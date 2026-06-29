@@ -185,78 +185,269 @@ router.get('/chart/:topId', async (req, res) => {
 });
 
 // ============================================================
-// 个性化推荐
-// 策略：
-//   1. 从播放历史 + 喜欢列表中提取「种子歌手」
-//   2. 对每个种子歌手搜索代表歌曲（限20首）
-//   3. 同时从热歌榜里拉取当前热门（扩展发现广度）
-//   4. 过滤掉已听过的歌曲（近30天有播放记录的）
-//   5. 随机打散后返回
+// 个性化推荐（多维度兴趣建模）
+//
+// 信号权重体系（参考 Spotify 隐式反馈）：
+//   红心            : 3.0  最强主动信号
+//   加入歌单        : 2.5  主动收藏
+//   完播率 ≥ 80%   : 1.5  真正喜欢
+//   重复播放 +1次   : 0.5  越听越喜欢（累加）
+//   完播率 20-80%  : 0.3  一般兴趣
+//   完播率 < 20%   : -0.3 不感兴趣（跳过）
+//
+// 歌手权重修正：
+//   - 对 "A / B" 合唱形式，仅当 B 作为主唱有独立高权重记录时，B 才算喜欢的歌手
+//   - 合唱中的非主唱歌手权重 × 0.4
+//
+// 推荐维度：
+//   1. 深度挖掘（高权重种子歌手的更多歌曲）
+//   2. 风格扩散（取高权重歌曲名搜索，发现同风格不同歌手版本）
+//   3. 热门发现（当前热歌榜混入，保持新鲜度）
 // ============================================================
-router.get('/recommend', async (req, res) => {
-  const uid = req.user.id;
-  const since30 = Date.now() - 30 * 86400000;
 
-  // 种子歌手：喜欢 > 高频播放（分别取前3）
-  const likedArtists = db.prepare(
-    `SELECT DISTINCT singer FROM likes WHERE user_id=? AND singer != '' LIMIT 3`
-  ).all(uid).map((r) => r.singer);
-
-  const topArtists = db.prepare(`
-    SELECT singer, COUNT(*) AS cnt FROM play_logs
-    WHERE user_id=? AND played_at >= ? AND singer != ''
-    GROUP BY singer ORDER BY cnt DESC LIMIT 5
-  `).all(uid, since30).map((r) => r.singer);
-
-  // 合并，优先喜欢的歌手，去重展开（"A / B" → ["A","B"]）
-  const artistSet = new Set();
-  for (const s of [...likedArtists, ...topArtists]) {
-    s.split(/[\/、,，&]/).forEach((p) => { const t = p.trim(); if (t) artistSet.add(t); });
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  const seedArtists = [...artistSet].slice(0, 5);
+  return arr;
+}
 
-  // 已听过的歌曲 key（近30天，用于过滤）
-  const heardKeys = new Set(
-    db.prepare(`SELECT name, singer FROM play_logs WHERE user_id=? AND played_at >= ?`)
-      .all(uid, since30)
+/** 计算每首歌的兴趣分数（基于多维信号） */
+function computeSongScores(uid) {
+  const since90 = Date.now() - 90 * 86400000; // 近90天数据
+
+  // 1. 播放记录聚合：同一首歌的所有播放合并
+  const playRows = db.prepare(`
+    SELECT name, singer, album, album_mid, song_mid, duration,
+           COUNT(*) AS play_count,
+           SUM(played_sec) AS total_played,
+           MAX(played_at) AS last_played
+    FROM play_logs
+    WHERE user_id = ? AND played_at >= ?
+    GROUP BY name, singer
+  `).all(uid, since90);
+
+  // 2. 红心列表
+  const likedMids = new Set(
+    db.prepare(`SELECT song_mid FROM likes WHERE user_id = ?`).all(uid).map((r) => r.song_mid)
+  );
+  const likedKeys = new Set(
+    db.prepare(`SELECT name, singer FROM likes WHERE user_id = ?`).all(uid)
       .map((r) => `${r.name}__${r.singer}`)
   );
 
-  const fetchTasks = [];
+  // 3. 加入歌单的歌曲
+  const inPlaylistKeys = new Set(
+    db.prepare(`
+      SELECT DISTINCT s.name, s.singer FROM songs s
+      JOIN playlists p ON s.playlist_id = p.id
+      WHERE p.user_id = ?
+    `).all(uid).map((r) => `${r.name}__${r.singer}`)
+  );
 
-  if (seedArtists.length) {
-    // 每个种子歌手搜代表歌曲
-    fetchTasks.push(...seedArtists.map((name) => searchSongs(name)));
-  }
-  // 始终混入当前热歌榜前20首（增加新鲜度和广度）
-  fetchTasks.push(getTopList(26, 20));
+  const songScores = new Map(); // key -> { score, name, singer, ... }
 
-  const results = await Promise.allSettled(fetchTasks);
-  const seen = new Set();
-  const songs = [];
+  for (const row of playRows) {
+    const key = `${row.name}__${row.singer}`;
+    const dur = row.duration || 1;
+    const avgPlayed = row.total_played / row.play_count;
+    const completionRate = Math.min(avgPlayed / dur, 1.0);
 
-  for (const r of results) {
-    if (r.status !== 'fulfilled') continue;
-    const list = Array.isArray(r.value) ? r.value : (r.value.songs || []);
-    for (const s of list) {
-      const key = `${s.name}__${s.singer}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      // 已听过的放到后面（不完全过滤，避免推荐列表太少）
-      songs.push({ ...s, _heard: heardKeys.has(key) });
+    let score = 0;
+
+    // 完播率信号
+    if (completionRate >= 0.8)       score += 1.5;
+    else if (completionRate >= 0.2)  score += 0.3;
+    else                             score -= 0.3;
+
+    // 重复播放奖励（每多播一次 +0.5，上限 +3）
+    score += Math.min((row.play_count - 1) * 0.5, 3.0);
+
+    // 红心信号
+    if (likedMids.has(row.song_mid) || likedKeys.has(key)) score += 3.0;
+
+    // 加入歌单信号
+    if (inPlaylistKeys.has(key)) score += 2.5;
+
+    // 时间衰减：越近期的行为权重越高（90天内线性衰减到0.5）
+    const ageRatio = (Date.now() - row.last_played) / (90 * 86400000);
+    const timeFactor = 1.0 - ageRatio * 0.5;
+    score *= timeFactor;
+
+    if (score > 0) {
+      songScores.set(key, { score, ...row });
     }
   }
 
-  // 未听过的优先，听过的放后面，各自内部随机打散
-  const unheard = songs.filter((s) => !s._heard);
-  const heard   = songs.filter((s) => s._heard);
-  const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
-  const final = [...shuffle(unheard), ...shuffle(heard)].slice(0, 50).map(({ _heard, ...s }) => s);
+  // 补充：纯红心（未必有播放记录）
+  const likedRows = db.prepare(`SELECT * FROM likes WHERE user_id = ?`).all(uid);
+  for (const row of likedRows) {
+    const key = `${row.name}__${row.singer}`;
+    if (!songScores.has(key)) {
+      songScores.set(key, { score: 3.0, ...row, play_count: 0 });
+    }
+  }
+
+  // 补充：加入歌单但没有播放记录的歌曲
+  const playlistRows = db.prepare(`
+    SELECT DISTINCT s.name, s.singer, s.album, s.album_mid, s.song_mid, s.duration
+    FROM songs s JOIN playlists p ON s.playlist_id = p.id WHERE p.user_id = ?
+  `).all(uid);
+  for (const row of playlistRows) {
+    const key = `${row.name}__${row.singer}`;
+    if (!songScores.has(key)) {
+      songScores.set(key, { score: 2.5, ...row, play_count: 0 });
+    }
+  }
+
+  return songScores;
+}
+
+/** 从歌曲分数图谱里提取歌手权重（修正合唱误判） */
+function computeArtistWeights(songScores) {
+  // 先统计每个「单独歌手名」的独立得分（非合唱情况）
+  const soloScores = new Map(); // artistName -> totalScore
+
+  for (const [, song] of songScores) {
+    const parts = (song.singer || '').split(/[\/、,，&]/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length === 0) continue;
+
+    const isFeat = parts.length > 1;
+    for (let i = 0; i < parts.length; i++) {
+      const name = parts[i];
+      // 合唱中非第一位歌手（非主唱）权重打折
+      const factor = (isFeat && i > 0) ? 0.4 : 1.0;
+      soloScores.set(name, (soloScores.get(name) || 0) + song.score * factor);
+    }
+  }
+
+  // 修正：如果一个歌手的得分主要来自合唱中的客串（score < 1.5），降权
+  // 只保留有独立主唱贡献 OR 总权重明显（≥ 2.0）的歌手
+  const result = new Map();
+  for (const [name, score] of soloScores) {
+    if (score >= 2.0) result.set(name, score);
+  }
+
+  // 按权重降序排列
+  return [...result.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+router.get('/recommend', async (req, res) => {
+  const uid = req.user.id;
+
+  // ---- Step 1: 计算兴趣分数 ----
+  const songScores = computeSongScores(uid);
+
+  if (songScores.size === 0) {
+    // 冷启动：直接返回热歌榜
+    try {
+      const songs = await getTopList(26, 40);
+      return res.json({ songs, artists: [], reason: 'cold_start' });
+    } catch (e) {
+      return res.json({ songs: [], artists: [], reason: 'cold_start' });
+    }
+  }
+
+  // ---- Step 2: 计算歌手权重 ----
+  const artistWeights = computeArtistWeights(songScores);
+  // 取权重最高的前 4 个歌手作为深度挖掘种子
+  const topArtists = artistWeights.slice(0, 4).map(([name]) => name);
+
+  // ---- Step 3: 取高分歌曲用于风格扩散 ----
+  // 选取分数 ≥ 2.0 的歌曲（真正喜欢的），随机取最多 4 首做风格搜索
+  const highScoreSongs = [...songScores.values()]
+    .filter((s) => s.score >= 2.0 && s.name)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10);
+  shuffle(highScoreSongs);
+  const styleSeedSongs = highScoreSongs.slice(0, 4); // 取4首风格种子
+
+  // ---- Step 4: 已听过的歌曲 key（用于排序，不完全过滤）----
+  const heardKeys = new Set([...songScores.keys()]);
+
+  // ---- Step 5: 并行拉取推荐内容 ----
+  const tasks = [];
+
+  // 任务A：深度挖掘——每个种子歌手搜索更多歌曲
+  for (const artist of topArtists) {
+    tasks.push({ type: 'artist', label: artist, promise: searchSongs(artist) });
+  }
+
+  // 任务B：风格扩散——用高分歌曲的歌名（不带歌手）搜索同风格其他版本
+  for (const song of styleSeedSongs) {
+    // 只用歌曲名搜索，不限定歌手，发现其他歌手的相似歌曲
+    const cleanName = song.name.replace(/[\(（\[【].*?[\)）\]】]/g, '').trim();
+    tasks.push({ type: 'style', label: cleanName, promise: searchSongs(cleanName) });
+  }
+
+  // 任务C：热歌榜混入（保持新鲜度）
+  tasks.push({ type: 'chart', label: 'hot', promise: getTopList(26, 20) });
+
+  const results = await Promise.allSettled(tasks.map((t) => t.promise));
+
+  // ---- Step 6: 合并并评分 ----
+  const candidateMap = new Map(); // key -> { song, score, source }
+
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    const task = tasks[i];
+    if (r.status !== 'fulfilled') continue;
+    const list = Array.isArray(r.value) ? r.value : (r.value.songs || []);
+
+    for (const s of list) {
+      const key = `${s.name}__${s.singer}`;
+      if (candidateMap.has(key)) continue; // 去重
+
+      let candidateScore = 0;
+
+      // 已听过且分数低（被跳过的）不推荐
+      const existingScore = songScores.get(key);
+      if (existingScore !== undefined && existingScore.score < 0) continue;
+
+      // 基础分：来源类型
+      if (task.type === 'artist') candidateScore += 2.0;
+      else if (task.type === 'style') candidateScore += 1.5;
+      else if (task.type === 'chart') candidateScore += 1.0;
+
+      // 已听过但分数高（喜欢的歌）：降低推荐优先级（已经知道了）
+      if (heardKeys.has(key)) candidateScore -= 1.5;
+
+      // 风格扩散中：过滤掉和种子歌手完全相同的歌手结果（避免重复）
+      if (task.type === 'style') {
+        const songSingers = (s.singer || '').split(/[\/、,，&]/).map((p) => p.trim());
+        const isTopArtist = songSingers.some((sg) => topArtists.includes(sg));
+        if (isTopArtist) candidateScore -= 0.8; // 降权但不完全排除
+      }
+
+      candidateMap.set(key, { ...s, _candidateScore: candidateScore, _source: task.type });
+    }
+  }
+
+  // ---- Step 7: 分桶排序 + 随机打散 ----
+  const candidates = [...candidateMap.values()];
+
+  // 按分数分三档：高(≥1.5)、中(0~1.5)、低(<0)
+  const high = shuffle(candidates.filter((s) => s._candidateScore >= 1.5));
+  const mid  = shuffle(candidates.filter((s) => s._candidateScore >= 0 && s._candidateScore < 1.5));
+  const low  = shuffle(candidates.filter((s) => s._candidateScore < 0));
+
+  // 组合：高分优先，适当混入中档（保持多样性），少量已听过的
+  const final = [
+    ...high.slice(0, 25),
+    ...mid.slice(0, 20),
+    ...low.slice(0, 5),
+  ].slice(0, 50).map(({ _candidateScore, _source, ...s }) => s);
 
   res.json({
     songs: final,
-    artists: seedArtists,
-    reason: seedArtists.length ? 'history' : 'no_history',
+    artists: topArtists,
+    reason: topArtists.length ? 'interest_model' : 'cold_start',
+    // debug 信息（可在前端展示）
+    _stats: {
+      song_signals: songScores.size,
+      top_artists: artistWeights.slice(0, 6).map(([n, s]) => ({ name: n, score: Math.round(s * 10) / 10 })),
+    },
   });
 });
 

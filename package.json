@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "init-db": "node server/db.js"
+    "init-db": "node server/db.js",
+    "build": "vite build",
+    "build:watch": "vite build --watch",
+    "dev:full": "concurrently \"node --watch server/index.js\" \"vite build --watch\""
   },
   "keywords": [
     "music",
@@ -24,5 +27,8 @@
     "express": "^4.21.0",
     "express-rate-limit": "^8.5.2",
     "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "vite": "^6.4.3"
   }
 }
