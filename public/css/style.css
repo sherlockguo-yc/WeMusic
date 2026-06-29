@@ -170,7 +170,7 @@ a { color: inherit; text-decoration: none; }
   padding: 18px 14px;
   overflow-y: auto;
 }
-.logo { font-size: 20px; font-weight: 800; margin-bottom: 20px; padding: 0 6px; }
+.logo { font-size: 20px; font-weight: 800; margin-bottom: 20px; padding: 0 6px; text-align: center; }
 .logo span { color: var(--accent); }
 .side-section { font-size: 12px; color: var(--text-dim); margin: 16px 6px 8px; display: flex; justify-content: space-between; align-items: center; }
 .side-section button { background: none; border: none; color: var(--accent); font-size: 18px; line-height: 1; }
@@ -552,12 +552,16 @@ input[type='range']::-moz-range-thumb {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .lp-like-row {
-  margin-top: 14px; display: flex; justify-content: center; gap: 16px;
+  margin-top: 14px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;
 }
-.lp-like-row .like-btn {
-  font-size: 24px; color: rgba(255,255,255,.7);
+.lp-action-btn {
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+  color: rgba(255,255,255,.8); border-radius: 20px; padding: 7px 16px;
+  font-size: 14px; cursor: pointer; transition: background .2s;
 }
-.lp-like-row .like-btn.liked { color: #e05c5c; }
+.lp-action-btn:hover { background: rgba(255,255,255,.22); color: #fff; }
+.lp-action-btn.like-btn { font-size: 18px; padding: 7px 14px; }
+.lp-action-btn.like-btn.liked { color: #e05c5c; border-color: rgba(224,92,92,.5); }
 
 /* 右侧歌词区 */
 .lp-body {

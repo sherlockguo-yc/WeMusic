@@ -2037,26 +2037,43 @@ function updateLyricsPanelMeta(song) {
   const bg = $('lpBg');
   if (cover) bg.style.backgroundImage = `url(${cover})`;
   else bg.style.backgroundImage = 'none';
-  // 喜欢按钮
-  if (song.song_mid) {
-    const isLiked = state.likedMids && state.likedMids.has(song.song_mid);
-    $('lpLikeRow').innerHTML = `<button class="like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}">${isLiked ? '❤' : '🤍'}</button>`;
-    $('lpLikeRow').querySelector('.like-btn').onclick = (e) => toggleLike(song, e.currentTarget);
-  } else {
-    $('lpLikeRow').innerHTML = '';
+  // 喜欢 + 添加到歌单按钮
+  const isLiked = song.song_mid && state.likedMids && state.likedMids.has(song.song_mid);
+  $('lpLikeRow').innerHTML = `
+    ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? '❤' : '🤍'}</button>` : ''}
+    <button class="lp-action-btn" title="添加到歌单" id="lpAddBtn">＋ 歌单</button>
+  `;
+  const lpLikeBtn = document.getElementById('lpLikeBtn');
+  if (lpLikeBtn) {
+    lpLikeBtn.onclick = async (e) => {
+      await toggleLike(song, null);
+      // 重新渲染按钮状态
+      const liked2 = state.likedMids.has(song.song_mid);
+      lpLikeBtn.textContent = liked2 ? '❤' : '🤍';
+      lpLikeBtn.classList.toggle('liked', liked2);
+      lpLikeBtn.title = liked2 ? '取消喜欢' : '喜欢';
+    };
   }
+  document.getElementById('lpAddBtn').onclick = () => addSongs([song]);
 }
 
 $('lyricsBtn').onclick = openLyricsPanel;
 // 点击播放器封面也打开歌词页
 $('npCover').style.cursor = 'pointer';
 
-// 歌词页播放控制 —— 直接复用主播放器的逻辑
-$('lpPrevBtn').onclick = playPrev;
+// 歌词页播放控制 —— 直接复用主播放器逻辑
+$('lpPrevBtn').onclick = () => playPrev();
 $('lpNextBtn').onclick = () => playNext(false);
-$('lpPlayBtn').onclick = $('playPauseBtn').onclick; // 会在下方 playPauseBtn 初始化后生效，改用函数引用
-// 为避免绑定时 onclick 还未赋值，用事件委托方式
-$('lpPlayBtn').addEventListener('click', () => $('playPauseBtn').click());
+$('lpPlayBtn').onclick = () => {
+  // 直接执行与 playPauseBtn 相同的逻辑，避免循环触发
+  if (!state.current) return toast('请选择一首歌曲播放');
+  const mounted = $('videoContainer').children.length > 0;
+  if (!mounted) { playCurrent(); return; }
+  timerPaused = !timerPaused;
+  $('playPauseBtn').textContent = timerPaused ? '▶' : '⏸';
+  $('lpPlayBtn').textContent = timerPaused ? '▶' : '⏸';
+  toast(timerPaused ? '已暂停自动连播' : '继续自动连播');
+};
 $('lpSeekBar').addEventListener('input', () => {
   const v = Number($('lpSeekBar').value);
   $('seekBar').value = v;
