@@ -383,3 +383,20 @@ export async function parsePlaylist(disstid) {
     songs: songlist.map(normalizeSong),
   };
 }
+
+/**
+ * QQ 音乐排行榜（走 fcg_v8_toplist_cp 接口，稳定可用）
+ * topId 对应：
+ *   26  - 巅峰榜·热歌
+ *   27  - 巅峰榜·新歌
+ *   4   - 巅峰榜·流行指数
+ *   67  - 听歌识曲榜
+ *   62  - 热歌榜（备用）
+ */
+export async function getTopList(topId = 26, num = 50) {
+  const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?` +
+    new URLSearchParams({ topid: String(topId), num: String(num), format: 'json', tpl: '3', page: 'detail', type: 'top' });
+  const json = await getJSON(url);
+  const songs = (json?.songlist || []).map((item) => normalizeSong(item.data || item));
+  return songs.filter((s) => s.name);
+}

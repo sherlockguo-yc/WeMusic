@@ -24,7 +24,7 @@
     <aside class="sidebar">
       <div class="logo">We<span>Music</span></div>
       <div class="side-nav">
-        <div class="side-nav-item" id="navHome" title="导入与管理">🏠 导入 / 管理</div>
+        <div class="side-nav-item" id="navDiscover" title="发现音乐">🔥 发现</div>
         <div class="side-nav-item" id="navHistory" title="最近播放">🕘 最近播放</div>
         <div class="side-nav-item" id="navStats" title="我的数据">📊 我的数据</div>
         <div class="side-nav-item" id="navLikes" title="我喜欢的">❤ 我喜欢的</div>
@@ -32,7 +32,7 @@
       <div class="side-section">
         <span>我的歌单</span>
         <span class="side-actions">
-          <button id="importPlBtn" title="导入歌单(JSON)">⇪</button>
+          <button id="importPlBtn" title="导入歌单">⇪</button>
           <button id="newPlaylistBtn" title="新建歌单">＋</button>
         </span>
       </div>
@@ -85,9 +85,11 @@
         <input type="range" id="volBar" min="0" max="100" value="80" />
       </div>
       <div class="player-status" id="playStatus"></div>
+      <button class="icon-btn" id="npLikeBtn" title="喜欢">🤍</button>
+      <button class="icon-btn" id="npMoreBtn" title="更多操作">···</button>
       <button class="btn sm" id="lyricsBtn" title="歌词">词</button>
       <button class="btn sm" id="queueBtn" title="播放队列 / 历史">队列</button>
-      <button class="btn sm" id="switchSrcBtn" title="更换播放资源">换源</button>
+      <button class="btn sm" id="switchSrcBtn" title="换源">换源</button>
       <button class="btn sm" id="videoBtn" title="观看 Bilibili 视频">看视频</button>
       <audio id="audio" preload="auto"></audio>
     </footer>
@@ -117,6 +119,17 @@
           <div class="lp-placeholder">播放歌曲后点「词」或封面加载歌词</div>
         </div>
       </div>
+      <!-- 歌词页底部播放控制栏 -->
+      <div class="lp-controls">
+        <button class="lp-ctrl-btn" id="lpPrevBtn" title="上一首">⏮</button>
+        <button class="lp-ctrl-btn play" id="lpPlayBtn" title="播放/暂停">▶</button>
+        <button class="lp-ctrl-btn" id="lpNextBtn" title="下一首">⏭</button>
+        <div class="lp-progress">
+          <span class="lp-time" id="lpCurTime">0:00</span>
+          <input type="range" class="lp-seek" id="lpSeekBar" min="0" max="1000" value="0" />
+          <span class="lp-time" id="lpDurTime">0:00</span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -141,8 +154,10 @@
       <span id="vpTitle">Bilibili 播放</span>
       <span class="vp-actions">
         <span class="vp-btn src" id="vpSwitch" title="更换资源">换源</span>
+        <span class="vp-btn" id="vpDanmaku" title="弹幕">弹幕</span>
+        <span class="vp-btn" id="vpHide" title="收起（保持播放）">−</span>
         <span class="vp-btn" id="vpFull" title="全屏">⛶</span>
-        <span class="vp-btn" id="vpClose" title="关闭">✕</span>
+        <span class="vp-btn" id="vpClose" title="关闭并停止播放">✕</span>
       </span>
     </div>
     <div id="videoContainer"></div>
@@ -184,6 +199,29 @@
       <div class="prompt-actions">
         <button class="btn sm" id="addNewPl">＋ 新建歌单</button>
         <button class="btn sm" id="addClose">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入歌单弹层 -->
+  <div class="modal-mask" id="importModal">
+    <div class="modal modal-sm">
+      <h3>导入歌单</h3>
+      <div class="settings-section">
+        <div class="settings-label">从 QQ 音乐链接解析</div>
+        <div style="display:flex;gap:8px">
+          <input id="importQqUrl" type="text" class="prompt-input" style="margin:0;flex:1"
+            placeholder="https://y.qq.com/n/ryqq/playlist/xxxx" />
+          <button class="btn green sm" id="importQqBtn">解析</button>
+        </div>
+      </div>
+      <div class="settings-section" style="margin-top:14px">
+        <div class="settings-label">从 JSON 备份文件导入</div>
+        <button class="btn sm" id="importJsonBtn" style="width:100%">选择文件…</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden />
+      </div>
+      <div class="prompt-actions" style="margin-top:16px">
+        <button class="btn sm" id="importModalClose">取消</button>
       </div>
     </div>
   </div>

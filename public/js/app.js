@@ -48,9 +48,9 @@ function toast(msg) {
 }
 
 function biliEmbed(bvid) {
-  // muted=0 尝试有声自动播放；部分浏览器仍会强制静音（浏览器安全策略），
-  // 此时需在播放器内手动点取消静音，或在浏览器设置里允许该网站自动播放声音。
-  return `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&high_quality=1&danmaku=0&as_wide=1&muted=0`;
+  // danmakuOn 在下方换源区域定义，此处用 localStorage 直接读（避免前向引用问题）
+  const dm = localStorage.getItem('wemusic_danmaku') !== '0' ? 1 : 0;
+  return `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&high_quality=1&danmaku=${dm}&as_wide=1&muted=0`;
 }
 
 // 专辑封面图（QQ 音乐）
@@ -127,7 +127,7 @@ function uiConfirm(message) {
 // ---------------- 初始化 ----------------
 async function init() {
   await loadPlaylists();
-  renderHome();
+  openDiscover();   // 默认打开发现页
   restoreSession();
   // 后台加载红心列表和头像
   loadLikes().catch(() => {});
@@ -406,16 +406,24 @@ function refreshAllBookmarks() {
         // 歌单页（有 del 按钮）不显示书签
         const isPlaylistPage = !!ops.querySelector('[data-act="del"]');
         const inPls = songInPlaylists(s);
-        const existing = ops.querySelector('.in-pl-mark');
+        // 书签现在是独立的 grid 列元素（.in-pl-mark 或 .in-pl-placeholder）
+        const existing = row.querySelector('.in-pl-mark');
+        const placeholder = row.querySelector('.in-pl-placeholder');
         const showBadge = !isPlaylistPage && inPls.size > 0;
+        const dur = row.querySelector('.dur');
         if (showBadge && !existing) {
+          // 把占位换成书签
           const mark = document.createElement('span');
           mark.className = 'in-pl-mark';
           mark.title = `已在 ${inPls.size} 个歌单中`;
           mark.textContent = '🔖';
-          ops.insertBefore(mark, ops.firstChild);
+          if (placeholder) placeholder.replaceWith(mark);
+          else if (dur) dur.before(mark);
         } else if (!showBadge && existing) {
-          existing.remove();
+          // 把书签换回占位
+          const ph = document.createElement('span');
+          ph.className = 'in-pl-placeholder';
+          existing.replaceWith(ph);
         } else if (existing && showBadge) {
           existing.title = `已在 ${inPls.size} 个歌单中`;
         }
@@ -490,8 +498,16 @@ function renderSidebar() {
   });
 }
 
+// ---- 侧边栏导航激活态 ----
+function setActiveNav(id) {
+  ['navDiscover', 'navHistory', 'navStats', 'navLikes'].forEach((n) => {
+    const el = $(n);
+    if (el) el.classList.toggle('active', n === id);
+  });
+}
+
 // 侧边栏导航
-$('navHome').onclick = () => { renderHome(); $('navHome').classList.add('active'); $('navHistory').classList.remove('active'); };
+// 移除了 navHome，已整合到导入弹层
 $('navHistory').onclick = () => {
   activeTab = 'history';
   $('queueDrawer').classList.add('show');
@@ -507,43 +523,14 @@ $('newPlaylistBtn').onclick = async () => {
   toast('歌单已创建');
 };
 
-// ---------------- 首页 / 导入区 ----------------
+// ---------------- 首页兜底（歌单删除后的空状态） ----------------
 function renderHome() {
   state.view = 'home';
+  setActiveNav(null);
   $('main').innerHTML = `
-    <div class="view-title">导入与管理</div>
-    <div class="view-sub">从 QQ 音乐导入歌单，或在上方搜索歌手批量添加</div>
-    <div class="toolbar">
-      <input id="qqUrl" placeholder="粘贴 QQ 音乐歌单链接，例如 https://y.qq.com/n/ryqq/playlist/xxxx" />
-      <button class="btn green" id="parseBtn">解析歌单</button>
-    </div>
-    <div id="homeResult" class="empty">解析结果将显示在这里</div>
-  `;
-  $('parseBtn').onclick = parsePlaylistFlow;
-  $('qqUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') parsePlaylistFlow(); });
-}
-
-async function parsePlaylistFlow() {
-  const url = $('qqUrl').value.trim();
-  if (!url) return toast('请粘贴歌单链接');
-  const box = $('homeResult');
-  box.className = 'loading';
-  box.textContent = '正在解析歌单...';
-  try {
-    const data = await api('/music/parse-playlist', { method: 'POST', body: { url } });
-    box.className = '';
-    box.innerHTML = `
-      <div class="section-head">
-        <h2>${esc(data.name)}（${data.songs.length} 首）</h2>
-        <button class="btn green sm" id="addAllParsed">全部添加到歌单</button>
-      </div>
-      <div class="song-list" id="parsedList"></div>`;
-    renderSongList($('parsedList'), data.songs, { showAdd: true });
-    $('addAllParsed').onclick = () => addSongs(data.songs);
-  } catch (e) {
-    box.className = 'empty';
-    box.textContent = '解析失败：' + e.message;
-  }
+    <div class="empty" style="padding-top:80px">
+      从左侧选择歌单，或在上方搜索歌曲 / 歌手
+    </div>`;
 }
 
 // ---------------- 搜索历史 / 建议 ----------------
@@ -698,7 +685,8 @@ function appendLoadMore(main, container, songBuf, singer, total) {
         const i = prevLen + j;
         const inPls = songInPlaylists(s);
         const bookmark = inPls.size > 0
-          ? `<span class="in-pl-mark" title="已在 ${inPls.size} 个歌单中">🔖</span>` : '';
+          ? `<span class="in-pl-mark" title="已在 ${inPls.size} 个歌单中">🔖</span>`
+          : '<span class="in-pl-placeholder"></span>';
         const div = document.createElement('div');
         div.className = 'song-row';
         div.dataset.i = String(i);
@@ -707,9 +695,9 @@ function appendLoadMore(main, container, songBuf, singer, total) {
           <span class="name">${esc(s.name)}</span>
           <span class="singer">${esc(s.singer)}</span>
           <span class="album">${esc(s.album)}</span>
+          ${bookmark}
           <span class="dur">${fmtDur(s.duration)}</span>
           <span class="ops">
-            ${bookmark}
             <button class="icon-btn play" title="播放" data-act="play">▶</button>
             <button class="icon-btn" title="添加到歌单" data-act="add">＋</button>
           </span>`;
@@ -867,7 +855,7 @@ function renderSongList(container, songs, opts = {}) {
       // 书签标记：非歌单页且已加入过任意歌单时显示
       const bookmark = (!showDelete && inPls.size > 0)
         ? `<span class="in-pl-mark" title="已在 ${inPls.size} 个歌单中">🔖</span>`
-        : '';
+        : '<span class="in-pl-placeholder"></span>';
       const isLiked = s.song_mid ? (state.likedMids && state.likedMids.has(s.song_mid)) : false;
       const likeBtn = s.song_mid
         ? `<button class="like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" data-act="like">${isLiked ? '❤' : '🤍'}</button>`
@@ -878,9 +866,9 @@ function renderSongList(container, songs, opts = {}) {
         <span class="name">${esc(s.name)}</span>
         <span class="singer">${esc(s.singer)}</span>
         <span class="album">${esc(s.album)}</span>
+        ${bookmark}
         <span class="dur">${fmtDur(s.duration)}</span>
         <span class="ops">
-          ${bookmark}
           ${likeBtn}
           <button class="icon-btn play" title="播放" data-act="play">▶</button>
           ${showAdd ? '<button class="icon-btn" title="添加到歌单" data-act="add">＋</button>' : ''}
@@ -1049,11 +1037,44 @@ async function exportPlaylist(id, name) {
   }
 }
 
-$('importPlBtn').onclick = () => $('importFile').click();
+// ---------------- 导入歌单弹层 ----------------
+$('importPlBtn').onclick = () => $('importModal').classList.add('show');
+$('importModalClose').onclick = () => $('importModal').classList.remove('show');
+$('importModal').onclick = (e) => { if (e.target.id === 'importModal') $('importModal').classList.remove('show'); };
+
+// QQ 链接解析
+$('importQqBtn').onclick = async () => {
+  const url = $('importQqUrl').value.trim();
+  if (!url) return toast('请粘贴歌单链接');
+  $('importModal').classList.remove('show');
+  // 展示到主内容区
+  const main = $('main');
+  main.innerHTML = '<div class="loading">正在解析歌单…</div>';
+  try {
+    const data = await api('/music/parse-playlist', { method: 'POST', body: { url } });
+    main.innerHTML = `
+      <div class="view-title">${esc(data.name)}</div>
+      <div class="view-sub">${data.songs.length} 首 · 解析完成</div>
+      <div class="list-tools">
+        <button class="btn green sm" id="addAllParsed">全部添加到歌单</button>
+      </div>
+      <div class="song-list" id="parsedList"></div>`;
+    renderSongList($('parsedList'), data.songs, { showAdd: true });
+    $('addAllParsed').onclick = () => addSongs(data.songs);
+    $('importQqUrl').value = '';
+  } catch (e) {
+    main.innerHTML = `<div class="empty">解析失败：${esc(e.message)}</div>`;
+  }
+};
+$('importQqUrl') && $('importQqUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('importQqBtn').click(); });
+
+// JSON 文件导入
+$('importJsonBtn').onclick = () => $('importFile').click();
 $('importFile').onchange = async (e) => {
   const file = e.target.files && e.target.files[0];
-  e.target.value = ''; // 允许重复选同一文件
+  e.target.value = '';
   if (!file) return;
+  $('importModal').classList.remove('show');
   try {
     const text = await file.text();
     const json = JSON.parse(text);
@@ -1254,6 +1275,8 @@ async function playFromList(songs, index, context, playlistId) {
 }
 
 async function playCurrent() {
+  // 切歌时先上报上一首已播放的实际秒数
+  _flushLog(elapsed);
   stopTimer();
   const song = state.queue[state.queueIndex];
   if (!song) return;
@@ -1265,6 +1288,8 @@ async function playCurrent() {
   document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
   updateNpCover(song);
   updateMediaSession(song);
+  // updateNpLikeBtn 定义在后方，用 setTimeout 0 确保执行顺序
+  setTimeout(updateNpLikeBtn, 0);
   resetProgress(song.duration);
 
   // 先查全局 bvid 缓存（按 song_mid），命中则直接用，无需重新打分匹配
@@ -1307,7 +1332,7 @@ async function playCurrent() {
 function startVideo(bvid, title, dur) {
   mountVideo(bvid, title);
   applyPaneVisibility(); // 按记住的展开/收起偏好显示，不强制弹出
-  $('vpTitle').textContent = title || 'Bilibili';
+  setVpTitle(title);
   setStatus(`<span class="badge">▶ Bilibili</span> ${esc((title || '').slice(0, 26))}`);
   startTimer(dur);
   saveSession();
@@ -1415,29 +1440,62 @@ function cacheBvid(song) {
   }
 }
 
-// 播放日志上报：autoAdvance 触发时也可补报 played_sec
+// ---- 播放日志上报 ----
+// 策略：
+//   1. 播放开始 5 秒后才算「有效播放」，记录 _pendingSong
+//   2. autoAdvance（播完）时：上报 played_sec = totalDur（整首听完）
+//   3. 切歌/重播时：若 _pendingSong 存在，上报当前 elapsed（实际听了多少秒）
 let _logTimer = null;
-let _logStart = 0;
+let _pendingSong = null;  // 等待确认的歌曲（5秒防抖通过后）
+let _pendingDur = 0;
+
 function logPlay(song, dur) {
   if (!song) return;
-  _logStart = Date.now();
-  // 曲目结束（或切歌）时上报实际播放秒数
+  // 先上报上一首实际播放时长（如果有）
+  _flushLog(elapsed);
+  // 5 秒后确认本次是有效播放
   if (_logTimer) clearTimeout(_logTimer);
+  _pendingSong = null;
   _logTimer = setTimeout(() => {
-    const played_sec = Math.min(Math.round((Date.now() - _logStart) / 1000), dur || 0);
-    api('/stats/log', {
-      method: 'POST',
-      body: {
-        song_mid: song.song_mid, name: song.name, singer: song.singer,
-        album: song.album, album_mid: song.album_mid, duration: dur || song.duration,
-        played_sec, bvid: song.bvid,
-      },
-    }).catch(() => {});
-  }, 5000); // 5 秒后确认歌曲确实在播才上报，避免快速切歌刷记录
+    _pendingSong = song;
+    _pendingDur = dur || song.duration || 0;
+  }, 5000);
+}
+
+function _flushLog(playedSec) {
+  if (!_pendingSong) return;
+  const song = _pendingSong;
+  const dur = _pendingDur;
+  _pendingSong = null;
+  _pendingDur = 0;
+  const sec = Math.max(0, Math.min(Math.round(playedSec), dur || 9999));
+  if (sec < 5) return; // 不足 5 秒不记录
+  api('/stats/log', {
+    method: 'POST',
+    body: {
+      song_mid: song.song_mid, name: song.name, singer: song.singer,
+      album: song.album, album_mid: song.album_mid, duration: dur,
+      played_sec: sec, bvid: song.bvid,
+    },
+  }).catch(() => {});
+}
+
+function setVpTitle(title) {
+  const el = $('vpTitle');
+  el.textContent = title || 'Bilibili 播放';
+  el.classList.remove('scrolling');
+  // 检测是否溢出，溢出则启动滚动动画
+  requestAnimationFrame(() => {
+    if (el.scrollWidth > el.clientWidth + 4) {
+      const dist = -(el.scrollWidth - el.clientWidth + 20);
+      el.style.setProperty('--scroll-dist', dist + 'px');
+      el.classList.add('scrolling');
+    }
+  });
 }
 
 function mountVideo(bvid, title) {
-  $('vpTitle').textContent = title || 'Bilibili 播放';
+  setVpTitle(title);
   $('videoContainer').innerHTML =
     `<iframe src="${biliEmbed(bvid)}" allowfullscreen allow="autoplay; fullscreen" scrolling="no" frameborder="0"></iframe>`;
 }
@@ -1511,6 +1569,8 @@ function startTimer(d) {
 function stopTimer() { if (autoTimer) { clearInterval(autoTimer); autoTimer = null; } }
 function autoAdvance() {
   stopTimer();
+  // 播完整首，用 totalDur 作为实际播放秒数上报
+  _flushLog(totalDur || elapsed);
   if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
   if (state.playMode === 'single') { playCurrent(); return; }
   playNext(true);
@@ -1726,10 +1786,13 @@ $('videoBtn').onclick = () => {
   if ($('videoContainer').children.length === 0) { playCurrent(); return; }
   setPaneVisible(!state.paneVisible);
 };
-// 关闭：彻底停止播放
+// 收起（−）：只隐藏面板，iframe 保持存活，声音不中断
+$('vpHide').onclick = () => setPaneVisible(false);
+
+// 关闭（✕）：彻底停止播放并销毁 iframe
 $('vpClose').onclick = () => {
   destroyVideo();
-  applyPaneVisibility(); // 刷新按钮文案为「看视频」
+  applyPaneVisibility();
   setStatus('已停止');
 };
 $('vpFull').onclick = () => {
@@ -1779,6 +1842,72 @@ $('vpFull').onclick = () => {
 $('switchSrcBtn').onclick = openCandModal;
 $('vpSwitch').onclick = openCandModal;
 $('candClose').onclick = () => $('candModal').classList.remove('show');
+
+// ---------------- 弹幕开关（重载 iframe） ----------------
+let danmakuOn = localStorage.getItem('wemusic_danmaku') !== '0'; // 默认开启
+
+function updateDanmakuBtn() {
+  const btn = $('vpDanmaku');
+  if (!btn) return;
+  if (danmakuOn) {
+    btn.textContent = '弹幕 ✓'; btn.style.color = 'var(--accent)';
+  } else {
+    btn.textContent = '弹幕'; btn.style.color = '';
+  }
+}
+updateDanmakuBtn();
+$('vpDanmaku').onclick = () => {
+  danmakuOn = !danmakuOn;
+  localStorage.setItem('wemusic_danmaku', danmakuOn ? '1' : '0');
+  updateDanmakuBtn();
+  if (state.current?.bvid && $('videoContainer').querySelector('iframe')) {
+    mountVideo(state.current.bvid, state.current._biliTitle);
+    toast(danmakuOn ? '弹幕已开启' : '弹幕已关闭');
+  } else {
+    toast(danmakuOn ? '弹幕已开启，下次播放生效' : '弹幕已关闭，下次播放生效');
+  }
+};
+
+// ---------------- 播放器喜欢 + 三点菜单 ----------------
+function updateNpLikeBtn() {
+  const btn = $('npLikeBtn');
+  if (!btn || !state.current) return;
+  const liked = state.current.song_mid && state.likedMids.has(state.current.song_mid);
+  btn.textContent = liked ? '❤' : '🤍';
+  btn.classList.toggle('liked-active', !!liked);
+  btn.title = liked ? '取消喜欢' : '喜欢';
+}
+
+$('npLikeBtn').onclick = async () => {
+  if (!state.current) return toast('当前没有播放的歌曲');
+  await toggleLike(state.current, null);
+  updateNpLikeBtn();
+};
+
+// 三点菜单（添加到歌单、复制 Bilibili 链接）
+$('npMoreBtn').onclick = (e) => {
+  e.stopPropagation();
+  if (!state.current) return toast('当前没有播放的歌曲');
+  const song = state.current;
+  const btn = $('npMoreBtn');
+  const rect = btn.getBoundingClientRect();
+  const menu = $('ctxMenu');
+  menu.innerHTML = `
+    <div class="ctx-item" id="ctxNpAdd">＋ 添加到歌单</div>
+    ${song.bvid ? `<div class="ctx-item" id="ctxNpCopy">⎘ 复制 Bilibili 链接</div>` : ''}
+  `;
+  menu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
+  menu.style.top = (rect.top - menu.offsetHeight - 4) + 'px';
+  menu.classList.add('show');
+  const $add = document.getElementById('ctxNpAdd');
+  if ($add) $add.onclick = () => { menu.classList.remove('show'); addSongs([song]); };
+  const $copy = document.getElementById('ctxNpCopy');
+  if ($copy) $copy.onclick = () => { menu.classList.remove('show'); copyBiliLink(song); };
+  // 弹出后定位（需在 show 后才有 offsetHeight）
+  requestAnimationFrame(() => {
+    menu.style.top = (rect.top - menu.offsetHeight - 4) + 'px';
+  });
+};
 $('candModal').onclick = (e) => { if (e.target.id === 'candModal') $('candModal').classList.remove('show'); };
 
 async function openCandModal() {
@@ -1835,7 +1964,7 @@ $('helpModal').onclick = (e) => { if (e.target.id === 'helpModal') $('helpModal'
 function closeOverlays() {
   let closed = false;
   if ($('lyricsPanel').classList.contains('show')) { closeLyricsPanel(); closed = true; }
-  ['candModal', 'addModal', 'promptModal', 'helpModal', 'settingsModal'].forEach((id) => {
+  ['candModal', 'addModal', 'promptModal', 'helpModal', 'settingsModal', 'importModal'].forEach((id) => {
     const el = $(id);
     if (el && el.classList.contains('show')) { el.classList.remove('show'); closed = true; }
   });
@@ -1877,6 +2006,8 @@ let lyricsFor = '';      // 当前歌词对应的歌曲 key
 function openLyricsPanel() {
   const panel = $('lyricsPanel');
   panel.classList.add('show');
+  // 锁定 body 滚动，防止 fixed 元素因页面滚动偏移
+  document.body.style.overflow = 'hidden';
   if (state.current) {
     updateLyricsPanelMeta(state.current);
     loadLyrics(state.current);
@@ -1887,6 +2018,8 @@ function openLyricsPanel() {
 
 function closeLyricsPanel() {
   $('lyricsPanel').classList.remove('show');
+  // 恢复 body 滚动
+  document.body.style.overflow = '';
 }
 
 function updateLyricsPanelMeta(song) {
@@ -1917,6 +2050,28 @@ function updateLyricsPanelMeta(song) {
 $('lyricsBtn').onclick = openLyricsPanel;
 // 点击播放器封面也打开歌词页
 $('npCover').style.cursor = 'pointer';
+
+// 歌词页播放控制 —— 直接复用主播放器的逻辑
+$('lpPrevBtn').onclick = playPrev;
+$('lpNextBtn').onclick = () => playNext(false);
+$('lpPlayBtn').onclick = $('playPauseBtn').onclick; // 会在下方 playPauseBtn 初始化后生效，改用函数引用
+// 为避免绑定时 onclick 还未赋值，用事件委托方式
+$('lpPlayBtn').addEventListener('click', () => $('playPauseBtn').click());
+$('lpSeekBar').addEventListener('input', () => {
+  const v = Number($('lpSeekBar').value);
+  $('seekBar').value = v;
+  $('seekBar').dispatchEvent(new Event('input'));
+});
+
+// 每秒同步歌词页进度显示（复用 elapsed/totalDur）
+setInterval(() => {
+  if (!$('lyricsPanel').classList.contains('show')) return;
+  $('lpCurTime').textContent = $('curTime').textContent;
+  $('lpDurTime').textContent = $('durTime').textContent;
+  $('lpSeekBar').value = $('seekBar').value;
+  // 同步播放/暂停按钮状态
+  $('lpPlayBtn').textContent = $('playPauseBtn').textContent;
+}, 500);
 $('npCover').onclick = openLyricsPanel;
 $('lpClose').onclick = closeLyricsPanel;
 
@@ -1955,9 +2110,12 @@ function syncLyrics(sec) {
   }
   const lines = $('lpBody').querySelectorAll('.lp-line');
   lines.forEach((el, i) => el.classList.toggle('active', i === idx));
-  // 滚动到当前行
-  if (lines[idx]) {
-    lines[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  // 滚动到当前行（只在歌词面板可见时滚动，避免触发页面整体滚动）
+  if (lines[idx] && $('lyricsPanel').classList.contains('show')) {
+    const body = $('lpBody');
+    const lineTop = lines[idx].offsetTop;
+    const targetScroll = lineTop - body.clientHeight / 2 + lines[idx].clientHeight / 2;
+    body.scrollTo({ top: targetScroll, behavior: 'smooth' });
   }
 }
 
@@ -1989,6 +2147,7 @@ const _origStartTimer = startTimer;
 // ============================================================
 $('navStats').onclick = openStats;
 $('navLikes').onclick = openLikesPage;
+$('navDiscover').onclick = openDiscover;
 
 function fmtSec(sec) {
   sec = Number(sec) || 0;
@@ -2000,6 +2159,7 @@ function fmtSec(sec) {
 
 async function openStats() {
   state.view = 'stats';
+  setActiveNav('navStats');
   const main = $('main');
   main.innerHTML = '<div class="loading">加载统计数据…</div>';
   try {
@@ -2011,62 +2171,135 @@ async function openStats() {
       api('/stats/hourly'),
     ]);
 
-    // 每日柱状图
-    const maxPlay = Math.max(...(daily.daily.map((d) => d.play_count)), 1);
-    const barHtml = daily.daily.map((d) => {
-      const h = Math.round((d.play_count / maxPlay) * 100);
-      return `<div class="bar" style="height:${h}%" title="${d.day}: ${d.play_count}次"></div>`;
+    // ---- 30天趋势：补全所有日期 ----
+    const today = new Date();
+    const dailyMap = new Map((daily.daily || []).map((d) => [d.day, d]));
+    const days30 = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(today); d.setDate(today.getDate() - 29 + i);
+      const key = d.toISOString().slice(0, 10);
+      const row = dailyMap.get(key);
+      return { day: key, play_count: row?.play_count || 0, label: `${d.getMonth() + 1}/${d.getDate()}` };
+    });
+    const maxPlay = Math.max(...days30.map((d) => d.play_count), 1);
+    const BAR_MAX_PX = 82; // 容器 110px，留 20px 给 label + 间距
+    const barHtml = days30.map((d, i) => {
+      const px = d.play_count ? Math.max(3, Math.round((d.play_count / maxPlay) * BAR_MAX_PX)) : 0;
+      const showLabel = i === 0 || i === 14 || i === 29 || (d.play_count === maxPlay && d.play_count > 0);
+      return `<div class="bar-item" title="${d.day}: ${d.play_count}次">
+        <div class="bar-fill" style="height:${px}px"></div>
+        <div class="bar-label">${showLabel ? d.label : ''}</div>
+      </div>`;
     }).join('');
 
-    // 时段热力
+    // ---- 时段热力 ----
     const maxH = Math.max(...(hourly.hourly.map((h) => h.play_count)), 1);
     const hourHtml = Array.from({ length: 24 }, (_, i) => {
       const row = hourly.hourly.find((r) => r.hour === i);
       const cnt = row ? row.play_count : 0;
-      const opacity = cnt ? 0.2 + (cnt / maxH) * 0.8 : 0;
-      return `<div class="hour-cell" style="background:rgba(29,185,84,${opacity.toFixed(2)})" title="${i}时: ${cnt}次">${i}</div>`;
+      const opacity = cnt ? 0.15 + (cnt / maxH) * 0.85 : 0;
+      const isActive = cnt > 0;
+      return `<div class="hour-cell${isActive ? ' active' : ''}"
+        style="${isActive ? `background:rgba(29,185,84,${opacity.toFixed(2)});color:#fff` : ''}"
+        title="${i}:00 — ${cnt}次">${i}</div>`;
+    }).join('');
+
+    // ---- 歌手分布饼图（用 CSS 条形代替） ----
+    const maxArtistPlay = Math.max(...(topArtists.artists.map((a) => a.play_count)), 1);
+    const artistBars = topArtists.artists.map((a) => {
+      const pct = Math.round((a.play_count / maxArtistPlay) * 100);
+      return `<div class="artist-bar-row" data-singer="${esc(a.singer)}">
+        <div class="artist-bar-name">${esc(a.singer)}</div>
+        <div class="artist-bar-wrap">
+          <div class="artist-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="artist-bar-val">${a.play_count}次</div>
+      </div>`;
     }).join('');
 
     main.innerHTML = `
       <div class="view-title">我的数据</div>
-      <div class="stats-grid">
-        <div class="stat-card"><div class="sv">${ov.plays}</div><div class="sl">总播放次数</div></div>
-        <div class="stat-card"><div class="sv">${fmtSec(ov.total_sec)}</div><div class="sl">总播放时长</div></div>
-        <div class="stat-card"><div class="sv">${ov.unique_songs}</div><div class="sl">不重复歌曲</div></div>
-        <div class="stat-card"><div class="sv">${ov.active_days}</div><div class="sl">听歌天数</div></div>
+
+      <div class="stats-overview">
+        <div class="stat-ov-card accent">
+          <div class="soc-val">${ov.plays}</div>
+          <div class="soc-label">总播放次数</div>
+        </div>
+        <div class="stat-ov-card">
+          <div class="soc-val">${fmtSec(ov.total_sec)}</div>
+          <div class="soc-label">总播放时长</div>
+        </div>
+        <div class="stat-ov-card">
+          <div class="soc-val">${ov.unique_songs}</div>
+          <div class="soc-label">不重复歌曲</div>
+        </div>
+        <div class="stat-ov-card">
+          <div class="soc-val">${ov.active_days}</div>
+          <div class="soc-label">听歌天数</div>
+        </div>
       </div>
 
-      <div class="section-head"><h2>最近 30 天播放趋势</h2></div>
-      <div class="bar-chart">${barHtml || '<span style="color:var(--text-dim);font-size:12px">暂无数据</span>'}</div>
+      <div class="stats-two-col">
+        <div class="stats-panel">
+          <div class="stats-panel-title">最近 30 天趋势</div>
+          <div class="bar-chart-new" id="barChart">
+            ${days30.some((d) => d.play_count > 0) ? barHtml : '<div class="stats-empty">暂无数据</div>'}
+          </div>
+        </div>
+        <div class="stats-panel">
+          <div class="stats-panel-title">听歌时段分布</div>
+          <div class="hour-grid">${hourHtml}</div>
+        </div>
+      </div>
 
-      <div class="section-head"><h2>听歌时段分布</h2></div>
-      <div class="hour-grid">${hourHtml}</div>
-
-      <div class="section-head"><h2>最常播放歌曲 Top 10</h2></div>
-      <div class="song-list" id="statsTopSongs"></div>
-
-      <div class="section-head"><h2>最常听歌手 Top 8</h2></div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px" id="statsTopArtists"></div>
+      <div class="stats-two-col">
+        <div class="stats-panel">
+          <div class="stats-panel-title">最爱歌手</div>
+          <div class="artist-bars" id="statsArtistBars">
+            ${artistBars || '<div class="stats-empty">暂无数据</div>'}
+          </div>
+        </div>
+        <div class="stats-panel">
+          <div class="stats-panel-title">最常播放 Top 10</div>
+          <div class="top-songs-list" id="statsTopSongs"></div>
+        </div>
+      </div>
     `;
 
-    // 渲染 Top 歌曲
-    const topContainer = $('statsTopSongs');
-    topContainer.innerHTML = topSongs.songs.map((s, i) => `
-      <div class="song-row" style="cursor:default">
-        <span class="idx">${i + 1}</span>
-        <span class="name">${esc(s.name)}</span>
-        <span class="singer">${esc(s.singer || '')}</span>
-        <span class="album"></span>
-        <span class="dur">${s.play_count}次</span>
-        <span class="ops" style="color:var(--text-dim);font-size:12px">${fmtSec(s.total_sec)}</span>
-      </div>`).join('') || '<div class="empty">还没有播放记录</div>';
+    // 渲染 Top 歌曲（可播放）
+    $('statsTopSongs').innerHTML = topSongs.songs.length
+      ? topSongs.songs.map((s, i) => `
+        <div class="top-song-row" data-i="${i}">
+          <span class="ts-rank">${i + 1}</span>
+          <div class="ts-info">
+            <div class="ts-name">${esc(s.name)}</div>
+            <div class="ts-singer">${esc(s.singer || '')}</div>
+          </div>
+          <div class="ts-meta">
+            <span class="ts-cnt">${s.play_count}次</span>
+            <button class="icon-btn play ts-play" title="播放" data-i="${i}">▶</button>
+          </div>
+        </div>`).join('')
+      : '<div class="stats-empty">还没有播放记录</div>';
 
-    // 渲染 Top 歌手
-    $('statsTopArtists').innerHTML = topArtists.artists.map((a) => `
-      <div class="stat-card" style="min-width:120px;text-align:left">
-        <div style="font-weight:600;font-size:13px;margin-bottom:4px">${esc(a.singer)}</div>
-        <div style="color:var(--text-dim);font-size:12px">${a.play_count} 次 · ${a.unique_songs} 首</div>
-      </div>`).join('') || '<div class="empty">暂无数据</div>';
+    // 绑定 Top 歌曲播放
+    const topSongsList = $('statsTopSongs');
+    topSongsList && topSongsList.querySelectorAll('.ts-play').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const i = Number(btn.dataset.i);
+        const s = topSongs.songs[i];
+        if (s) playFromList(topSongs.songs, i, 'stats', null);
+      };
+    });
+
+    // 绑定歌手点击
+    main.querySelectorAll('.artist-bar-row').forEach((row) => {
+      row.style.cursor = 'pointer';
+      row.onclick = () => {
+        $('searchInput').value = row.dataset.singer;
+        doSearch(row.dataset.singer);
+      };
+    });
 
   } catch (e) {
     main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
@@ -2097,8 +2330,110 @@ async function toggleLike(song, btn) {
   }
 }
 
+// ============================================================
+// 发现页（榜单 + 个性化推荐）
+// ============================================================
+const CHART_TABS = [
+  { id: 26,  label: '🔥 热歌榜' },
+  { id: 27,  label: '✨ 新歌榜' },
+  { id: 4,   label: '📊 流行指数' },
+  { id: 67,  label: '👂 识曲榜' },
+];
+
+async function openDiscover() {
+  state.view = 'discover';
+  setActiveNav('navDiscover');
+  const main = $('main');
+  main.innerHTML = `
+    <div class="view-title">发现音乐</div>
+    <div class="discover-tabs" id="discoverTabs">
+      <button class="disc-tab active" data-tab="recommend">🎵 为你推荐</button>
+      ${CHART_TABS.map((t) => `<button class="disc-tab" data-tab="chart-${t.id}">${t.label}</button>`).join('')}
+    </div>
+    <div id="discoverContent"><div class="loading">加载中…</div></div>
+  `;
+
+  // Tab 切换
+  main.querySelectorAll('.disc-tab').forEach((btn) => {
+    btn.onclick = async () => {
+      main.querySelectorAll('.disc-tab').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      await loadDiscoverTab(btn.dataset.tab);
+    };
+  });
+
+  await loadDiscoverTab('recommend');
+}
+
+async function loadDiscoverTab(tab) {
+  const container = $('discoverContent');
+  container.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    if (tab === 'recommend') {
+      const data = await api('/stats/recommend');
+      if (!data.songs.length) {
+        container.innerHTML = `
+          <div class="discover-empty">
+            <div style="font-size:40px;margin-bottom:16px">🎵</div>
+            <div>多听一些歌曲后，这里会根据你的喜好为你推荐</div>
+            <div style="color:var(--text-dim);font-size:13px;margin-top:8px">
+              可以先去搜索你喜欢的歌手试试
+            </div>
+          </div>`;
+        return;
+      }
+      const basedOn = data.artists?.length
+        ? `<div class="discover-based-on">基于你喜欢的：${data.artists.slice(0, 4).map(esc).join(' · ')}</div>`
+        : '';
+      container.innerHTML = `${basedOn}<div class="song-list" id="discoverList"></div>`;
+      renderSongList($('discoverList'), data.songs, { showAdd: true });
+    } else {
+      const topId = tab.replace('chart-', '');
+      const data = await api(`/stats/chart/${topId}`);
+      container.innerHTML = `
+        <div class="chart-meta">${data.cached ? '<span class="chart-cached">已缓存</span>' : '<span class="chart-fresh">实时</span>'}</div>
+        <div class="song-list" id="discoverList"></div>`;
+      // 给榜单歌曲加排名序号
+      const songs = data.songs.map((s, i) => ({ ...s, _chartRank: i + 1 }));
+      renderChartList($('discoverList'), songs);
+    }
+  } catch (e) {
+    container.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+function renderChartList(container, songs) {
+  if (!songs.length) { container.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+  container.innerHTML = songs.map((s, i) => {
+    const rank = s._chartRank || i + 1;
+    const rankClass = rank <= 3 ? `rank-top rank-${rank}` : 'rank-normal';
+    const cover = s.album_mid ? albumCover(s.album_mid, 80) : '';
+    return `
+    <div class="chart-row" data-i="${i}">
+      <span class="chart-rank ${rankClass}">${rank}</span>
+      ${cover ? `<img class="chart-cover" src="${cover}" loading="lazy" onerror="this.style.display='none'" />` : '<div class="chart-cover-ph">♪</div>'}
+      <div class="chart-info">
+        <div class="chart-name">${esc(s.name)}</div>
+        <div class="chart-singer">${esc(s.singer || '')}</div>
+      </div>
+      <div class="chart-ops">
+        <button class="icon-btn play" title="播放" data-act="play">▶</button>
+        <button class="icon-btn" title="添加到歌单" data-act="add">＋</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('.chart-row').forEach((row) => {
+    const i = Number(row.dataset.i);
+    row.querySelector('[data-act="play"]').onclick = (e) => { e.stopPropagation(); playFromList(songs, i, 'chart', null); };
+    row.querySelector('[data-act="add"]').onclick = (e) => { e.stopPropagation(); addSongs([songs[i]]); };
+    row.onclick = () => playFromList(songs, i, 'chart', null);
+  });
+}
+
 async function openLikesPage() {
   state.view = 'likes';
+  setActiveNav('navLikes');
   const main = $('main');
   main.innerHTML = '<div class="loading">加载中…</div>';
   try {

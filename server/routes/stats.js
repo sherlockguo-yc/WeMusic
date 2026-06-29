@@ -5,6 +5,7 @@ import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
 import { fetchLyrics } from '../services/lyrics.js';
+import { getTopList, searchSongs } from '../services/qqmusic.js';
 
 const router = express.Router();
 router.use(authRequired);
@@ -160,6 +161,103 @@ router.post('/likes/check', (req, res) => {
   const liked = {};
   for (const r of rows) liked[r.song_mid] = true;
   res.json({ liked });
+});
+
+// ============================================================
+// 榜单（热歌榜 / 新歌榜 / 飙升榜）
+// ============================================================
+const CHART_CACHE = new Map(); // topId -> { data, ts }
+const CHART_TTL = 60 * 60 * 1000; // 1 小时缓存（榜单数据每天更新一次）
+
+router.get('/chart/:topId', async (req, res) => {
+  const topId = Number(req.params.topId) || 62;
+  const cached = CHART_CACHE.get(topId);
+  if (cached && Date.now() - cached.ts < CHART_TTL) {
+    return res.json({ songs: cached.data, cached: true });
+  }
+  try {
+    const songs = await getTopList(topId, 50);
+    CHART_CACHE.set(topId, { data: songs, ts: Date.now() });
+    res.json({ songs, cached: false });
+  } catch (e) {
+    res.status(502).json({ error: '榜单获取失败：' + e.message });
+  }
+});
+
+// ============================================================
+// 个性化推荐
+// 策略：
+//   1. 从播放历史 + 喜欢列表中提取「种子歌手」
+//   2. 对每个种子歌手搜索代表歌曲（限20首）
+//   3. 同时从热歌榜里拉取当前热门（扩展发现广度）
+//   4. 过滤掉已听过的歌曲（近30天有播放记录的）
+//   5. 随机打散后返回
+// ============================================================
+router.get('/recommend', async (req, res) => {
+  const uid = req.user.id;
+  const since30 = Date.now() - 30 * 86400000;
+
+  // 种子歌手：喜欢 > 高频播放（分别取前3）
+  const likedArtists = db.prepare(
+    `SELECT DISTINCT singer FROM likes WHERE user_id=? AND singer != '' LIMIT 3`
+  ).all(uid).map((r) => r.singer);
+
+  const topArtists = db.prepare(`
+    SELECT singer, COUNT(*) AS cnt FROM play_logs
+    WHERE user_id=? AND played_at >= ? AND singer != ''
+    GROUP BY singer ORDER BY cnt DESC LIMIT 5
+  `).all(uid, since30).map((r) => r.singer);
+
+  // 合并，优先喜欢的歌手，去重展开（"A / B" → ["A","B"]）
+  const artistSet = new Set();
+  for (const s of [...likedArtists, ...topArtists]) {
+    s.split(/[\/、,，&]/).forEach((p) => { const t = p.trim(); if (t) artistSet.add(t); });
+  }
+  const seedArtists = [...artistSet].slice(0, 5);
+
+  // 已听过的歌曲 key（近30天，用于过滤）
+  const heardKeys = new Set(
+    db.prepare(`SELECT name, singer FROM play_logs WHERE user_id=? AND played_at >= ?`)
+      .all(uid, since30)
+      .map((r) => `${r.name}__${r.singer}`)
+  );
+
+  const fetchTasks = [];
+
+  if (seedArtists.length) {
+    // 每个种子歌手搜代表歌曲
+    fetchTasks.push(...seedArtists.map((name) => searchSongs(name)));
+  }
+  // 始终混入当前热歌榜前20首（增加新鲜度和广度）
+  fetchTasks.push(getTopList(26, 20));
+
+  const results = await Promise.allSettled(fetchTasks);
+  const seen = new Set();
+  const songs = [];
+
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue;
+    const list = Array.isArray(r.value) ? r.value : (r.value.songs || []);
+    for (const s of list) {
+      const key = `${s.name}__${s.singer}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // 已听过的放到后面（不完全过滤，避免推荐列表太少）
+      songs.push({ ...s, _heard: heardKeys.has(key) });
+    }
+  }
+
+  // 未听过的优先，听过的放后面，各自内部随机打散
+  const unheard = songs.filter((s) => !s._heard);
+  const heard   = songs.filter((s) => s._heard);
+  const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+  const final = [...shuffle(unheard), ...shuffle(heard)].slice(0, 50).map(({ _heard, ...s }) => s);
+
+  res.json({
+    songs: final,
+    artists: seedArtists,
+    reason: seedArtists.length ? 'history' : 'no_history',
+  });
 });
 
 // ============================================================
