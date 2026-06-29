@@ -2,7 +2,9 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 
 export function signToken(payload) {
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: '30d' });
+  // 默认 7 天，可通过环境变量 JWT_EXPIRES 调整（如 '1d' '24h' '7d'）
+  const expiresIn = process.env.JWT_EXPIRES || '7d';
+  return jwt.sign(payload, config.jwtSecret, { expiresIn });
 }
 
 export function authRequired(req, res, next) {

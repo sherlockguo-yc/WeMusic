@@ -37,27 +37,69 @@ db.exec(`
     album_mid   TEXT,
     duration    INTEGER DEFAULT 0,
     source      TEXT DEFAULT 'qqmusic',
-    bvid        TEXT,           -- 缓存命中的 Bilibili 视频
+    bvid        TEXT,
     cid         INTEGER,
     sort_order  INTEGER DEFAULT 0,
     added_at    INTEGER NOT NULL,
     FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE
   );
 
-  CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_id);
-  CREATE INDEX IF NOT EXISTS idx_songs_playlist ON songs(playlist_id);
+  /* bvid 全局缓存：不依赖歌单，任意来源播放均可复用 */
+  CREATE TABLE IF NOT EXISTS bvid_cache (
+    song_mid    TEXT PRIMARY KEY,   -- QQ 音乐曲目 mid 作为 key
+    name        TEXT NOT NULL,
+    singer      TEXT,
+    bvid        TEXT NOT NULL,
+    bili_title  TEXT,
+    bili_dur    INTEGER DEFAULT 0,
+    updated_at  INTEGER NOT NULL
+  );
+
+  /* 播放日志：记录每次播放 */
+  CREATE TABLE IF NOT EXISTS play_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    song_mid    TEXT,
+    name        TEXT NOT NULL,
+    singer      TEXT,
+    album       TEXT,
+    album_mid   TEXT,
+    duration    INTEGER DEFAULT 0,   -- 歌曲标准时长（秒）
+    played_sec  INTEGER DEFAULT 0,   -- 本次实际播放秒数（由前端上报）
+    bvid        TEXT,
+    played_at   INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  /* 歌曲红心（用户喜欢）*/
+  CREATE TABLE IF NOT EXISTS likes (
+    user_id   INTEGER NOT NULL,
+    song_mid  TEXT    NOT NULL,
+    name      TEXT NOT NULL,
+    singer    TEXT,
+    album     TEXT,
+    album_mid TEXT,
+    duration  INTEGER DEFAULT 0,
+    liked_at  INTEGER NOT NULL,
+    PRIMARY KEY (user_id, song_mid)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_playlists_user  ON playlists(user_id);
+  CREATE INDEX IF NOT EXISTS idx_songs_playlist  ON songs(playlist_id);
+  CREATE INDEX IF NOT EXISTS idx_play_logs_user  ON play_logs(user_id, played_at);
+  CREATE INDEX IF NOT EXISTS idx_likes_user      ON likes(user_id, liked_at);
 `);
 
-// 迁移：为旧库补充 sort_order 列
+// ---- 迁移：为旧库补充字段 ----
 const songCols = db.prepare('PRAGMA table_info(songs)').all().map((c) => c.name);
 if (!songCols.includes('sort_order')) {
   db.exec('ALTER TABLE songs ADD COLUMN sort_order INTEGER DEFAULT 0');
   db.exec('UPDATE songs SET sort_order = added_at');
 }
 
-export default db;
-
-// 允许通过 `npm run init-db` 直接初始化
-if (import.meta.url === `file://${process.argv[1]}`) {
-  console.log('数据库初始化完成:', config.dbPath);
+const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+if (!userCols.includes('avatar')) {
+  db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');
 }
+
+export default db;
