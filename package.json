@@ -1,0 +1,27 @@
+{
+  "name": "wemusic",
+  "version": "1.0.0",
+  "description": "本地部署的个人音乐网站：QQ音乐歌单/歌手解析 + Bilibili 免费播放",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "init-db": "node server/db.js"
+  },
+  "keywords": [
+    "music",
+    "qqmusic",
+    "bilibili",
+    "personal",
+    "local"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

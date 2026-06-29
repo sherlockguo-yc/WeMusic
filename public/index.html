@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WeMusic · 个人音乐</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="sidebar-resizer" id="sidebarResizer" title="拖动调整宽度"></div>
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <div class="logo">We<span>Music</span></div>
+      <div class="side-nav">
+        <div class="side-nav-item" id="navHome" title="导入与管理">🏠 导入 / 管理</div>
+        <div class="side-nav-item" id="navHistory" title="最近播放">🕘 最近播放</div>
+      </div>
+      <div class="side-section">
+        <span>我的歌单</span>
+        <span class="side-actions">
+          <button id="importPlBtn" title="导入歌单(JSON)">⇪</button>
+          <button id="newPlaylistBtn" title="新建歌单">＋</button>
+        </span>
+      </div>
+      <div id="playlistList"></div>
+      <input type="file" id="importFile" accept="application/json,.json" hidden />
+    </aside>
+
+    <!-- 顶栏 -->
+    <header class="topbar">
+      <div class="search-box">
+        <input id="searchInput" type="text" placeholder="搜索歌曲 / 歌手，回车检索" autocomplete="off" />
+        <button id="searchBtn">搜索</button>
+        <div class="search-suggest" id="searchSuggest"></div>
+      </div>
+      <div class="user-menu">
+        <button id="settingsBtn" title="设置">⚙</button>
+        <button id="helpBtn" title="快捷键帮助 (?)">？</button>
+        <span id="userName"></span>
+        <button id="logoutBtn">退出</button>
+      </div>
+    </header>
+
+    <!-- 主内容 -->
+    <main class="main" id="main">
+      <div class="empty">输入歌手名或歌曲名开始检索，或从左侧选择歌单</div>
+    </main>
+
+    <!-- 播放器 -->
+    <footer class="player">
+      <div class="np-cover" id="npCover"></div>
+      <div class="np">
+        <div class="t" id="npTitle">未在播放</div>
+        <div class="s" id="npSinger">—</div>
+      </div>
+      <div class="controls">
+        <button class="icon-btn" id="modeBtn" title="播放模式：列表循环">🔁</button>
+        <button class="icon-btn" id="prevBtn" title="上一首">⏮</button>
+        <button class="icon-btn play" id="playPauseBtn" title="播放/暂停">▶</button>
+        <button class="icon-btn" id="nextBtn" title="下一首">⏭</button>
+      </div>
+      <div class="progress-wrap">
+        <span class="time" id="curTime">0:00</span>
+        <input type="range" id="seekBar" min="0" max="1000" value="0" />
+        <span class="time" id="durTime">0:00</span>
+      </div>
+      <div class="volume-wrap">
+        <button class="icon-btn vol" id="volBtn" title="静音">🔊</button>
+        <input type="range" id="volBar" min="0" max="100" value="80" />
+      </div>
+      <div class="player-status" id="playStatus"></div>
+      <button class="btn sm" id="queueBtn" title="播放队列 / 历史">队列</button>
+      <button class="btn sm" id="switchSrcBtn" title="更换播放资源">换源</button>
+      <button class="btn sm" id="videoBtn" title="观看 Bilibili 视频">看视频</button>
+      <audio id="audio" preload="auto"></audio>
+    </footer>
+  </div>
+
+  <!-- 播放队列 + 历史 合并抽屉 -->
+  <div class="queue-drawer" id="queueDrawer">
+    <div class="qd-head">
+      <div class="qd-tabs">
+        <button class="qd-tab active" id="tabQueue">播放队列</button>
+        <button class="qd-tab" id="tabHistory">最近播放</button>
+      </div>
+      <span class="qd-actions">
+        <span class="qd-clear" id="qdClear" title="清空当前列表">清空</span>
+        <span class="qd-close" id="qdClose" title="关闭">✕</span>
+      </span>
+    </div>
+    <div class="qd-list" id="qdList"></div>
+  </div>
+
+  <!-- Bilibili 视频面板（可拖动 / 缩放 / 全屏） -->
+  <div class="video-pane" id="videoPane">
+    <div class="vp-head" id="vpHead">
+      <span id="vpTitle">Bilibili 播放</span>
+      <span class="vp-actions">
+        <span class="vp-btn src" id="vpSwitch" title="更换资源">换源</span>
+        <span class="vp-btn" id="vpFull" title="全屏">⛶</span>
+        <span class="vp-btn" id="vpClose" title="关闭">✕</span>
+      </span>
+    </div>
+    <div id="videoContainer"></div>
+  </div>
+
+  <!-- 候选换源弹层 -->
+  <div class="modal-mask" id="candModal">
+    <div class="modal">
+      <h3>选择播放资源（Bilibili）</h3>
+      <div id="candList"></div>
+      <div style="text-align:right;margin-top:12px">
+        <button class="btn sm" id="candClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 定时关闭弹层 -->
+  <div class="modal-mask" id="sleepModal">
+    <div class="modal modal-sm">
+      <h3>定时关闭</h3>
+      <div class="add-list" id="sleepOptions">
+        <div class="add-pl-row" data-min="0">关闭定时</div>
+        <div class="add-pl-row" data-min="15">15 分钟后停止</div>
+        <div class="add-pl-row" data-min="30">30 分钟后停止</div>
+        <div class="add-pl-row" data-min="60">60 分钟后停止</div>
+        <div class="add-pl-row" data-min="song">播完当前歌曲后停止</div>
+      </div>
+      <div class="prompt-actions">
+        <button class="btn sm" id="sleepClose">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 添加到歌单选择弹层 -->
+  <div class="modal-mask" id="addModal">
+    <div class="modal modal-sm">
+      <h3>添加到歌单</h3>
+      <div id="addList" class="add-list"></div>
+      <div class="prompt-actions">
+        <button class="btn sm" id="addNewPl">＋ 新建歌单</button>
+        <button class="btn sm" id="addClose">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通用输入/确认弹层（替代浏览器原生 prompt/confirm，预览环境下原生弹窗会被拦截） -->
+  <div class="modal-mask" id="promptModal">
+    <div class="modal modal-sm">
+      <h3 id="promptTitle">输入</h3>
+      <input id="promptInput" type="text" class="prompt-input" />
+      <div class="prompt-actions">
+        <button class="btn sm" id="promptCancel">取消</button>
+        <button class="btn green sm" id="promptOk">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设置面板 -->
+  <div class="modal-mask" id="settingsModal">
+    <div class="modal modal-sm">
+      <h3>设置</h3>
+      <div class="settings-body">
+        <div class="settings-section">
+          <div class="settings-label">外观主题</div>
+          <div class="settings-row theme-options">
+            <button class="theme-opt" data-theme="system">跟随系统</button>
+            <button class="theme-opt" data-theme="dark">深色</button>
+            <button class="theme-opt" data-theme="light">浅色</button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-label">定时停止播放</div>
+          <div class="settings-row">
+            <button class="btn sm sleep-opt" data-min="0">关闭</button>
+            <button class="btn sm sleep-opt" data-min="15">15 分钟</button>
+            <button class="btn sm sleep-opt" data-min="30">30 分钟</button>
+            <button class="btn sm sleep-opt" data-min="60">60 分钟</button>
+            <button class="btn sm sleep-opt" data-min="song">播完当前曲</button>
+          </div>
+          <div class="settings-hint" id="sleepHint"></div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-label">账户</div>
+          <div class="settings-row">
+            <span id="settingsUser" class="settings-username"></span>
+            <button class="btn sm danger" id="settingsLogout">退出登录</button>
+          </div>
+        </div>
+      </div>
+      <div class="prompt-actions">
+        <button class="btn sm" id="settingsClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 快捷键帮助浮层 -->
+  <div class="modal-mask" id="helpModal">
+    <div class="modal modal-sm">
+      <h3>键盘快捷键</h3>
+      <div class="help-list">
+        <div class="help-row"><kbd>空格</kbd><span>暂停 / 继续自动连播</span></div>
+        <div class="help-row"><kbd>→</kbd><span>下一首</span></div>
+        <div class="help-row"><kbd>←</kbd><span>上一首</span></div>
+        <div class="help-row"><kbd>/</kbd><span>聚焦搜索框</span></div>
+        <div class="help-row"><kbd>?</kbd><span>显示本帮助</span></div>
+        <div class="help-row"><kbd>Esc</kbd><span>关闭弹层 / 收起视频</span></div>
+        <div class="help-row"><kbd>右键</kbd><span>歌曲菜单（添加 / 移除 / 复制链接）</span></div>
+      </div>
+      <div class="prompt-actions">
+        <button class="btn sm" id="helpClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 歌曲右键菜单 -->
+  <div class="ctx-menu" id="ctxMenu"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
