@@ -111,7 +111,19 @@ export async function fetchLyrics(name, singer = '') {
   for (const q of queries) {
     const songs = await neSearchSongs(q);
     if (!songs.length) continue;
-    const candidate = pickBest(songs, name, singerFirst) || pickBest(songs, nameClean, singerFirst);
+
+    // 先尝试精确歌名匹配，若匹配质量差则用去括号歌名重试
+    const candidate = pickBest(songs, name, singerFirst);
+    const isGood = candidate && candidate.name?.toLowerCase() === name.toLowerCase();
+
+    if (isGood) { best = candidate; usedSongs = songs; break; }
+
+    // 若精确歌名未匹配，尝试去括号歌名
+    if (nameClean !== name) {
+      const alt = pickBest(songs, nameClean, singerFirst);
+      if (alt) { best = alt; usedSongs = songs; break; }
+    }
+    // 兜底：接受第一个非精确匹配
     if (candidate) { best = candidate; usedSongs = songs; break; }
   }
 

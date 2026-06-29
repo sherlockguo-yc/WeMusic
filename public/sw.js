@@ -2,32 +2,34 @@
  * WeMusic Service Worker
  * 策略：
  *   - 静态资源（HTML/CSS/JS/图标）：Cache First，版本号更新时自动失效
- *   - API 请求（/api/）：Network Only，不缓存（保证数据实时）
- *   - 音乐封面图（QQ 音乐 CDN）：Stale While Revalidate，优先缓存加速显示
+ *   - API 请求（/api/）：Network Only，不缓存
+ *   - 音乐封面图（QQ 音乐 CDN）：Stale While Revalidate
  */
 
-const CACHE_VERSION = 'wemusic-v1';
+const CACHE_VERSION = 'wemusic-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const IMG_CACHE    = `${CACHE_VERSION}-img`;
 
-// 预缓存的核心静态资源
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/login.html',
   '/css/style.css',
-  '/js/api.js',
-  '/js/app.js',
-  '/js/login.js',
+  '/dist/app.js',
+  '/dist/login.js',
   '/manifest.json',
   '/icons/icon-192.svg',
   '/icons/icon-512.svg',
 ];
 
-// ---- 安装：预缓存静态资源 ----
+// ---- 安装：逐文件缓存，避免单个失败导致全部失败 ----
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS))
+    caches.open(STATIC_CACHE).then((cache) =>
+      Promise.allSettled(PRECACHE_URLS.map((url) =>
+        fetch(url).then((res) => { if (res.ok) cache.put(url, res); }).catch(() => {})
+      ))
+    )
   );
   self.skipWaiting();
 });
