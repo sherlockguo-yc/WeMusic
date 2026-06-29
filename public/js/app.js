@@ -280,6 +280,42 @@ async function buildSongIndex() {
 /** 标记索引为脏，下次渲染歌曲列表时懒重建 */
 function dirtyIndex() { _indexDirty = true; }
 
+/**
+ * 强制重建索引后立即刷新页面上所有可见歌曲行的书签标记。
+ * 用于添加/删除歌曲后实时反馈。
+ */
+function refreshAllBookmarks() {
+  buildSongIndex().then(() => {
+    document.querySelectorAll('.song-list').forEach((list) => {
+      const songs = list._songs;
+      if (!songs) return;
+      list.querySelectorAll('.song-row').forEach((row) => {
+        const i = Number(row.dataset.i);
+        const s = songs[i];
+        if (!s) return;
+        const ops = row.querySelector('.ops');
+        if (!ops) return;
+        // 歌单页（有 del 按钮）不显示书签
+        const isPlaylistPage = !!ops.querySelector('[data-act="del"]');
+        const inPls = songInPlaylists(s);
+        const existing = ops.querySelector('.in-pl-mark');
+        const showBadge = !isPlaylistPage && inPls.size > 0;
+        if (showBadge && !existing) {
+          const mark = document.createElement('span');
+          mark.className = 'in-pl-mark';
+          mark.title = `已在 ${inPls.size} 个歌单中`;
+          mark.textContent = '🔖';
+          ops.insertBefore(mark, ops.firstChild);
+        } else if (!showBadge && existing) {
+          existing.remove();
+        } else if (existing && showBadge) {
+          existing.title = `已在 ${inPls.size} 个歌单中`;
+        }
+      });
+    });
+  }).catch(() => {});
+}
+
 function songInPlaylists(song) {
   const k = `${song.name}__${song.singer || ''}`;
   return state.songIndex.get(k) || new Set();
@@ -707,34 +743,8 @@ async function openPlaylist(id) {
 
 // ---------------- 歌曲列表渲染 ----------------
 function renderSongList(container, songs, opts = {}) {
-  // 索引脏时后台静默重建，重建完成后刷新书签（不阻塞当前渲染）
-  if (_indexDirty) {
-    buildSongIndex().then(() => {
-      // 重建完成：刷新当前容器内所有书签标记
-      if (!container.isConnected) return;
-      container.querySelectorAll('.song-row').forEach((row) => {
-        const i = Number(row.dataset.i);
-        const s = songs[i];
-        if (!s) return;
-        const inPls = songInPlaylists(s);
-        const ops = row.querySelector('.ops');
-        if (!ops) return;
-        const existing = ops.querySelector('.in-pl-mark');
-        const showBadge = !opts.showDelete && inPls.size > 0;
-        if (showBadge && !existing) {
-          const mark = document.createElement('span');
-          mark.className = 'in-pl-mark';
-          mark.title = `已在 ${inPls.size} 个歌单中`;
-          mark.textContent = '🔖';
-          ops.insertBefore(mark, ops.firstChild);
-        } else if (!showBadge && existing) {
-          existing.remove();
-        } else if (existing && showBadge) {
-          existing.title = `已在 ${inPls.size} 个歌单中`;
-        }
-      });
-    }).catch(() => {});
-  }
+  // 索引脏时后台静默重建，重建完成后刷新所有可见书签
+  if (_indexDirty) refreshAllBookmarks();
 
   const { showAdd = false, showDelete = false, playlistId = null, context = null } = opts;
   container.innerHTML = songs
@@ -877,7 +887,9 @@ async function commitAdd(playlistId) {
     const r = await api(`/playlists/${playlistId}/songs`, { method: 'POST', body: { songs } });
     const p = state.playlists.find((x) => x.id === playlistId);
     toast(`已添加 ${r.added} 首${r.skipped ? `，跳过 ${r.skipped} 首重复` : ''} → ${p ? p.name : ''}`);
-    await loadPlaylists(); // 内部会重建 songIndex
+    await loadPlaylists();
+    // 强制重建索引并立即刷新所有可见歌曲行的书签（实时反馈）
+    refreshAllBookmarks();
     if (state.view === 'playlist' && state.targetPlaylistId === playlistId) openPlaylist(playlistId);
   } catch (e) {
     toast('添加失败：' + e.message);
@@ -999,7 +1011,9 @@ async function deleteSong(playlistId, songId, row) {
   try {
     await api(`/playlists/${playlistId}/songs/${songId}`, { method: 'DELETE' });
     row.remove();
-    await loadPlaylists(); // 内部会重建 songIndex
+    await loadPlaylists();
+    // 该歌曲从歌单移除后，其他视图里的书签可能需要消失
+    refreshAllBookmarks();
   } catch (e) {
     toast('删除失败：' + e.message);
   }
@@ -1019,7 +1033,7 @@ function openSongMenu(evt, songs, i, context, playlistId, row) {
     { label: '▶ 播放', act: 'play' },
     { label: '＋ 添加到歌单', act: 'add' },
     { sep: true },
-    { label: '🔗 复制 Bilibili 链接', act: 'copy', disabled: !song.bvid },
+    { label: '🔗 复制 Bilibili 链接', act: 'copy', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
     { label: '🔍 在 Bilibili 搜索此歌', act: 'search' },
   ];
   if (inPlaylist) {
@@ -1029,7 +1043,7 @@ function openSongMenu(evt, songs, i, context, playlistId, row) {
     .map((it) =>
       it.sep
         ? '<div class="ctx-sep"></div>'
-        : `<div class="ctx-item${it.danger ? ' danger' : ''}" data-act="${it.act}"${it.disabled ? ' style="opacity:.45;pointer-events:none"' : ''}>${it.label}</div>`
+        : `<div class="ctx-item${it.danger ? ' danger' : ''}${it.dim ? ' dim' : ''}" data-act="${it.act}"${it.dimTip ? ` data-dim-tip="${esc(it.dimTip)}"` : ''}>${it.label}</div>`
     )
     .join('');
   menu.classList.add('show');
@@ -1045,6 +1059,12 @@ function openSongMenu(evt, songs, i, context, playlistId, row) {
   menu.querySelectorAll('.ctx-item').forEach((el) => {
     el.onclick = async (e) => {
       e.stopPropagation();
+      // dim 状态：给出友好提示而非静默无响应
+      if (el.classList.contains('dim')) {
+        closeCtxMenu();
+        toast(el.dataset.dimTip || '暂不可用');
+        return;
+      }
       closeCtxMenu();
       const act = el.dataset.act;
       if (act === 'play') playFromList(songs, i, context, playlistId);

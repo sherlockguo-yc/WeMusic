@@ -446,6 +446,8 @@ input[type='range']::-moz-range-thumb {
 }
 .ctx-menu .ctx-item:hover { background: var(--bg-soft); }
 .ctx-menu .ctx-item.danger { color: var(--danger); }
+.ctx-menu .ctx-item.dim { color: var(--text-dim); }
+.ctx-menu .ctx-item.dim:hover { background: var(--bg-soft); color: var(--text-dim); }
 .ctx-menu .ctx-sep { height: 1px; background: var(--border); margin: 5px 6px; }
 
 /* 拖拽排序 */
