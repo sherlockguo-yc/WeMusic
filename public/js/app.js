@@ -226,7 +226,12 @@ function clearSleep() {
   if (sleepTimeout) { clearTimeout(sleepTimeout); sleepTimeout = null; }
   sleepAfterSong = false;
 }
-function stopPlayback() { destroyVideo(); setStatus('已停止'); }
+function stopPlayback() {
+  destroyVideo();
+  setStatus('已停止');
+  // 定时停止后恢复标签页标题
+  document.title = 'WeMusic · 个人音乐';
+}
 function setSleep(v) {
   clearSleep();
   if (v === '0') { toast('已取消定时关闭'); updateSleepHint(); return; }
@@ -373,9 +378,11 @@ function renderSidebar() {
       const cnt = pl ? pl.count : 0;
       if (!(await uiConfirm(`确定删除歌单「${pl ? pl.name : ''}」？${cnt ? `（含 ${cnt} 首歌曲）` : ''}此操作不可恢复`))) return;
       await api(`/playlists/${id}`, { method: 'DELETE' });
-      if (state.targetPlaylistId === id) state.targetPlaylistId = null;
+      const wasActive = state.targetPlaylistId === id;
+      if (wasActive) state.targetPlaylistId = null;
       await loadPlaylists();
-      renderHome();
+      // 如果当前正在查看被删歌单，或已无歌单，跳回首页
+      if (wasActive || state.view === 'playlist') renderHome();
     };
   });
 }
@@ -384,8 +391,7 @@ function renderSidebar() {
 $('navHome').onclick = () => { renderHome(); $('navHome').classList.add('active'); $('navHistory').classList.remove('active'); };
 $('navHistory').onclick = () => {
   activeTab = 'history';
-  const d = $('queueDrawer');
-  d.classList.add('show');
+  $('queueDrawer').classList.add('show');
   setTab('history');
   renderHistory();
 };
@@ -462,7 +468,12 @@ function renderSuggest() {
   const q = $('searchInput').value.trim().toLowerCase();
   const hist = getSearchHistory();
   const list = q ? hist.filter((x) => x.toLowerCase().includes(q)) : hist;
-  if (list.length === 0) { box.classList.remove('show'); return; }
+  if (list.length === 0 && !q) { box.classList.remove('show'); return; }
+  if (list.length === 0 && q) {
+    // 有输入内容但无历史匹配：隐藏下拉，直接回车搜索即可
+    box.classList.remove('show');
+    return;
+  }
   box.innerHTML =
     `<div class="ss-head"><span>搜索历史</span><span class="ss-clear" id="ssClear">清空</span></div>` +
     list
@@ -743,8 +754,8 @@ async function openPlaylist(id) {
 
 // ---------------- 歌曲列表渲染 ----------------
 function renderSongList(container, songs, opts = {}) {
-  // 索引脏时后台静默重建，重建完成后刷新所有可见书签
-  if (_indexDirty) refreshAllBookmarks();
+  // 索引脏时后台静默重建，先置 false 防止重复触发
+  if (_indexDirty) { _indexDirty = false; buildSongIndex().then(() => refreshAllBookmarks()).catch(() => {}); }
 
   const { showAdd = false, showDelete = false, playlistId = null, context = null } = opts;
   container.innerHTML = songs
@@ -961,6 +972,7 @@ function playAll(songs, context, playlistId, shuffle = false) {
     localStorage.setItem('wemusic_mode', 'shuffle');
     renderMode();
   }
+  state.history = []; // 切换新列表时清空随机回溯历史
   const start = shuffle ? Math.floor(Math.random() * songs.length) : 0;
   playFromList(songs, start, context, playlistId);
 }
@@ -1012,8 +1024,17 @@ async function deleteSong(playlistId, songId, row) {
     await api(`/playlists/${playlistId}/songs/${songId}`, { method: 'DELETE' });
     row.remove();
     await loadPlaylists();
-    // 该歌曲从歌单移除后，其他视图里的书签可能需要消失
     refreshAllBookmarks();
+    // 刷新歌单头部统计（首 / 总时长），无需重新渲染整个列表
+    const sub = document.querySelector('.view-sub');
+    if (sub && state.view === 'playlist') {
+      const container = $('plSongs');
+      if (container) {
+        const remaining = container._songs || [];
+        const totalSec = remaining.reduce((acc, s) => acc + (Number(s.duration) || 0), 0);
+        sub.textContent = `${remaining.length} 首 · 总时长 ${fmtTotal(totalSec)} · 点击播放自动从 Bilibili 匹配`;
+      }
+    }
   } catch (e) {
     toast('删除失败：' + e.message);
   }
@@ -1412,7 +1433,14 @@ $('queueBtn').onclick = () => {
 $('qdClose').onclick = () => $('queueDrawer').classList.remove('show');
 $('qdClear').onclick = () => {
   if (activeTab === 'queue') {
-    state.queue = []; state.queueIndex = -1; saveSession();
+    state.queue = []; state.queueIndex = -1; state.current = null; state.history = [];
+    destroyVideo();
+    $('npTitle').textContent = '未在播放';
+    $('npSinger').textContent = '—';
+    $('npCover').classList.remove('show');
+    document.title = 'WeMusic · 个人音乐';
+    setStatus('');
+    saveSession();
     renderQueue(); toast('已清空播放队列');
   } else {
     localStorage.removeItem('wemusic_play_hist');
