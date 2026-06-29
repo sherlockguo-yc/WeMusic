@@ -20,8 +20,22 @@ app.use('/api/play', playRouter);
 // 健康检查
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+// Service Worker：必须无缓存，保证更新能及时生效
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile('sw.js', { root: PUBLIC_DIR });
+});
+
 // 静态前端
-app.use(express.static(PUBLIC_DIR));
+app.use(express.static(PUBLIC_DIR, {
+  setHeaders(res, filePath) {
+    // manifest 和图标也不强缓存，方便开发调试
+    if (filePath.endsWith('manifest.json')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
 
 // 统一错误处理
 app.use((err, req, res, next) => {
