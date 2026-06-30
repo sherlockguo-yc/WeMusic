@@ -849,18 +849,19 @@ input[type='range']::-moz-range-thumb {
 
 /* 柱状图：固定区域，柱子底部对齐，高度用 px（JS 计算），不依赖百分比 */
 .bar-chart-wrap {
-  /* 柱区 90px + 轴标签 18px = 108px，精确匹配，无多余空白 */
-  height: 108px;
+  /* 柱区 160px + 轴标签 18px = 178px */
+  height: 178px;
   display: flex;
   flex-direction: column;
 }
 .bar-chart-new {
-  flex: 1;               /* 占满 .bar-chart-wrap */
+  flex: 1;
   display: flex;
-  align-items: flex-end; /* 所有柱子底部对齐 */
+  align-items: flex-end;
   gap: 2px;
-  overflow: hidden;
+  overflow: visible; /* 允许数字标签溢出顶部 */
   position: relative;
+  padding-top: 16px;  /* 为顶部数字留出空间 */
 }
 .bar-item {
   flex: 1;
@@ -870,11 +871,13 @@ input[type='range']::-moz-range-thumb {
   justify-content: flex-end;
   cursor: default;
   min-width: 0;
-  /* 不设 height，由内容决定，底部对齐保证柱子从底部生长 */
+  position: relative;
 }
 .bar-val-label {
-  font-size: 8px; color: var(--text-dim); line-height: 1.2;
-  text-align: center; white-space: nowrap; min-height: 10px;
+  font-size: 9px; color: var(--text-dim); line-height: 1.2;
+  text-align: center; white-space: nowrap;
+  position: absolute; bottom: 100%; margin-bottom: 2px;
+  left: 50%; transform: translateX(-50%);
 }
 .bar-fill {
   width: 100%; background: var(--accent); border-radius: 3px 3px 0 0;

@@ -20,27 +20,40 @@ function fmtMin(sec) {
   return rm ? `${h} 小时 ${rm} 分` : `${h} 小时`;
 }
 
-// 自定义 tooltip（即时显示，无延迟）
-function bindTooltip(container) {
-  const tip = document.createElement('div');
-  tip.className = 'stats-tip';
-  tip.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap';
-  document.body.appendChild(tip);
-  container.addEventListener('mouseover', (e) => {
-    const el = e.target.closest('[data-tip]');
-    if (!el) return;
-    tip.innerHTML = el.dataset.tip;
+// ---- 全局 tooltip：单例 div + 索引化内容，避免 data-tip 属性内嵌 HTML 导致的问题 ----
+const TIP_ID = '__stats_tooltip__';
+let _tipRegistry = []; // { el, html } — 每个绑定元素的 tooltip HTML 内容
+
+function getTip() {
+  let el = document.getElementById(TIP_ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = TIP_ID;
+    el.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap;max-width:200px';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+// 绑定 tooltip：tipHtml 为可选参数；若不传，则用元素自身的 data-tip-text（纯文本索引）
+function attachTip(el, tipHtml) {
+  el.removeAttribute('title'); // 清除原生 title 干扰
+  el.addEventListener('mouseenter', (e) => {
+    const tip = getTip();
+    tip.innerHTML = tipHtml || el.dataset.tipText || '';
     tip.style.display = 'block';
-  });
-  container.addEventListener('mousemove', (e) => {
     tip.style.left = (e.clientX + 12) + 'px';
     tip.style.top = (e.clientY - 28) + 'px';
   });
-  container.addEventListener('mouseout', (e) => {
-    if (!e.target.closest('[data-tip]')) tip.style.display = 'none';
+  el.addEventListener('mousemove', (e) => {
+    const tip = getTip();
+    if (tip.style.display === 'none') return;
+    tip.style.left = (e.clientX + 12) + 'px';
+    tip.style.top = (e.clientY - 28) + 'px';
   });
-  container.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
-  return tip;
+  el.addEventListener('mouseleave', () => {
+    getTip().style.display = 'none';
+  });
 }
 
 export async function openStats() {
@@ -59,10 +72,13 @@ export async function openStats() {
     ]);
 
     const today = new Date();
+    // 用本地日期（与后端 SQLite date(...,'localtime') 对齐），避免 UTC 时区偏移
+    const fmtLocal = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const dailyMap = new Map((daily.daily || []).map((d) => [d.day, d]));
     const days30 = Array.from({ length: 30 }, (_, i) => {
       const d = new Date(today); d.setDate(today.getDate() - 29 + i);
-      const key = d.toISOString().slice(0, 10);
+      const key = fmtLocal(d);
       const row = dailyMap.get(key);
       return {
         day: key, label: `${d.getMonth() + 1}/${d.getDate()}`,
@@ -72,20 +88,31 @@ export async function openStats() {
     });
 
     // 渲染柱状图（mode: 'count' | 'duration'）
-    // 结构：.bar-chart-wrap > .bar-chart-new（柱子）+ .bar-chart-axis（x轴标签）
-    const BAR_PX = 90; // 柱子区域高度（px），与 CSS .bar-chart-wrap height 保持一致
+    const BAR_PX = 160; // 与 CSS .bar-chart-wrap height - 18px(axis) - 16px(padding-top) = 160px
+    // 存储每个柱子的 tooltip HTML，渲染后用 attachTip 绑定
+    let _barTipMap = [];
     function renderBarChart(mode) {
       const vals = days30.map((d) => mode === 'count' ? d.play_count : Math.round(d.total_sec / 60));
       const maxVal = Math.max(...vals, 1);
-      const bars = days30.map((d, i) => {
-        const val = vals[i];
-        const px = val ? Math.max(3, Math.round((val / maxVal) * BAR_PX)) : 0;
-        const tipContent = mode === 'count'
+      _barTipMap = days30.map((d) => {
+        return mode === 'count'
           ? `${d.label}<br><b>${d.play_count} 次</b> · ${fmtMin(d.total_sec)}`
           : `${d.label}<br><b>${fmtMin(d.total_sec)}</b> · ${d.play_count} 次`;
-        const valLabel = val > 0 ? (mode === 'count' ? val : Math.round(d.total_sec / 60) + 'm') : '';
-        return `<div class="bar-item" data-tip="${tipContent}">
-          <div class="bar-val-label">${valLabel}</div>
+      });
+      // 对数缩放：避免极端值把其他柱子压成一条线
+      // log1p 让小值也能有可见高度，大值不会撑满整个区域
+      const logMax = Math.log1p(maxVal);
+      const scale = (val) => val > 0 ? (Math.log1p(val) / logMax) * BAR_PX : 0;
+      const bars = days30.map((d, i) => {
+        const val = vals[i];
+        const px = val > 0 ? Math.max(4, Math.round(scale(val))) : 0;
+        // 有数据的柱子均显示标签（绝对定位在柱子外侧，不占空间）
+        const showLabel = val > 0;
+        const valLabel = showLabel
+          ? (mode === 'count' ? val : (d.total_sec >= 3600 ? Math.round(d.total_sec / 3600) + 'h' : Math.round(d.total_sec / 60) + 'm'))
+          : '';
+        return `<div class="bar-item" data-idx="${i}">
+          ${valLabel ? `<div class="bar-val-label">${valLabel}</div>` : ''}
           <div class="bar-fill" style="height:${px}px"></div>
         </div>`;
       }).join('');
@@ -98,22 +125,23 @@ export async function openStats() {
 
     // 时段分布（次数）
     const maxH = Math.max(...hourly.hourly.map((h) => h.play_count), 1);
+    const _hourTips = [];
     const hourHtml = Array.from({ length: 24 }, (_, i) => {
       const row = hourly.hourly.find((r) => r.hour === i);
       const cnt = row ? row.play_count : 0;
       const opacity = cnt ? 0.15 + (cnt / maxH) * 0.85 : 0;
-      const tipStr = `${i}:00 ~ ${i + 1}:00<br><b>${cnt} 次</b>`;
-      return `<div class="hour-cell${cnt > 0 ? ' active' : ''}"
-        style="${cnt > 0 ? `background:rgba(29,185,84,${opacity.toFixed(2)});color:#fff` : ''}"
-        data-tip="${tipStr}">${i}</div>`;
+      _hourTips[i] = `${i}:00 ~ ${i + 1}:00<br><b>${cnt} 次</b>`;
+      return `<div class="hour-cell${cnt > 0 ? ' active' : ''}" data-idx="${i}"
+        style="${cnt > 0 ? `background:rgba(29,185,84,${opacity.toFixed(2)});color:#fff` : ''}">${i}</div>`;
     }).join('');
 
     // 歌手条形图（次数 + 时长双行）
     const maxArtistPlay = Math.max(...topArtists.artists.map((a) => a.play_count), 1);
-    const artistBars = topArtists.artists.map((a) => {
+    const _artistTips = [];
+    const artistBars = topArtists.artists.map((a, i) => {
       const pct = Math.round((a.play_count / maxArtistPlay) * 100);
-      const tipStr = `${esc(a.singer)}<br><b>${a.play_count} 次</b>　${fmtMin(a.total_sec || 0)}`;
-      return `<div class="artist-bar-row" data-singer="${esc(a.singer)}" data-tip="${tipStr}">
+      _artistTips[i] = `${esc(a.singer)}<br><b>${a.play_count} 次</b>　${fmtMin(a.total_sec || 0)}`;
+      return `<div class="artist-bar-row" data-singer="${esc(a.singer)}" data-idx="${i}">
         <div class="artist-bar-name">${esc(a.singer)}</div>
         <div class="artist-bar-wrap"><div class="artist-bar-fill" style="width:${pct}%"></div></div>
         <div class="artist-bar-val">${a.play_count}次</div>
@@ -165,25 +193,35 @@ export async function openStats() {
         </div>
       </div>`;
 
-    // 绑定自定义 tooltip（barChart 在切换逻辑里绑定）
-    bindTooltip($('hourGrid'));
-    bindTooltip($('artistBars'));
+    // 绑定自定义 tooltip
+    // 时段网格
+    $('hourGrid').querySelectorAll('.hour-cell').forEach((el) => {
+      const i = Number(el.dataset.idx);
+      attachTip(el, _hourTips[i]);
+    });
+    // 歌手条形图
+    $('artistBars').querySelectorAll('.artist-bar-row').forEach((el) => {
+      const i = Number(el.dataset.idx);
+      attachTip(el, _artistTips[i]);
+    });
 
-    // 次数/时长切换：更新 wrap 内容，重新绑 tooltip
+    // 次数/时长切换
+    function bindBarChartTips() {
+      $('barChart').querySelectorAll('.bar-item').forEach((el) => {
+        const i = Number(el.dataset.idx);
+        attachTip(el, _barTipMap[i]);
+      });
+    }
     main.querySelectorAll('.stats-bar-tab').forEach((btn) => {
       btn.onclick = () => {
         main.querySelectorAll('.stats-bar-tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         const wrap = $('barChart');
         wrap.innerHTML = renderBarChart(btn.dataset.mode);
-        // tooltip 绑在 .bar-chart-new 上
-        const chartInner = wrap.querySelector('.bar-chart-new');
-        if (chartInner) bindTooltip(chartInner);
+        bindBarChartTips();
       };
     });
-    // 初始 tooltip 绑定
-    const initChartInner = $('barChart').querySelector('.bar-chart-new');
-    if (initChartInner) { bindTooltip(initChartInner); }
+    bindBarChartTips(); // 初始绑定
 
     $('statsTopSongs').innerHTML = topSongs.songs.length
       ? topSongs.songs.map((s, i) => `
