@@ -374,42 +374,58 @@ export function startVideo(bvid, title, dur) {
 }
 
 let _bgAudioBvid = null;
-let _bgAudioEndedHandler = null;
+let _bgAudioTimeHandler = null;
 
 function _startBgAudio(bvid) {
   if (_bgAudioBvid === bvid && !bgAudio.paused) return; // 已经在播这个
   _bgAudioBvid = bvid;
+  _bgAudioEndGuard = false; // 新歌开始，重置切歌守卫
 
-  // 移除旧的 ended 监听
-  if (_bgAudioEndedHandler) {
-    bgAudio.removeEventListener('ended', _bgAudioEndedHandler);
-    _bgAudioEndedHandler = null;
+  // 移除旧的 timeupdate 监听
+  if (_bgAudioTimeHandler) {
+    bgAudio.removeEventListener('timeupdate', _bgAudioTimeHandler);
+    _bgAudioTimeHandler = null;
   }
 
   bgAudio.src = `/api/play/stream?bvid=${bvid}`;
+  bgAudio.load(); // 显式触发加载，避免旧状态残留导致 play() 失败
   bgAudio.volume = 1;
   bgAudio.muted = false;
-  bgAudio.play().catch(() => {});
+
+  // 等音频元数据就绪后再播放（避免 ended 竞态导致的 AbortError）
+  bgAudio.addEventListener('canplay', () => {
+    if (_bgAudioBvid !== bvid) return;
+    bgAudio.play().catch(() => {});
+  }, { once: true });
+
   setStatus(`<span class="badge">▶ 后台播放</span> ${esc((state.current?.name || '').slice(0, 26))}`);
 
-  // bgAudio ended = 歌曲播完，触发自动切歌（补充计时器在后台被节流的情况）
-  _bgAudioEndedHandler = () => {
-    if (!document.hidden) return; // 前台不处理（由计时器负责）
+  // timeupdate 检测歌曲结束（替代 ended，稳定触发且不受竞态影响）
+  _bgAudioTimeHandler = () => {
+    if (!document.hidden) return;
     if (timerPaused) return;
+    // bgAudio.currentTime 接近总长（前后留 2 秒容差）
+    if (!bgAudio.duration || isNaN(bgAudio.duration)) return;
+    if (bgAudio.currentTime < bgAudio.duration - 2) return;
+    // 确认为结束时切歌
+    if (_bgAudioEndGuard) return;
+    _bgAudioEndGuard = true;
     stopTimer();
     _flushLog(totalDur || elapsed);
     if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
     if (state.playMode === 'single') { playCurrent(); return; }
     playNext(true);
   };
-  bgAudio.addEventListener('ended', _bgAudioEndedHandler);
+  bgAudio.addEventListener('timeupdate', _bgAudioTimeHandler);
 }
+let _bgAudioEndGuard = false;
 
 function _stopBgAudio() {
-  if (_bgAudioEndedHandler) {
-    bgAudio.removeEventListener('ended', _bgAudioEndedHandler);
-    _bgAudioEndedHandler = null;
+  if (_bgAudioTimeHandler) {
+    bgAudio.removeEventListener('timeupdate', _bgAudioTimeHandler);
+    _bgAudioTimeHandler = null;
   }
+  _bgAudioEndGuard = false;
   if (!bgAudio.src && !_bgAudioBvid) return;
   bgAudio.pause();
   bgAudio.src = '';
