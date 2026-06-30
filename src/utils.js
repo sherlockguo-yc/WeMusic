@@ -51,9 +51,14 @@ export function toast(msg) {
 
 export function biliEmbed(bvid, startSec = 0) {
   // danmaku=1 默认开启，用户可通过 B 站播放器内置按钮开关
-  // t=秒数 让 B 站从指定位置开始播放（用于回前台时对齐进度）
-  const t = startSec > 5 ? `&t=${Math.floor(startSec)}` : '';
-  return `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&high_quality=1&danmaku=1&as_wide=1&muted=0${t}`;
+  //
+  // B 站嵌入播放器会记住同一 bvid 的历史进度并自动恢复。
+  // 解决方案：
+  //   1. 加随机 _ts 参数使每次 URL 唯一 → B 站无法匹配历史记录 → 不恢复进度
+  //   2. 从头播时传 t=1（t=0 被 B 站忽略）；回前台对齐进度时传实际秒数
+  const ts = Date.now(); // 每次唯一，破坏 B 站的历史进度缓存
+  const t = startSec > 1 ? Math.floor(startSec) : 1;
+  return `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&high_quality=1&danmaku=1&as_wide=1&muted=0&t=${t}&_ts=${ts}`;
 }
 
 export function albumCover(albumMid, size = 300) {

@@ -383,9 +383,9 @@ function _bgPreload(bvid) {
   _bgBvid = bvid;
   _bgPlaying = false;
   bgAudio.src = `/api/play/stream?bvid=${bvid}`;
-  bgAudio.muted = true;   // 静音，避免与 iframe 叠声
+  bgAudio.muted = true;
   bgAudio.volume = _bgVolume;
-  bgAudio.load();         // 触发网络请求，开始缓冲（不 play）
+  bgAudio.load();
 }
 
 // 解除静音并从指定进度开始播放（切后台时调用）
@@ -396,24 +396,17 @@ function _bgUnmuteAndPlay(seekSec) {
 
   const doPlay = () => bgAudio.play().catch(() => setTimeout(() => bgAudio.play().catch(() => {}), 500));
 
-  const doSeekAndPlay = () => {
-    if (Math.abs(bgAudio.currentTime - seekSec) < 1) {
-      doPlay(); return; // 已经在目标位置附近，直接播
-    }
+  // 不等 canplay：直接设 currentTime + play()
+  // 浏览器会自动处理"还没数据时 seek"——会在数据到达后继续 seek，不会报错
+  if (seekSec > 2 && Math.abs(bgAudio.currentTime - seekSec) > 1) {
     const onSeeked = () => { bgAudio.removeEventListener('seeked', onSeeked); doPlay(); };
     bgAudio.addEventListener('seeked', onSeeked);
     bgAudio.currentTime = seekSec;
-  };
-
-  if (seekSec > 2) {
-    if (bgAudio.readyState >= 1) {
-      // 已有元数据，可以直接 seek
-      doSeekAndPlay();
-    } else {
-      // 等 canplay 再 seek（readyState=0 时 set currentTime 无效）
-      const onCanPlay = () => { bgAudio.removeEventListener('canplay', onCanPlay); doSeekAndPlay(); };
-      bgAudio.addEventListener('canplay', onCanPlay);
-    }
+    // 兜底：seek 超过 1.5s 未响应则直接 play（避免死等）
+    setTimeout(() => {
+      bgAudio.removeEventListener('seeked', onSeeked);
+      if (bgAudio.paused) doPlay();
+    }, 1500);
   } else {
     doPlay();
   }
@@ -468,13 +461,13 @@ export function startVideo(bvid, title, dur) {
     _pendingMount = { bvid, title };
     $('videoContainer').dataset.pendingBvid = bvid;
   } else {
-    // 前台：挂载 iframe，静音预缓冲 bgAudio（为下次切后台做准备）
+    // 前台：挂载 iframe，同时静音预缓冲 bgAudio（为下次切后台做准备）
     _bgStop();
     _pendingMount = null;
     delete $('videoContainer').dataset.pendingBvid;
     mountVideo(bvid, title);
-    // 延迟 1s 再预缓冲，避免与 iframe 初始加载抢带宽
-    setTimeout(() => _bgPreload(bvid), 1000);
+    // 500ms 后预缓冲：给 iframe 短暂优先带宽启动，避免争抢导致双方都慢
+    setTimeout(() => _bgPreload(bvid), 500);
   }
   applyPaneVisibility();
   setStatus(`<span class="badge">▶ Bilibili</span> ${esc((title || '').slice(0, 26))}`);
@@ -667,23 +660,28 @@ export function initPlayer() {
       mountVideoAt(target.bvid, target.title, elapsed > 5 ? elapsed : 0);
       applyPaneVisibility();
 
-      // 交叉：收到 B 站第一条 postMessage（视频已启动）时停 bgAudio；兜底 2s
+      // 交叉：收到来自 B 站的 postMessage（视频已初始化）时立即停 bgAudio
+      // 兜底：800ms 后无论如何停止（避免双声道时间过长）
       let _crossStopped = false;
-      const stopCross = () => { if (_crossStopped) return; _crossStopped = true; _bgStop(); };
+      const stopCross = () => {
+        if (_crossStopped) return;
+        _crossStopped = true;
+        window.removeEventListener('message', crossMsg);
+        _bgStop();
+      };
       const crossMsg = (e) => {
+        // 只处理来自 B 站播放器域名的消息，排除 WeMusic 自发的
+        if (!e.origin?.includes('bilibili.com')) return;
         try {
           const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-          if (d && typeof d === 'object' && (d.type || d.event)) {
-            window.removeEventListener('message', crossMsg);
-            stopCross();
-          }
+          if (d && typeof d === 'object' && (d.type || d.event)) stopCross();
         } catch {}
       };
       window.addEventListener('message', crossMsg);
-      setTimeout(() => { window.removeEventListener('message', crossMsg); stopCross(); }, 2000);
+      setTimeout(stopCross, 800); // 兜底缩短到 800ms
 
-      // 同步 iframe 音量（B 站 postMessage 协议）
-      setTimeout(() => _setIframeVolume(_bgVolume), 500);
+      // 同步 iframe 音量
+      setTimeout(() => _setIframeVolume(_bgVolume), 400);
     }
   });
 }
