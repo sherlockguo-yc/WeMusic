@@ -235,30 +235,31 @@ export function updateMediaSession(song) {
 const MODE_META = {
   loop: {
     label: '列表循环',
-    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="m17 2 4 4-4 4"/>
-      <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
-      <path d="m7 22-4-4 4-4"/>
-      <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+    icon: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 2l4 4-4 4"/>
+      <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+      <path d="M7 22l-4-4 4-4"/>
+      <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
     </svg>`,
   },
   single: {
     label: '单曲循环',
-    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="m17 2 4 4-4 4"/>
-      <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
-      <path d="m7 22-4-4 4-4"/>
-      <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
-      <path d="M11 10h1v4"/>
+    icon: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 2l4 4-4 4"/>
+      <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+      <path d="M7 22l-4-4 4-4"/>
+      <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+      <path d="M11 17V9l-2 2"/>
     </svg>`,
   },
   shuffle: {
     label: '随机播放',
-    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/>
-      <path d="m18 2 4 4-4 4"/>
-      <path d="M2 6h1.9c1.3 0 2.5.6 3.3 1.7l6.1 8.6c.7 1.1 2 1.7 3.3 1.7H22"/>
-      <path d="m22 18-4 4-4-4"/>
+    icon: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 3h5v5"/>
+      <path d="M4 20l17-17"/>
+      <path d="M21 16v5h-5"/>
+      <path d="M4 4l5 5"/>
+      <path d="M15 15l5 5"/>
     </svg>`,
   },
 };
@@ -267,8 +268,10 @@ const MODE_ORDER = ['loop', 'single', 'shuffle'];
 export function renderMode() {
   const m = MODE_META[state.playMode] || MODE_META.loop;
   const btn = $('modeBtn');
-  btn.innerHTML = m.icon;
+  if (!m._node) { const t = document.createElement('template'); t.innerHTML = m.icon; m._node = t.content.firstChild; }
+  btn.replaceChildren(m._node.cloneNode(true));
   btn.title = '播放模式：' + m.label;
+  btn.dataset.mode = state.playMode;
 }
 
 export function computeNextIndex() {
@@ -670,17 +673,20 @@ export function initPlayer() {
   navigator.mediaSession.setActionHandler('nexttrack', () => playNext(false));
 
   document.addEventListener('visibilitychange', () => {
+    // 未播放时切换前后台无任何影响
+    if (!autoTimer || timerPaused) return;
+
     if (document.hidden) {
-      // 切到后台：bgAudio 已预缓冲，直接 seek+play，几乎无延迟
-      if (!state.current?.bvid || timerPaused) return;
+      // 切到后台：销毁 iframe，bgAudio 接管
+      if (!state.current?.bvid) return;
       if (_bgBvid !== state.current.bvid) _bgPreload(state.current.bvid);
       $('videoContainer').innerHTML = '';
       _pendingMount = { bvid: state.current.bvid, title: state.current._biliTitle };
       $('videoContainer').dataset.pendingBvid = state.current.bvid;
       _bgUnmuteAndPlay(elapsed);
-      _startBgSync(); // 后台启动 bgAudio.currentTime 定期校准 elapsed
+      _startBgSync();
     } else {
-      // 回到前台
+      // 回到前台：停 bgAudio，重建 iframe
       if (!state.current?.bvid) return;
       _stopBgSync(); // 停止后台校准
 

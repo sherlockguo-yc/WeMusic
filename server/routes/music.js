@@ -6,7 +6,6 @@ import {
   getSingerSongs,
   getSingerAlbums,
   getAlbumDetail,
-  getAlbumSongs,
   getSongAlbumBg,
   extractDisstid,
   parsePlaylist,

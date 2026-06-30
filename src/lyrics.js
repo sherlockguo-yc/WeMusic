@@ -80,22 +80,21 @@ export function updateLyricsPanelMeta(song) {
   if (cover) bg.style.backgroundImage = `url(${cover})`;
   else bg.style.backgroundImage = 'none';
 
-  const lHeartO = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
-  const lHeartF = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+  import('./ui.js').then(({ heartOutline, heartFilled }) => {
   const isLiked = song.song_mid && state.likedMids && state.likedMids.has(song.song_mid);
   $('lpLikeRow').innerHTML = `
-    ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? lHeartF : lHeartO}</button>` : ''}
+    ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? heartFilled : heartOutline}</button>` : ''}
     <button class="lp-action-btn" title="添加到歌单" id="lpAddBtn">＋ 歌单</button>
     <button class="lp-action-btn" title="歌词换源" id="lpSwitchBtn">⤢ 歌词</button>
     <button class="lp-action-btn lp-bg-action" title="歌曲背景" id="lpBgBtn">💿 背景</button>
   `;
   const lpLikeBtn = document.getElementById('lpLikeBtn');
   if (lpLikeBtn) {
-    lpLikeBtn.onclick = async () => {
-      const { toggleLike } = await import('./ui.js');
+      lpLikeBtn.onclick = async () => {
+      const { toggleLike, heartOutline, heartFilled } = await import('./ui.js');
       await toggleLike(song, null);
       const liked2 = state.likedMids.has(song.song_mid);
-      lpLikeBtn.innerHTML = liked2 ? lHeartF : lHeartO;
+      lpLikeBtn.innerHTML = liked2 ? heartFilled : heartOutline;
       lpLikeBtn.classList.toggle('liked', liked2);
       lpLikeBtn.title = liked2 ? '取消喜欢' : '喜欢';
     };
@@ -110,10 +109,20 @@ export function updateLyricsPanelMeta(song) {
     const ov = $('lpBgOverlay');
     ov.style.display = ov.style.display === 'none' || !ov.style.display ? 'flex' : 'none';
   };
+  }); // close import('./ui.js').then(...)
 }
 
 export function openLyricsPanel() {
   const panel = $('lyricsPanel');
+  // 计算封面元素在视口中的中心坐标，作为 transform-origin（百分比）
+  const cover = $('npCover');
+  if (cover) {
+    const r = cover.getBoundingClientRect();
+    const cx = ((r.left + r.width / 2) / window.innerWidth * 100).toFixed(1) + '%';
+    const cy = ((r.top + r.height / 2) / window.innerHeight * 100).toFixed(1) + '%';
+    panel.style.setProperty('--lp-origin-x', cx);
+    panel.style.setProperty('--lp-origin-y', cy);
+  }
   panel.classList.add('show');
   document.body.style.overflow = 'hidden';
   if (state.current) {
@@ -126,7 +135,17 @@ export function openLyricsPanel() {
 }
 
 export function closeLyricsPanel() {
-  $('lyricsPanel').classList.remove('show');
+  const panel = $('lyricsPanel');
+  // 关闭时同步更新 origin，让动画缩回当前封面位置
+  const cover = $('npCover');
+  if (cover) {
+    const r = cover.getBoundingClientRect();
+    const cx = ((r.left + r.width / 2) / window.innerWidth * 100).toFixed(1) + '%';
+    const cy = ((r.top + r.height / 2) / window.innerHeight * 100).toFixed(1) + '%';
+    panel.style.setProperty('--lp-origin-x', cx);
+    panel.style.setProperty('--lp-origin-y', cy);
+  }
+  panel.classList.remove('show');
   document.body.style.overflow = '';
 }
 

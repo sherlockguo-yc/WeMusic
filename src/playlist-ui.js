@@ -47,14 +47,14 @@ export function refreshAllBookmarks() {
         const dur = row.querySelector('.dur');
         if (showBadge && !existing) {
           const mark = document.createElement('span');
-          mark.className = 'in-pl-mark'; mark.title = `已在 ${inPls.size} 个歌单中`; mark.textContent = '🔖';
+          mark.className = 'in-pl-mark'; mark.dataset.tip = `已在 ${inPls.size} 个歌单中`; mark.textContent = '🔖';
           if (placeholder) placeholder.replaceWith(mark);
           else if (dur) dur.before(mark);
         } else if (!showBadge && existing) {
           const ph = document.createElement('span'); ph.className = 'in-pl-placeholder';
           existing.replaceWith(ph);
         } else if (existing && showBadge) {
-          existing.title = `已在 ${inPls.size} 个歌单中`;
+          existing.dataset.tip = `已在 ${inPls.size} 个歌单中`;
         }
       });
     });
@@ -90,10 +90,34 @@ export function renderHome() {
 export function renderSidebar() {
   const box = $('playlistList');
   box.innerHTML = state.playlists.map((p) => `
-    <div class="playlist-item ${p.id === state.targetPlaylistId ? 'active' : ''}" data-id="${p.id}">
+    <div class="playlist-item ${p.id === state.targetPlaylistId ? 'active' : ''}" data-id="${p.id}" draggable="true">
       <span class="pl-name">${esc(p.name)}</span>
       <span><span class="count">${p.count}</span> <span class="del" data-del="${p.id}">✕</span></span>
     </div>`).join('');
+
+  // 拖拽排序
+  box.querySelectorAll('.playlist-item').forEach((el) => {
+    el.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+      el._dragId = Number(el.dataset.id);
+    });
+    el.addEventListener('dragend', () => { el.classList.remove('dragging'); });
+    el.addEventListener('dragover', (e) => e.preventDefault());
+    el.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      const fromId = box.querySelector('.dragging')?._dragId;
+      const toId = Number(el.dataset.id);
+      if (!fromId || fromId === toId) return;
+      const fromIdx = state.playlists.findIndex((p) => p.id === fromId);
+      const toIdx = state.playlists.findIndex((p) => p.id === toId);
+      if (fromIdx < 0 || toIdx < 0) return;
+      const [moved] = state.playlists.splice(fromIdx, 1);
+      state.playlists.splice(toIdx, 0, moved);
+      renderSidebar();
+      api('/playlists/reorder', { method: 'PUT', body: { orderedIds: state.playlists.map((p) => p.id) } }).catch(() => loadPlaylists());
+    });
+  });
 
   box.querySelectorAll('.playlist-item').forEach((el) => {
     const id = Number(el.dataset.id);
@@ -181,7 +205,7 @@ export function renderSongList(container, songs, opts = {}) {
   container.innerHTML = songs.map((s, i) => {
     const inPls = songInPlaylists(s);
     const bookmark = (!showDelete && inPls.size > 0)
-      ? `<span class="in-pl-mark" title="已在 ${inPls.size} 个歌单中">🔖</span>`
+      ? `<span class="in-pl-mark" data-tip="已在 ${inPls.size} 个歌单中">🔖</span>`
       : '<span class="in-pl-placeholder"></span>';
     const isLiked = s.song_mid ? (state.likedMids && state.likedMids.has(s.song_mid)) : false;
     const likeBtn = s.song_mid
@@ -327,7 +351,9 @@ export async function openPlaylist(id) {
       <div class="pl-header">
         <div class="pl-cover-wrap">${playlistCoverHtml(coverMids)}</div>
         <div class="pl-meta">
-          <div class="view-title">${esc(data.playlist.name)}</div>
+          <div class="view-title" id="plTitle">${esc(data.playlist.name)}
+            <button class="pl-rename-btn" id="plRenameBtn" title="重命名歌单">✏️</button>
+          </div>
           <div class="view-sub">${data.songs.length} 首 · 总时长 ${fmtTotal(totalSec)} · 点击播放自动从 Bilibili 匹配</div>
           <div class="section-head" style="margin:12px 0 0">
             <button class="btn sm" id="exportPlBtn">⤓ 导出歌单</button>
@@ -337,12 +363,32 @@ export async function openPlaylist(id) {
       ${data.songs.length ? listToolsHtml() : ''}
       <div class="song-list" id="plSongs"></div>`;
     $('exportPlBtn').onclick = () => exportPlaylist(id, data.playlist.name);
+    $('plRenameBtn').onclick = async () => {
+      const name = await uiPrompt('重命名歌单', data.playlist.name);
+      if (!name || name === data.playlist.name) return;
+      await api(`/playlists/${id}`, { method: 'PUT', body: { name } });
+      await loadPlaylists();
+      openPlaylist(id);
+    };
     if (data.songs.length === 0) { $('plSongs').innerHTML = '<div class="empty">歌单还是空的，去搜索添加歌曲吧</div>'; return; }
     const container = $('plSongs');
     renderSongList(container, data.songs, { showDelete: true, playlistId: id, context: 'playlist' });
     bindListTools(main, data.songs, container, 'playlist', id);
   } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
+
+// 全局即时 tooltip（替代 title 属性，无延迟）
+let _tipEl = null;
+function _initTip() { if (_tipEl) return; _tipEl = document.createElement('div'); _tipEl.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap'; document.body.appendChild(_tipEl); }
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest('[data-tip]');
+  if (!el) return;
+  _initTip(); _tipEl.textContent = el.dataset.tip; _tipEl.style.display = 'block';
+  const onMove = (ev) => { _tipEl.style.left = (ev.clientX + 12) + 'px'; _tipEl.style.top = (ev.clientY - 28) + 'px'; };
+  onMove(e); el.addEventListener('mousemove', onMove, { once: true });
+  const hide = () => { _tipEl.style.display = 'none'; el.removeEventListener('mouseleave', hide); };
+  el.addEventListener('mouseleave', hide);
+});
 
 export function initPlaylistUI() {
   $('addClose').onclick = () => { $('addModal').classList.remove('show'); pendingAddSongs = null; };

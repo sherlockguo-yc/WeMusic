@@ -23,6 +23,7 @@ db.exec(`
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL,
     name       TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -95,6 +96,11 @@ const songCols = db.prepare('PRAGMA table_info(songs)').all().map((c) => c.name)
 if (!songCols.includes('sort_order')) {
   db.exec('ALTER TABLE songs ADD COLUMN sort_order INTEGER DEFAULT 0');
   db.exec('UPDATE songs SET sort_order = added_at');
+}
+
+const plCols = db.prepare('PRAGMA table_info(playlists)').all().map((c) => c.name);
+if (!plCols.includes('sort_order')) {
+  db.exec('ALTER TABLE playlists ADD COLUMN sort_order INTEGER DEFAULT 0');
 }
 
 const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);

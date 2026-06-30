@@ -117,7 +117,7 @@ function appendLoadMore(main, container, songBuf, singer, total) {
         const i = prevLen + j;
         const inPls = songInPlaylists(s);
         const bookmark = inPls.size > 0
-          ? `<span class="in-pl-mark" title="已在 ${inPls.size} 个歌单中">🔖</span>`
+          ? `<span class="in-pl-mark" data-tip="已在 ${inPls.size} 个歌单中">🔖</span>`
           : '<span class="in-pl-placeholder"></span>';
         const div = document.createElement('div');
         div.className = 'song-row'; div.dataset.i = String(i);
@@ -152,6 +152,8 @@ function appendLoadMore(main, container, songBuf, singer, total) {
   };
 }
 
+let _artistTab = 'songs'; // 记住上次在专辑页点了哪个 tab
+
 export async function openArtist(mid, name) {
   state.view = 'artist';
   navPush('artist', { mid, name });
@@ -175,15 +177,15 @@ export async function openArtist(mid, name) {
         </div>
       </div>
       <div class="artist-tabs">
-        <button class="artist-tab active" data-tab="songs">歌曲（${totalNote}）</button>
-        <button class="artist-tab" data-tab="albums">专辑（${data.albums.length}）</button>
+        <button class="artist-tab${_artistTab === 'songs' ? ' active' : ''}" data-tab="songs">歌曲（${totalNote}）</button>
+        <button class="artist-tab${_artistTab === 'albums' ? ' active' : ''}" data-tab="albums">专辑（${data.albums.length}）</button>
       </div>
       <div class="artist-tab-content" id="artistTabContent">
-        <div class="artist-pane" id="artistSongsPane">
+        <div class="artist-pane" id="artistSongsPane" style="display:${_artistTab === 'songs' ? 'block' : 'none'}">
           ${songColHeader}
           <div class="song-list" id="artistSongs"></div>
         </div>
-        <div class="artist-pane" id="artistAlbumsPane" style="display:none">
+        <div class="artist-pane" id="artistAlbumsPane" style="display:${_artistTab === 'albums' ? 'block' : 'none'}">
           <div class="album-grid" id="artistAlbums"></div>
         </div>
       </div>`;
@@ -208,12 +210,12 @@ export async function openArtist(mid, name) {
     // Tab 切换
     main.querySelectorAll('.artist-tab').forEach((btn) => {
       btn.onclick = () => {
+        _artistTab = btn.dataset.tab;
         main.querySelectorAll('.artist-tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         const isSongs = btn.dataset.tab === 'songs';
         $('artistSongsPane').style.display = isSongs ? 'block' : 'none';
         $('artistAlbumsPane').style.display = isSongs ? 'none' : 'block';
-        // 切换时隐藏/显示加载更多按钮
         const loadMore = document.getElementById('loadMoreWrap');
         if (loadMore) loadMore.style.display = isSongs ? '' : 'none';
       };

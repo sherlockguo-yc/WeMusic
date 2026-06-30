@@ -71,7 +71,11 @@
 
     <!-- 播放器 -->
     <footer class="player">
-      <div class="np-cover" id="npCover" title="点击查看歌词"></div>
+      <div class="np-cover" id="npCover" title="点击查看歌词">
+        <span class="np-cover-br">┐</span>
+        <span class="np-cover-bl">└</span>
+        <span class="np-cover-txt">词</span>
+      </div>
       <div class="np">
         <div class="np-title-line" id="npTitle">未在播放</div>
         <div class="np-actions">
@@ -95,15 +99,6 @@
         <button class="icon-btn" id="nextBtn" title="下一首">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="6" x2="19" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
-      </div>
-      <div class="progress-center">
-        <div class="progress-wrap">
-          <span class="time" id="curTime">0:00</span>
-          <input type="range" id="seekBar" min="0" max="1000" value="0" />
-          <span class="time" id="durTime">0:00</span>
-        </div>
-      </div>
-      <div class="player-right">
         <div class="volume-wrap">
           <button class="icon-btn vol" id="volBtn" title="静音">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -114,6 +109,15 @@
           </button>
           <input type="range" id="volBar" min="0" max="100" value="80" />
         </div>
+      </div>
+      <div class="progress-center">
+        <div class="progress-wrap">
+          <span class="time" id="curTime">0:00</span>
+          <input type="range" id="seekBar" min="0" max="1000" value="0" />
+          <span class="time" id="durTime">0:00</span>
+        </div>
+      </div>
+      <div class="player-right">
         <div class="player-status" id="playStatus"></div>
         <button class="btn sm" id="lyricsBtn" title="歌词">词</button>
         <button class="btn sm" id="queueBtn" title="播放队列 / 历史">队列</button>

@@ -49,7 +49,7 @@ function insertSongsBulk(playlistId, songs, extraFields = {}) {
 router.get('/', (req, res) => {
   const rows = db.prepare(
     `SELECT p.*, (SELECT COUNT(*) FROM songs s WHERE s.playlist_id = p.id) AS count
-     FROM playlists p WHERE p.user_id = ? ORDER BY p.created_at ASC`
+     FROM playlists p WHERE p.user_id = ? ORDER BY p.sort_order ASC, p.created_at ASC`
   ).all(req.user.id);
   const coverStmt = db.prepare(
     `SELECT DISTINCT album_mid FROM songs WHERE playlist_id = ? AND album_mid IS NOT NULL AND album_mid != ''
@@ -57,6 +57,15 @@ router.get('/', (req, res) => {
   );
   for (const p of rows) p.cover_mids = coverStmt.all(p.id).map((r) => r.album_mid);
   res.json({ playlists: rows });
+});
+
+// ---- 歌单排序 ----
+router.put('/reorder', (req, res) => {
+  const ids = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : [];
+  if (ids.length === 0) return res.status(400).json({ error: '缺少排序数据' });
+  const upd = db.prepare('UPDATE playlists SET sort_order = ? WHERE id = ? AND user_id = ?');
+  db.transaction((arr) => { arr.forEach((id, idx) => upd.run(idx, Number(id), req.user.id)); })(ids);
+  res.json({ ok: true });
 });
 
 // ---- 新建歌单 ----

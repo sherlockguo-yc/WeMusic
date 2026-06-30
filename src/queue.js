@@ -109,12 +109,23 @@ export function renderHistory() {
 }
 
 export function initQueue() {
-  $('queueBtn').onclick = () => {
+  $('queueBtn').onclick = (e) => {
+    e.stopPropagation();
     const d = $('queueDrawer');
     const show = d.classList.toggle('show');
     if (show) renderActiveTab();
   };
   $('qdClose').onclick = () => $('queueDrawer').classList.remove('show');
+  // 点击侧边栏外部自动关闭
+  document.addEventListener('click', (e) => {
+    const d = $('queueDrawer');
+    if (!d.classList.contains('show')) return;
+    const btn = $('queueBtn');
+    const nav = $('navHistory');
+    if (!d.contains(e.target) && !btn.contains(e.target) && !nav?.contains(e.target)) {
+      d.classList.remove('show');
+    }
+  });
   $('qdClear').onclick = () => {
     if (activeTab === 'queue') {
       state.queue = []; state.queueIndex = -1; state.current = null; state.history = [];

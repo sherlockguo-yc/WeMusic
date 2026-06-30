@@ -315,12 +315,83 @@ export async function openLikesPage() {
       main.innerHTML = '<div class="view-title">我喜欢的</div><div class="empty">还没有标记喜欢的歌曲</div>';
       return;
     }
-    main.innerHTML = `<div class="view-title">我喜欢的（${likes.length} 首）</div>${listToolsHtml()}<div class="song-list" id="likesList"></div>`;
     const songs = likes.map((l) => ({ ...l, id: null }));
+    renderLikesView(main, songs);
+  } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+}
+
+function renderLikesView(main, songs, mode = 'list') {
+  if (mode === 'singer') {
+    // 按歌手分组
+    const groups = {};
+    for (const s of songs) {
+      const key = s.singer || '未知歌手';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(s);
+    }
+    // 按歌曲数量排序
+    const sorted = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+    const renderSingerGroups = (filter = '') => {
+      const filtered = filter ? sorted.filter(([singer]) => singer.toLowerCase().includes(filter.toLowerCase())) : sorted;
+      if (filtered.length === 0 && filter) {
+        document.getElementById('likesSingerList').innerHTML = '<div class="empty">没有匹配的歌手</div>';
+        return;
+      }
+      const html = filtered.map(([singer, ss]) => `
+        <div class="likes-singer-group" data-singer-name="${esc(singer).toLowerCase()}">
+          <div class="likes-singer-head">
+            <span class="likes-singer-name">${esc(singer)}</span>
+            <span class="likes-singer-cnt">${ss.length} 首</span>
+            <button class="btn sm green likes-singer-play" data-singer="${esc(singer)}">▶ 播放</button>
+          </div>
+          <div class="song-list"></div>
+        </div>
+      `).join('');
+      document.getElementById('likesSingerList').innerHTML = html;
+      filtered.forEach(([singer, ss]) => {
+        const group = document.querySelector(`.likes-singer-group[data-singer-name="${esc(singer).toLowerCase()}"]`);
+        if (group) renderSongList(group.querySelector('.song-list'), ss, { showAdd: true });
+      });
+      // 播放按钮
+      document.querySelectorAll('.likes-singer-play').forEach((btn) => {
+        btn.onclick = () => {
+          const s = btn.dataset.singer;
+          const sss = songs.filter((x) => x.singer === s);
+          import('./player.js').then(({ playFromList }) => playFromList(sss, 0, 'likes', null));
+        };
+      });
+    };
+
+    main.innerHTML = `<div class="view-title">我喜欢的（${songs.length} 首）
+      <span class="likes-toggle">
+        <button class="likes-tab active" data-tab="singer">按歌手</button>
+        <button class="likes-tab" data-tab="list">列表</button>
+      </span></div>
+      <input class="likes-filter" id="likesFilter" placeholder="筛选歌手…" />
+      <div id="likesSingerList"></div>`;
+    renderSingerGroups();
+    $('likesFilter').addEventListener('input', (e) => renderSingerGroups(e.target.value));
+    bindLikesToggle(main, songs);
+  } else {
+    const colHeader = `<div class="song-row-head">
+      <span class="h-idx">#</span><span class="h-name">歌名</span><span class="h-singer">歌手</span><span class="h-album">专辑</span><span class="h-bookmark"></span><span class="h-dur">时长</span><span class="h-ops"></span>
+    </div>`;
+    main.innerHTML = `<div class="view-title">我喜欢的（${songs.length} 首）
+      <span class="likes-toggle">
+        <button class="likes-tab" data-tab="singer">按歌手</button>
+        <button class="likes-tab active" data-tab="list">列表</button>
+      </span></div>${listToolsHtml()}${colHeader}<div class="song-list" id="likesList"></div>`;
     const container = $('likesList');
     renderSongList(container, songs, { showAdd: true });
     bindListTools(main, songs, container, null, null);
-  } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+    bindLikesToggle(main, songs);
+  }
+}
+
+function bindLikesToggle(main, songs) {
+  main.querySelectorAll('.likes-tab').forEach((btn) => {
+    btn.onclick = () => { renderLikesView(main, songs, btn.dataset.tab); };
+  });
 }
 
 export function initStats() {
