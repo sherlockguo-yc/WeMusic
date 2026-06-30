@@ -42,13 +42,21 @@
 
     <!-- 顶栏 -->
     <header class="topbar">
+      <div class="topbar-nav">
+        <button class="nav-arrow" id="navBack" title="后退">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button class="nav-arrow" id="navFwd" title="前进">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
       <div class="search-box">
         <input id="searchInput" type="text" placeholder="搜索歌曲 / 歌手，回车检索" autocomplete="off" />
         <button id="searchBtn">搜索</button>
         <div class="search-suggest" id="searchSuggest"></div>
       </div>
       <div class="user-menu">
-        <button id="helpBtn" title="快捷键帮助 (?)">？</button>
+        <button id="helpBtn" title="快捷键帮助 (?)">📖</button>
         <div class="user-avatar-wrap" id="userAvatarWrap" title="设置">
           <img class="user-avatar" id="userAvatar" src="" alt="" style="display:none" />
           <span class="user-avatar-fallback" id="userAvatarFallback"></span>
@@ -117,6 +125,22 @@
         <div class="lp-body" id="lpBody">
           <div class="lp-placeholder">播放歌曲后点「词」或封面加载歌词</div>
         </div>
+        <!-- 歌曲背景面板：居中卡片，毛玻璃，优雅展示 -->
+        <div class="lp-bg-overlay" id="lpBgOverlay" style="display:none">
+          <div class="lp-bg-card" id="lpBgCard">
+            <div class="lp-bg-card-header">
+              <span class="lp-bg-card-icon">💿</span>
+              <div class="lp-bg-card-heading">
+                <div class="lp-bg-card-title" id="lpBgCardTitle">歌曲背景</div>
+                <div class="lp-bg-card-sub" id="lpBgCardSub"></div>
+              </div>
+              <button class="lp-bg-card-close" id="lpBgCardClose">✕</button>
+            </div>
+            <div class="lp-bg-card-body" id="lpBgCardBody"></div>
+          </div>
+        </div>
+        <!-- 歌曲背景触发按钮 -->
+        <button class="lp-bg-btn" id="lpBgBtn" title="歌曲背景" style="display:none">💿</button>
       </div>
       <!-- 歌词页底部播放控制栏 -->
       <div class="lp-controls">

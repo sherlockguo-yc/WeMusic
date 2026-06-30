@@ -20,6 +20,31 @@ function saveSourceCache(songMid, sourceId) {
   localStorage.setItem('wemusic_lyrics_src', JSON.stringify(cache));
 }
 
+// 加载当前歌曲的背景信息（专辑简介）
+let _bgLoading = false;
+let _bgLoadedFor = '';
+
+export async function loadSongBackground(song) {
+  const key = song.song_mid || `${song.name}__${song.singer || ''}`;
+  if (_bgLoadedFor === key) return;
+  _bgLoadedFor = key;
+  if (_bgLoading) return;
+  _bgLoading = true;
+  $('lpBgBtn').style.display = 'none';
+  try {
+    const bg = await api(`/music/song-background?name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}&album_mid=${encodeURIComponent(song.album_mid || '')}`);
+    if (!bg || !bg.desc) return;
+    const title = bg.album_name || song.album || '未知专辑';
+    const sub = [bg.aDate, bg.company, bg.genre, bg.lan].filter(Boolean).join(' / ');
+    const desc = bg.desc.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+    $('lpBgCardTitle').textContent = title;
+    $('lpBgCardSub').textContent = sub;
+    $('lpBgCardBody').innerHTML = `<p>${desc}</p>`;
+    $('lpBgBtn').style.display = 'block';
+  } catch { $('lpBgBtn').style.display = 'none'; }
+  _bgLoading = false;
+}
+
 export function updateLyricsPanelMeta(song) {
   if (!song) return;
   $('lpTitle').textContent = `${song.name} · ${(song.singer || '').split('/')[0]}`;
@@ -189,7 +214,13 @@ export function initLyrics() {
   $('npCover').onclick = openLyricsPanel;
   $('lpClose').onclick = closeLyricsPanel;
 
-  $('lpPrevBtn').onclick = () => import('./player.js').then(({ playPrev }) => playPrev());
+  // 歌曲背景面板开关
+  $('lpBgBtn').onclick = () => {
+    const ov = $('lpBgOverlay');
+    ov.style.display = ov.style.display === 'none' || !ov.style.display ? 'flex' : 'none';
+  };
+  $('lpBgCardClose').onclick = () => { $('lpBgOverlay').style.display = 'none'; };
+  $('lpBgOverlay').onclick = (e) => { if (e.target === e.currentTarget) $('lpBgOverlay').style.display = 'none'; };
   $('lpNextBtn').onclick = () => import('./player.js').then(({ playNext }) => playNext(false));
   $('lpPlayBtn').onclick = () => {
     if (!state.current) return toast('请选择一首歌曲播放');

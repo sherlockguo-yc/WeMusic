@@ -5,7 +5,9 @@ import {
   findSingerMid,
   getSingerSongs,
   getSingerAlbums,
+  getAlbumDetail,
   getAlbumSongs,
+  getSongAlbumBg,
   extractDisstid,
   parsePlaylist,
   deduplicateByAlbum,
@@ -14,12 +16,19 @@ import {
 const router = express.Router();
 router.use(authRequired);
 
-// 综合搜索：返回歌曲列表 + 命中歌手（命中歌手时返回该歌手前 100 首，含 total 以便前端判断是否还有更多）
+// 综合搜索：返回歌曲列表 + 命中歌手（命中歌手时返回该歌手前 100 首，含 total 和 album_count 以便前端展示）
 router.get('/search', async (req, res) => {
   const { keyword } = req.query;
   if (!keyword) return res.status(400).json({ error: '请输入搜索关键字' });
   try {
     const result = await searchSongs(keyword);
+    // 命中歌手时，同时获取专辑数量（用于前端显示）
+    if (result.singer?.mid) {
+      try {
+        const albums = await getSingerAlbums(result.singer.mid, 1, 0);
+        result.album_count = albums.length;
+      } catch { result.album_count = 0; }
+    }
     res.json(result);
   } catch (e) {
     res.status(502).json({ error: e.message });
@@ -58,13 +67,25 @@ router.get('/artist', async (req, res) => {
   }
 });
 
-// 专辑内歌曲
+// 专辑详情（歌曲 + 元数据）
 router.get('/album', async (req, res) => {
   const { mid } = req.query;
   if (!mid) return res.status(400).json({ error: '请提供专辑 mid' });
   try {
-    const result = await getAlbumSongs(mid);
+    const result = await getAlbumDetail(mid);
     res.json(result);
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// 歌曲背景（当前播放歌曲的专辑简介 / 来源信息）
+router.get('/song-background', async (req, res) => {
+  const { name, singer, album_mid } = req.query;
+  if (!name) return res.status(400).json({ error: '请提供歌曲名' });
+  try {
+    const bg = await getSongAlbumBg(name, singer, album_mid);
+    res.json(bg || {});
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

@@ -46,6 +46,7 @@ function bindTooltip(container) {
 export async function openStats() {
   state.view = 'stats';
   setActiveNav('navStats');
+  import('./main.js').then(({ navPush }) => navPush('stats'));
   const main = $('main');
   main.innerHTML = '<div class="loading">加载统计数据…</div>';
   try {
@@ -214,6 +215,7 @@ export async function openStats() {
 export async function openDiscover() {
   state.view = 'discover';
   setActiveNav('navDiscover');
+  import('./main.js').then(({ navPush }) => navPush('discover'));
   const main = $('main');
   main.innerHTML = `
     <div class="view-title">发现音乐</div>
@@ -304,6 +306,7 @@ function renderChartList(container, songs) {
 export async function openLikesPage() {
   state.view = 'likes';
   setActiveNav('navLikes');
+  import('./main.js').then(({ navPush }) => navPush('likes'));
   const main = $('main');
   main.innerHTML = '<div class="loading">加载中…</div>';
   try {

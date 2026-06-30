@@ -233,16 +233,25 @@ export function updateMediaSession(song) {
 
 // ---- 播放模式 ----
 const MODE_META = {
-  loop: { icon: '🔁', label: '列表循环' },
-  single: { icon: '🔂', label: '单曲循环' },
-  shuffle: { icon: '🔀', label: '随机播放' },
+  loop: {
+    label: '列表循环',
+    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.5 22a9 9 0 1 0 2.1-18.4L1 10"/></svg>`,
+  },
+  single: {
+    label: '单曲循环',
+    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.5 22a9 9 0 1 0 2.1-18.4L1 10"/><text x="15" y="17" text-anchor="middle" font-size="9" font-weight="700" fill="currentColor" stroke="none">1</text></svg>`,
+  },
+  shuffle: {
+    label: '随机播放',
+    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>`,
+  },
 };
 const MODE_ORDER = ['loop', 'single', 'shuffle'];
 
 export function renderMode() {
   const m = MODE_META[state.playMode] || MODE_META.loop;
   const btn = $('modeBtn');
-  btn.textContent = m.icon;
+  btn.innerHTML = m.icon;
   btn.title = '播放模式：' + m.label;
 }
 
@@ -478,13 +487,15 @@ export function startVideo(bvid, title, dur) {
     if ($('queueDrawer').classList.contains('show')) renderActiveTab();
   });
   logPlay(state.current, dur);
-  import('./lyrics.js').then(({ updateLyricsPanelMeta, loadLyrics, lyricsFor, setLyricsFor }) => {
+  import('./lyrics.js').then(({ updateLyricsPanelMeta, loadLyrics, loadSongBackground, setLyricsFor }) => {
     if ($('lyricsPanel').classList.contains('show') && state.current) {
       updateLyricsPanelMeta(state.current);
       $('lyricsPanel').classList.add('playing');
       setLyricsFor('');
       loadLyrics(state.current);
     }
+    // 异步加载歌曲背景（不阻塞播放）
+    if (state.current) loadSongBackground(state.current);
   });
   prefetchNextBvid();
 }

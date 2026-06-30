@@ -3,6 +3,21 @@ import { $, esc, fmtDur, albumCover, toast } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 import { renderSongList, listToolsHtml, bindListTools, addSongs, songInPlaylists } from './playlist-ui.js';
+import { navPush } from './main.js';
+
+// 歌手头像 URL
+const singerAvatar = (mid) => `https://y.gtimg.cn/music/photo_new/T001R300x300M000${mid}.jpg`;
+
+// 歌曲列表列头
+const songColHeader = `<div class="song-row-head">
+  <span class="h-idx">#</span>
+  <span class="h-name">歌名</span>
+  <span class="h-singer">歌手</span>
+  <span class="h-album">专辑</span>
+  <span class="h-bookmark"></span>
+  <span class="h-dur">时长</span>
+  <span class="h-ops"></span>
+</div>`;
 
 // ---- 搜索历史 ----
 function getSearchHistory() {
@@ -20,6 +35,7 @@ function removeSearchHistory(kw) {
 function clearSearchHistory() { localStorage.removeItem('wemusic_search_hist'); }
 
 function renderSuggest() {
+  _selIdx = -1; // 重置键盘导航选中
   const box = $('searchSuggest');
   const q = $('searchInput').value.trim().toLowerCase();
   const hist = getSearchHistory();
@@ -50,6 +66,7 @@ export async function doSearch() {
   pushSearchHistory(keyword);
   $('searchSuggest').classList.remove('show');
   state.view = 'search';
+  navPush('search', { kw: keyword });
   const main = $('main');
   main.innerHTML = `<div class="loading">搜索中...</div>`;
   try {
@@ -58,10 +75,15 @@ export async function doSearch() {
     const totalNote = isSingerResult ? `已加载 ${data.songs.length} / ${data.total || '?'} 首` : `${data.songs.length} 首`;
     let html = `<div class="view-title">搜索：${esc(keyword)}</div>`;
     if (isSingerResult) {
-      html += `<div class="singer-card"><div class="info"><h3>歌手 · ${esc(data.singer.name)}</h3><p>查看 TA 的全部歌曲与专辑，可一键批量添加</p></div><button class="btn green" id="openArtistBtn">进入歌手页</button></div>`;
+      html += `<div class="singer-card">
+        <img class="singer-avatar" src="${singerAvatar(data.singer.mid)}" onerror="this.style.display='none'" />
+        <div class="info"><h3>${esc(data.singer.name)}</h3><p>共 ${data.total} 首歌曲${data.album_count ? ' · ' + data.album_count + ' 张专辑' : ''}</p></div>
+        <button class="btn green" id="openArtistBtn">进入歌手页</button>
+      </div>`;
     }
-    html += `<div class="section-head"><h2>${isSingerResult ? '歌手歌曲' : '单曲'}（${totalNote}）</h2></div>
+    html += `<div class="section-head"><h2>${isSingerResult ? '歌曲' : '单曲'}（${totalNote}）</h2></div>
              ${data.songs.length ? listToolsHtml() : ''}
+             ${songColHeader}
              <div class="song-list" id="searchSongs"></div>`;
     main.innerHTML = html;
     const sContainer = $('searchSongs');
@@ -132,27 +154,48 @@ function appendLoadMore(main, container, songBuf, singer, total) {
 
 export async function openArtist(mid, name) {
   state.view = 'artist';
+  navPush('artist', { mid, name });
   const main = $('main');
   main.innerHTML = `<div class="loading">加载歌手「${esc(name)}」...</div>`;
   try {
     const data = await api(`/music/artist?mid=${encodeURIComponent(mid)}&name=${encodeURIComponent(name || '')}`);
     const songBuf = [...data.songs];
     const totalNote = `已加载 ${songBuf.length} / ${data.total || '?'} 首`;
+
+    // 歌手顶栏：头像 + 信息
+    const singerName = data.singer?.name || name;
+    const singerSub = `共 ${data.total || 0} 首歌曲 · ${data.albums.length} 张专辑`;
+
     main.innerHTML = `
-      <div class="singer-card">
-        <div class="info"><h3>${esc(data.singer.name)}</h3><p>共 ${data.total} 首歌曲 · ${data.albums.length} 张专辑</p></div>
-        <button class="btn green" id="addAllSongs">添加已加载歌曲</button>
+      <div class="artist-header">
+        <img class="artist-avatar" src="${singerAvatar(mid)}" onerror="this.style.display='none'" />
+        <div class="artist-info">
+          <h2 class="artist-name">${esc(singerName)}</h2>
+          <p class="artist-sub">${singerSub}</p>
+        </div>
       </div>
-      <div class="section-head"><h2>歌曲（${totalNote}）</h2></div>
-      ${data.songs.length ? listToolsHtml() : ''}
-      <div class="song-list" id="artistSongs"></div>
-      <div class="section-head"><h2>专辑（${data.albums.length}）</h2></div>
-      <div class="album-grid" id="artistAlbums"></div>`;
+      <div class="artist-tabs">
+        <button class="artist-tab active" data-tab="songs">歌曲（${totalNote}）</button>
+        <button class="artist-tab" data-tab="albums">专辑（${data.albums.length}）</button>
+      </div>
+      <div class="artist-tab-content" id="artistTabContent">
+        <div class="artist-pane" id="artistSongsPane">
+          ${songColHeader}
+          <div class="song-list" id="artistSongs"></div>
+        </div>
+        <div class="artist-pane" id="artistAlbumsPane" style="display:none">
+          <div class="album-grid" id="artistAlbums"></div>
+        </div>
+      </div>`;
+
+    // 歌曲面板
     const aContainer = $('artistSongs');
     renderSongList(aContainer, songBuf, { showAdd: true });
     bindListTools(main, songBuf, aContainer, null, null);
-    $('addAllSongs').onclick = () => addSongs(songBuf);
+    $('addAllSongs')?.remove(); // 旧按钮不存在
     if (data.hasMore !== false) appendLoadMore(main, aContainer, songBuf, data.singer, data.total);
+
+    // 专辑面板
     const grid = $('artistAlbums');
     grid.innerHTML = data.albums.map((a) => `
       <div class="album-card" data-mid="${esc(a.album_mid)}" data-name="${esc(a.name)}">
@@ -161,21 +204,64 @@ export async function openArtist(mid, name) {
         <div class="a-time">${esc(a.pub_time || '')}</div>
       </div>`).join('') || '<div class="empty">暂无专辑</div>';
     grid.querySelectorAll('.album-card').forEach((el) => { el.onclick = () => openAlbum(el.dataset.mid, el.dataset.name); });
+
+    // Tab 切换
+    main.querySelectorAll('.artist-tab').forEach((btn) => {
+      btn.onclick = () => {
+        main.querySelectorAll('.artist-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const isSongs = btn.dataset.tab === 'songs';
+        $('artistSongsPane').style.display = isSongs ? 'block' : 'none';
+        $('artistAlbumsPane').style.display = isSongs ? 'none' : 'block';
+        // 切换时隐藏/显示加载更多按钮
+        const loadMore = document.getElementById('loadMoreWrap');
+        if (loadMore) loadMore.style.display = isSongs ? '' : 'none';
+      };
+    });
+
   } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
 
 export async function openAlbum(mid, name) {
   state.view = 'album';
+  navPush('album', { mid, name });
   const main = $('main');
   main.innerHTML = `<div class="loading">加载专辑「${esc(name)}」...</div>`;
   try {
     const data = await api(`/music/album?mid=${encodeURIComponent(mid)}`);
+    const metaHtml = data.desc || data.company || data.genre
+      ? `<div class="album-meta">
+        ${data.genre ? `<span class="album-meta-tag">${esc(data.genre)}</span>` : ''}
+        ${data.lan ? `<span class="album-meta-tag">${esc(data.lan)}</span>` : ''}
+        ${data.company ? `<span class="album-meta-tag">${esc(data.company)}</span>` : ''}
+        ${data.aDate ? `<span class="album-meta-tag">${esc(data.aDate)}</span>` : ''}
+        ${data.cur_song_num ? `<span class="album-meta-tag">${data.cur_song_num} 首</span>` : data.songs.length + ' 首'}
+      </div>`
+      : '';
+    const descHtml = data.desc
+      ? `<div class="album-desc-wrap">
+          <div class="album-desc clamp" id="albumDesc">${esc(data.desc).replace(/\n/g, '<br>')}</div>
+          <button class="album-desc-more" id="albumDescMore">展开全文</button>
+        </div>`
+      : '';
     main.innerHTML = `
-      <div class="view-title">专辑 · ${esc(data.album || name)}</div>
-      <div class="view-sub">${data.songs.length} 首</div>
-      <div class="section-head"><h2>曲目</h2><button class="btn green sm" id="addAlbumAll">整张添加</button></div>
+      <div class="view-title">${esc(data.name || name)}</div>
+      ${metaHtml}
+      ${descHtml}
+      <div class="section-head"><h2>曲目</h2>
+        <button class="btn green sm" id="addAlbumAll">整张添加</button>
+      </div>
       ${data.songs.length ? listToolsHtml() : ''}
+      ${songColHeader}
       <div class="song-list" id="albumSongs"></div>`;
+    if (data.desc) {
+      $('albumDescMore').onclick = () => {
+        const el = $('albumDesc');
+        const more = $('albumDescMore');
+        el.classList.toggle('clamp');
+        more.textContent = el.classList.contains('clamp') ? '展开全文' : '收起';
+      };
+    }
     const albContainer = $('albumSongs');
     renderSongList(albContainer, data.songs, { showAdd: true });
     bindListTools(main, data.songs, albContainer, null, null);
@@ -183,15 +269,49 @@ export async function openAlbum(mid, name) {
   } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
 
+// 搜索建议键盘导航选中索引
+let _selIdx = -1;
+
 export function initSearch() {
   $('searchBtn').onclick = doSearch;
   $('searchInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { $('searchSuggest').classList.remove('show'); doSearch(); }
-    else if (e.key === 'Escape') $('searchSuggest').classList.remove('show');
+    const box = $('searchSuggest');
+    const rows = box.querySelectorAll('.ss-row');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _selIdx = Math.min(_selIdx + 1, rows.length - 1);
+      rows.forEach((r, i) => r.classList.toggle('ss-hover', i === _selIdx));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _selIdx = Math.max(_selIdx - 1, -1);
+      rows.forEach((r, i) => r.classList.toggle('ss-hover', i === _selIdx));
+    } else if (e.key === 'Enter') {
+      box.classList.remove('show');
+      if (_selIdx >= 0 && rows[_selIdx]) {
+        $('searchInput').value = rows[_selIdx].dataset.k;
+      }
+      doSearch();
+    } else if (e.key === 'Escape') {
+      box.classList.remove('show');
+      _selIdx = -1;
+    }
   });
   $('searchInput').addEventListener('focus', renderSuggest);
   $('searchInput').addEventListener('input', renderSuggest);
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-box')) $('searchSuggest').classList.remove('show');
+  });
+
+  // 浏览器前进后退
+  window.addEventListener('popstate', (e) => {
+    if (!e.state) return;
+    const { view, data } = e.state;
+    if (view === 'search' && data?.kw) {
+      $('searchInput').value = data.kw; doSearch();
+    } else if (view === 'artist' && data?.mid) {
+      openArtist(data.mid, data.name);
+    } else if (view === 'album' && data?.mid) {
+      openAlbum(data.mid, data.name);
+    }
   });
 }

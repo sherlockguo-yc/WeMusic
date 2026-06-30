@@ -327,9 +327,9 @@ export async function getSingerAlbums(singerMid, num = 80, begin = 0) {
 }
 
 /**
- * 获取专辑内全部歌曲
+ * 获取专辑内全部歌曲 + 完整元数据（简介、公司、风格等）
  */
-export async function getAlbumSongs(albumMid) {
+export async function getAlbumDetail(albumMid) {
   const url =
     'https://c.y.qq.com/v8/fcg-bin/fcg_v8_album_info_cp.fcg?' +
     new URLSearchParams({
@@ -340,12 +340,43 @@ export async function getAlbumSongs(albumMid) {
       needNewCode: '0',
     }).toString();
   const json = await getJSON(url);
-  const list = json?.data?.list || [];
-  const albumName = json?.data?.name || '';
+  const data = json?.data || {};
+  const list = data.list || [];
+  const albumName = data.name || '';
   return {
-    album: albumName,
+    name: albumName,
+    desc: data.desc || '',
+    company: data.company || '',
+    company_new: data.company_new || '',
+    genre: data.genre || '',
+    lan: data.lan || '',
+    aDate: data.aDate || '',
+    cur_song_num: data.cur_song_num || list.length,
     songs: list.map((s) => normalizeSong({ ...s, albumname: s.albumname || albumName })),
   };
+}
+
+/**
+ * @deprecated 使用 getAlbumDetail 代替
+ */
+export async function getAlbumSongs(albumMid) {
+  const detail = await getAlbumDetail(albumMid);
+  return { album: detail.name, songs: detail.songs };
+}
+
+/**
+ * 通过歌曲的 album_mid 获取专辑简介（用于播放时展示歌曲背景）
+ * 如果歌曲没有 album_mid，尝试用歌名+歌手搜索匹配
+ */
+export async function getSongAlbumBg(songName, singer, albumMid) {
+  if (albumMid) {
+    try {
+      const detail = await getAlbumDetail(albumMid);
+      return { source: 'album', album_name: detail.name, desc: detail.desc, company: detail.company, genre: detail.genre, lan: detail.lan, aDate: detail.aDate };
+    } catch {}
+  }
+  // 没有 album_mid 或获取失败：返回空
+  return null;
 }
 
 /**

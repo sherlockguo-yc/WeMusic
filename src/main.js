@@ -60,10 +60,63 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ---- 全局路由历史（支持前进后退） ----
+// 关键：popstate 恢复视图时，视图内部会调 navPush()。此时不能用 pushState（会擦除前进历史），
+// 而应该用 replaceState 替换当前历史条目，保持前进栈完整。
+let _popstateView = null; // popstate 恢复时设为对应 view，navPush 消费后置 null
+
+export function navPush(view, data) {
+  if (_popstateView) {
+    // 覆盖当前历史条目，不破坏前进栈
+    history.replaceState({ view, data }, '', location.href);
+    _popstateView = null;
+  } else {
+    history.pushState({ view, data }, '', location.href);
+  }
+}
+
+async function restoreView(view, data) {
+  _popstateView = view;
+  if (view === 'discover')    openDiscover();
+  else if (view === 'search'  && data?.kw) { document.getElementById('searchInput').value = data.kw; import('./search.js').then(({ doSearch }) => doSearch()); }
+  else if (view === 'artist'  && data?.mid) import('./search.js').then(({ openArtist }) => openArtist(data.mid, data.name));
+  else if (view === 'album'   && data?.mid) import('./search.js').then(({ openAlbum }) => openAlbum(data.mid, data.name));
+  else if (view === 'stats')   import('./stats.js').then(({ openStats }) => openStats());
+  else if (view === 'likes')   import('./stats.js').then(({ openLikesPage }) => openLikesPage());
+}
+
+window.addEventListener('popstate', (e) => {
+  if (!e.state?.view) return;
+  restoreView(e.state.view, e.state.data);
+  updateNavArrows();
+});
+
+// 顶栏前进后退按钮
+function updateNavArrows() {
+  document.getElementById('navBack').disabled = history.length <= 1;
+  document.getElementById('navFwd').disabled = !(history.state && history.state.view);
+}
+document.getElementById('navBack').onclick = () => history.back();
+document.getElementById('navFwd').onclick = () => history.forward();
+// 初始状态及每次 pushState 后更新
+const _origPush = history.pushState.bind(history);
+history.pushState = function(state, title, url) {
+  _origPush(state, title, url);
+  updateNavArrows();
+};
+updateNavArrows();
+
 // 应用初始化
 async function init() {
   await loadPlaylists();
-  openDiscover();
+  // 检查 URL 是否有历史记录参数，有则恢复，否则默认打开发现页
+  const params = new URL(location.href).searchParams;
+  const v = params.get('v');
+  if (v) {
+    try { restoreView(v, JSON.parse(params.get('d') || '{}')); } catch { openDiscover(); }
+  } else {
+    openDiscover();
+  }
   restoreSession();
   loadLikes().catch(() => {});
   loadAvatar().catch(() => {});
