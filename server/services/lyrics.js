@@ -179,10 +179,21 @@ export async function searchLyricsCandidates(name, singer = '') {
     }
   }
 
-  // 按 quality 降序排列
+  // 按 quality 降序排列，取足够多的候选（后续过滤无歌词的再保留 12 个）
   candidates.sort((a, b) => b.quality - a.quality);
-  // 前 8 个候选
-  return candidates.slice(0, 8);
+  const pool = candidates.slice(0, 30);
+
+  // 并发拉取歌词，过滤掉歌词为空的候选
+  const valid = [];
+  const fetchTasks = pool.map(async (c) => {
+    const raw = await neFetchLyric(c.id);
+    if (raw.trim()) valid.push(c);
+  });
+  await Promise.allSettled(fetchTasks);
+
+  // 按原始 quality 排序后返回前 12 个
+  valid.sort((a, b) => b.quality - a.quality);
+  return valid.slice(0, 12);
 }
 
 /** 按 网易云 songId 直接拉取歌词 */

@@ -302,6 +302,7 @@ export async function getSingerAllSongs(singerMid, maxSongs = 500) {
 
 /**
  * 获取歌手专辑列表
+ * 返回 { albums: Array, total: number }
  */
 export async function getSingerAlbums(singerMid, num = 80, begin = 0) {
   const url =
@@ -318,12 +319,16 @@ export async function getSingerAlbums(singerMid, num = 80, begin = 0) {
     }).toString();
   const json = await getJSON(url);
   const list = json?.data?.list || [];
-  return list.map((a) => ({
-    album_mid: a.albumMID || a.album_mid || a.mid || a.Fmid || '',
-    name: a.albumName || a.album_name || a.albumname || '',
-    pub_time: a.pubTime || a.pub_time || '',
-    singer: a.singerName || a.singer_name || '',
-  }));
+  const total = json?.data?.total ?? list.length;
+  return {
+    albums: list.map((a) => ({
+      album_mid: a.albumMID || a.album_mid || a.mid || a.Fmid || '',
+      name: a.albumName || a.album_name || a.albumname || '',
+      pub_time: a.pubTime || a.pub_time || '',
+      singer: a.singerName || a.singer_name || '',
+    })),
+    total,
+  };
 }
 
 /**

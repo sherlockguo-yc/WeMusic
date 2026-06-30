@@ -24,8 +24,8 @@ router.get('/search', async (req, res) => {
     // 命中歌手时，同时获取专辑数量（用于前端显示）
     if (result.singer?.mid) {
       try {
-        const albums = await getSingerAlbums(result.singer.mid, 1, 0);
-        result.album_count = albums.length;
+        const res = await getSingerAlbums(result.singer.mid, 1, 0);
+        result.album_count = res.total;
       } catch { result.album_count = 0; }
     }
     res.json(result);
@@ -47,7 +47,7 @@ router.get('/artist', async (req, res) => {
       singerName = singer.name || name;
     }
     const isFirstPage = Number(begin) === 0;
-    const [songsRes, albums] = await Promise.all([
+    const [songsRes, albumRes] = await Promise.all([
       getSingerSongs(mid, 100, Number(begin)),
       isFirstPage ? getSingerAlbums(mid, 80, 0) : Promise.resolve(null),
     ]);
@@ -57,7 +57,7 @@ router.get('/artist', async (req, res) => {
       singer: { mid, name: singerName },
       total: songsRes.total,
       songs,
-      albums: albums || [],
+      albums: albumRes?.albums || [],
       begin: Number(begin),
       hasMore: Number(begin) + 100 < songsRes.total,
     });

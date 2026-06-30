@@ -207,14 +207,20 @@ export function restoreSession() {
 }
 
 // ---- bvid 缓存 ----
+// 优先用 song_mid 作 key；无 song_mid 时用 "name__singer" 作备用 key
+export function bvidCacheKey(song) {
+  return song.song_mid || `__${song.name}__${song.singer || ''}`;
+}
+
 export function cacheBvid(song) {
   if (state.currentContext && song.id) {
     api(`/playlists/${state.currentContext}/songs/${song.id}/bvid`, {
       method: 'PUT', body: { bvid: song.bvid },
     }).catch(() => {});
   }
-  if (song.song_mid) {
-    api(`/stats/bvid/${encodeURIComponent(song.song_mid)}`, {
+  const key = bvidCacheKey(song);
+  if (key) {
+    api(`/stats/bvid/${encodeURIComponent(key)}`, {
       method: 'PUT',
       body: { name: song.name, singer: song.singer, bvid: song.bvid, bili_title: song._biliTitle, bili_dur: song._biliDur },
     }).catch(() => {});
@@ -312,15 +318,16 @@ export async function prefetchNextBvid() {
     if (i < 0) return;
     const song = state.queue[i];
     if (!song || song.bvid) return; // 已有 bvid，无需预取
-    if (song.song_mid) {
-      const cached = await api(`/stats/bvid/${encodeURIComponent(song.song_mid)}`);
+    try {
+      const key = bvidCacheKey(song);
+      const cached = await api(`/stats/bvid/${encodeURIComponent(key)}`);
       if (cached.cached) {
         song.bvid = cached.bvid;
         song._biliTitle = cached.bili_title;
         song._biliDur = cached.bili_dur || song.duration;
         return;
       }
-    }
+    } catch {}
     const { best, candidates } = await api('/play/resolve', {
       method: 'POST',
       body: { name: song.name, singer: song.singer, duration: song.duration },
@@ -357,9 +364,10 @@ export async function playCurrent() {
   setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn }) => updateNpLikeBtn()), 0);
   resetProgress(song.duration);
 
-  if (!song.bvid && song.song_mid) {
+  if (!song.bvid) {
     try {
-      const cached = await api(`/stats/bvid/${encodeURIComponent(song.song_mid)}`);
+      const key = bvidCacheKey(song);
+      const cached = await api(`/stats/bvid/${encodeURIComponent(key)}`);
       if (cached.cached && seq === playSeq) {
         song.bvid = cached.bvid;
         song._biliTitle = cached.bili_title;

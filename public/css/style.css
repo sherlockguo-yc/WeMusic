@@ -435,44 +435,15 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 
 /* 播放模式按钮 */
 #modeBtn {
-  position: relative;
   border-color: transparent;
   background: transparent;
-  transition: color .2s, background .2s, transform .2s;
+  color: var(--text);
+  transition: color .2s;
 }
 #modeBtn svg { display: block; }
-/* 底部活跃指示点 */
-#modeBtn::after {
-  content: '';
-  position: absolute;
-  bottom: 4px; left: 50%; transform: translateX(-50%);
-  width: 4px; height: 4px; border-radius: 50%;
-  background: var(--accent);
-  opacity: 0;
-  transition: opacity .2s;
-}
-#modeBtn[data-mode]::after { opacity: 1; }
-/* 列表循环：accent 色 */
-#modeBtn[data-mode="loop"] { color: var(--accent); }
-#modeBtn[data-mode="loop"]:hover svg { animation: mode-spin 0.5s linear; }
-/* 单曲循环：accent-2 色（偏蓝/橙，取决于主题） */
-#modeBtn[data-mode="single"] { color: var(--accent-2, #6ab0f5); }
-#modeBtn[data-mode="single"]::after { background: var(--accent-2, #6ab0f5); }
-#modeBtn[data-mode="single"]:hover svg { animation: mode-spin 0.5s linear; }
-/* 随机播放：偏紫/品红 */
-#modeBtn[data-mode="shuffle"] { color: #c084fc; }
-#modeBtn[data-mode="shuffle"]::after { background: #c084fc; }
-#modeBtn[data-mode="shuffle"]:hover svg { animation: mode-shake 0.4s ease; }
+#modeBtn:hover { color: var(--text); border-color: transparent; }
 
-@keyframes mode-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-@keyframes mode-shake {
-  0%,100% { transform: translateX(0); }
-  20%     { transform: translateX(-3px) rotate(-6deg); }
-  60%     { transform: translateX(3px) rotate(6deg); }
-}
+
 .player-right { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .player .player-status { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
 .player .player-status .badge { color: var(--accent-2); }
