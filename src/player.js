@@ -275,6 +275,36 @@ export function playNext(auto = false) {
   playCurrent();
 }
 
+// 预解析下一首的 bvid，写回歌曲对象。用于后台自动切歌时无需现场 await。
+export async function prefetchNextBvid() {
+  try {
+    const i = computeNextIndex();
+    if (i < 0) return;
+    const song = state.queue[i];
+    if (!song || song.bvid) return; // 已有 bvid，无需预取
+    if (song.song_mid) {
+      const cached = await api(`/stats/bvid/${encodeURIComponent(song.song_mid)}`);
+      if (cached.cached) {
+        song.bvid = cached.bvid;
+        song._biliTitle = cached.bili_title;
+        song._biliDur = cached.bili_dur || song.duration;
+        return;
+      }
+    }
+    const { best, candidates } = await api('/play/resolve', {
+      method: 'POST',
+      body: { name: song.name, singer: song.singer, duration: song.duration },
+    });
+    song._candidates = candidates;
+    if (best) {
+      song.bvid = best.bvid;
+      song._biliTitle = best.title;
+      song._biliDur = best.duration || song.duration;
+      cacheBvid(song);
+    }
+  } catch {}
+}
+
 export async function playFromList(songs, index, context, playlistId) {
   state.queue = songs;
   state.queueIndex = index;
@@ -371,61 +401,128 @@ export function startVideo(bvid, title, dur) {
       loadLyrics(state.current);
     }
   });
+
+  // 提前解析下一首的 bvid，供后台自动切歌时无缝使用
+  prefetchNextBvid();
 }
 
 let _bgAudioBvid = null;
-let _bgAudioTimeHandler = null;
+let _bgAudioEndedHandler = null;
+
+function _bgAdvance() {
+  // bgAudio 播完后切歌（后台场景：保持 bgAudio 播放连续性，避免 autoplay 被阻止）
+  if (timerPaused) return;
+  stopTimer();
+  _flushLog(totalDur || elapsed);
+
+  if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
+
+  // 单曲循环：同一首再播一遍
+  if (state.playMode === 'single') {
+    if (document.hidden && state.current?.bvid) {
+      _bgReplayCurrent();
+    } else {
+      playCurrent();
+    }
+    return;
+  }
+
+  // 计算下一首
+  const i = computeNextIndex();
+  if (i === -1) return;
+  if (state.playMode === 'shuffle') state.history.push(state.queueIndex);
+  state.queueIndex = i;
+  const next = state.queue[i];
+
+  // 后台 + 下一首已有 bvid：在 ended 同步上下文中直接切 bgAudio，保持播放连续性
+  if (document.hidden && next && next.bvid) {
+    _bgSwitchTo(next);
+  } else {
+    // 前台，或下一首未预取到 bvid：走常规异步流程（会再发请求解析）
+    playCurrent();
+  }
+}
+
+// 后台无缝切到下一首：直接复用 bgAudio 元素，play() 在 ended 同步上下文中执行
+function _bgSwitchTo(song) {
+  const seq = ++playSeq;
+  state.current = song;
+  _pendingMount = { bvid: song.bvid, title: song._biliTitle };
+  $('videoContainer').dataset.pendingBvid = song.bvid;
+
+  // 立即切换 bgAudio 源并播放（关键：同步调用，保持媒体播放连续许可）
+  _bgAudioBvid = song.bvid;
+  _bindBgHandlers();
+  bgAudio.src = `/api/play/stream?bvid=${song.bvid}`;
+  bgAudio.load();
+  _tryPlayBg();
+
+  // 异步补做 UI/状态更新（不影响 bgAudio 已经开始的播放）
+  const dur = song._biliDur || song.duration;
+  resetProgress(dur);
+  $('npTitle').textContent = song.name;
+  $('npSinger').textContent = song.singer || '';
+  document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
+  updateNpCover(song);
+  updateMediaSession(song);
+  highlightPlaying();
+  startTimer(dur);
+  saveSession();
+  setStatus(`<span class="badge">▶ 后台播放</span> ${esc((song.name || '').slice(0, 26))}`);
+  if (seq !== playSeq) return;
+  import('./queue.js').then(({ pushPlayHistory, renderActiveTab }) => {
+    pushPlayHistory(song);
+    if ($('queueDrawer').classList.contains('show')) renderActiveTab();
+  });
+  logPlay(song, dur);
+  // 后台继续预取再下一首
+  prefetchNextBvid();
+}
+
+// 后台单曲循环：从头重播当前 bgAudio
+function _bgReplayCurrent() {
+  try { bgAudio.currentTime = 0; } catch {}
+  _tryPlayBg();
+  resetProgress(totalDur);
+  startTimer(totalDur);
+}
+
+function _bindBgHandlers() {
+  if (_bgAudioEndedHandler) return; // 已绑定
+  _bgAudioEndedHandler = () => _bgAdvance();
+  bgAudio.addEventListener('ended', _bgAudioEndedHandler);
+}
+
+function _tryPlayBg(attempt = 0) {
+  const p = bgAudio.play();
+  if (p && p.catch) {
+    p.catch(() => {
+      // 后台 Tab 媒体加载可能被降级，短延时后重试（最多 3 次）
+      if (attempt < 3) setTimeout(() => _tryPlayBg(attempt + 1), 400);
+    });
+  }
+}
 
 function _startBgAudio(bvid) {
-  if (_bgAudioBvid === bvid && !bgAudio.paused) return; // 已经在播这个
-  _bgAudioBvid = bvid;
-  _bgAudioEndGuard = false; // 新歌开始，重置切歌守卫
+  if (!bvid) return;
+  if (_bgAudioBvid === bvid && !bgAudio.paused && !bgAudio.ended) return; // 已经在播这个
 
-  // 移除旧的 timeupdate 监听
-  if (_bgAudioTimeHandler) {
-    bgAudio.removeEventListener('timeupdate', _bgAudioTimeHandler);
-    _bgAudioTimeHandler = null;
-  }
+  _bgAudioBvid = bvid;
+  _bindBgHandlers();
 
   bgAudio.src = `/api/play/stream?bvid=${bvid}`;
-  bgAudio.load(); // 显式触发加载，避免旧状态残留导致 play() 失败
   bgAudio.volume = 1;
   bgAudio.muted = false;
-
-  // 等音频元数据就绪后再播放（避免 ended 竞态导致的 AbortError）
-  bgAudio.addEventListener('canplay', () => {
-    if (_bgAudioBvid !== bvid) return;
-    bgAudio.play().catch(() => {});
-  }, { once: true });
-
+  bgAudio.load(); // 显式加载新 src，确保 ended 状态被重置后能重新播放
+  _tryPlayBg();
   setStatus(`<span class="badge">▶ 后台播放</span> ${esc((state.current?.name || '').slice(0, 26))}`);
-
-  // timeupdate 检测歌曲结束（替代 ended，稳定触发且不受竞态影响）
-  _bgAudioTimeHandler = () => {
-    if (!document.hidden) return;
-    if (timerPaused) return;
-    // bgAudio.currentTime 接近总长（前后留 2 秒容差）
-    if (!bgAudio.duration || isNaN(bgAudio.duration)) return;
-    if (bgAudio.currentTime < bgAudio.duration - 2) return;
-    // 确认为结束时切歌
-    if (_bgAudioEndGuard) return;
-    _bgAudioEndGuard = true;
-    stopTimer();
-    _flushLog(totalDur || elapsed);
-    if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
-    if (state.playMode === 'single') { playCurrent(); return; }
-    playNext(true);
-  };
-  bgAudio.addEventListener('timeupdate', _bgAudioTimeHandler);
 }
-let _bgAudioEndGuard = false;
 
 function _stopBgAudio() {
-  if (_bgAudioTimeHandler) {
-    bgAudio.removeEventListener('timeupdate', _bgAudioTimeHandler);
-    _bgAudioTimeHandler = null;
+  if (_bgAudioEndedHandler) {
+    bgAudio.removeEventListener('ended', _bgAudioEndedHandler);
+    _bgAudioEndedHandler = null;
   }
-  _bgAudioEndGuard = false;
   if (!bgAudio.src && !_bgAudioBvid) return;
   bgAudio.pause();
   bgAudio.src = '';
