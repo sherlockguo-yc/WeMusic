@@ -112,6 +112,8 @@ export function mountVideoAt(bvid, title, startSec) {
   setVpTitle(title);
   $('videoContainer').innerHTML =
     `<iframe src="${biliEmbed(bvid, startSec)}" allowfullscreen allow="autoplay; fullscreen" scrolling="no" frameborder="0"></iframe>`;
+  // 记录 iframe 创建的时间戳，用于检测 B 站视频真实启动时间
+  $('videoContainer').dataset.mountedAt = Date.now();
 }
 
 export function destroyVideo() {
@@ -414,6 +416,7 @@ function _bgStop() {
 }
 
 export function startVideo(bvid, title, dur) {
+  _iframeStartCalibrated = false; // 每首新歌重置校正状态
   if (document.hidden) {
     // 后台切歌：重新 preload 新歌，立即播放
     _bgBvid = null; // 强制重新 preload
@@ -450,9 +453,43 @@ export function startVideo(bvid, title, dur) {
   prefetchNextBvid();
 }
 
+// B 站 iframe 真实启动时间检测：
+// B 站播放器会通过 postMessage 发送心跳（包含 type:'heartbeat' 或 currentTime 等）
+// 监听第一条有效消息即可知道视频真正开始播放的时刻，用于校正计时器偏移
+let _iframeStartCalibrated = false; // 当前歌是否已校正过
+
+function _onBiliMessage(e) {
+  if (_iframeStartCalibrated) return;
+  if (!state.current?.bvid || document.hidden) return;
+  // B 站消息结构：{ type, data } 或直接字符串，只要收到任意一条就说明播放器已初始化
+  try {
+    const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+    if (!d || typeof d !== 'object') return;
+    // 任意 B 站播放器消息（heartbeat / statechange 等）
+    if (!d.type && !d.event) return;
+  } catch { return; }
+
+  const mountedAt = Number($('videoContainer').dataset.mountedAt || 0);
+  if (!mountedAt) return;
+  const delay = (Date.now() - mountedAt) / 1000; // iframe 从创建到视频开始的秒数
+  if (delay < 0.5 || delay > 15) return; // 不合理则忽略
+
+  // 把计时器往回拨：elapsed 实际上多走了 delay 秒
+  // 修正：elapsed = 当前 elapsed - delay（但不能小于 0）
+  if (elapsed > delay + 1) {
+    elapsed = Math.max(0, Math.round(elapsed - delay));
+    $('curTime').textContent = fmtDur(elapsed);
+    if (totalDur > 0) $('seekBar').value = Math.min(1000, Math.round((elapsed / totalDur) * 1000));
+  }
+  _iframeStartCalibrated = true;
+}
+
 export function initPlayer() {
   // seekBar 禁用（跨域 iframe 无法 seek）
   $('seekBar').disabled = true;
+
+  // 监听 B 站 iframe postMessage，检测视频真实启动时刻，校正计时器
+  window.addEventListener('message', _onBiliMessage);
 
   // 音量控件：控制后台 bgAudio 的音量（前台 iframe 音量需在 B 站播放器内调节）
   _bgVolume = Number(localStorage.getItem('wemusic_vol') || 0.8);

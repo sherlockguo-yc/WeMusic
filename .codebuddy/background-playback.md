@@ -1,6 +1,6 @@
 # WeMusic 后台播放
 
-> 最后更新：2026-06-30
+> 最后更新：2026-06-30 | 状态：✅ 已完成
 
 ---
 
@@ -14,64 +14,67 @@
 
 | 事实 | 说明 |
 |------|------|
-| iframe 后台继续播 | 已在播的 B 站 iframe 切后台后不会停 |
-| **新建** iframe autoplay 失败 | `document.hidden=true` 时创建 iframe，autoplay 被浏览器拦截 |
-| `<audio>` 后台可播 | 前台触发过一次 play() 后，后台换 src 再 play() 浏览器允许 |
-| `/api/play/stream` 已修复 | 原 WBI 接口被 B 站 412 风控；现降级为 `platform=html5` durl，稳定 200 |
+| 已在播的 iframe 后台继续播 | 不需要干预 |
+| **新建** iframe autoplay 被阻止 | `document.hidden=true` 时创建 iframe，autoplay 被浏览器拒绝 |
+| `<audio>` 后台可播 | 前台触发过 play() 后，后台换 src 再 play() 浏览器允许 |
+| `/api/play/stream` | 原 WBI 接口被 B 站 412 风控；已降级为 `platform=html5` durl，稳定 200 |
 
 ---
 
-## 当前方案（已实现）
+## 实现方案
 
-**切后台时销毁 iframe，用 `<audio>` 从当前进度接管；回前台时停 audio、重建 iframe。**
+**前台：iframe 播放 + bgAudio 静音预缓冲  
+后台：销毁 iframe + bgAudio 有声接管  
+回前台：bgAudio 交叉播放 1.8s → 停止，iframe 带时间戳重建**
 
 ```
 前台播放 (iframe)
-  ↓ 切到后台 (visibilitychange hidden)
-销毁 iframe
-bgAudio.src = /api/play/stream?bvid
-bgAudio.canplay 后 seek 到 elapsed，再 play()   ← 从当前进度接续
+  startVideo 后 1s → bgAudio 静音预缓冲（load but not play）
 
-  ↓ 计时器切歌 (startVideo, document.hidden=true)
+  ↓ 切到后台
+销毁 iframe
+bgAudio 解除静音，seek 到 elapsed（数据已预缓冲，几乎无延迟），play()
+
+  ↓ 后台计时器切歌
 bgAudio.src = 新歌 stream → play()（新歌从 0 开始）
 记录 _pendingMount = { bvid, title }
 
-  ↓ 回到前台 (visibilitychange visible)
-elapsed = bgAudio.currentTime  (校正进度)
-bgAudio.pause(); bgAudio.src = ''
-mountVideoAt(bvid, title, elapsed)  (iframe 带 &t= 时间戳)
+  ↓ 回到前台
+elapsed = bgAudio.currentTime（校正进度）
+mountVideoAt(bvid, title, elapsed)（iframe 带 &t= 时间戳）
+setTimeout 1.8s 后停 bgAudio（交叉，填补 iframe 加载空档）
 ```
 
-### 音量控制
+### 关键代码（`src/player.js`）
 
-WeMusic 维护独立音量（`_bgVolume`，存 `localStorage`），控制 bgAudio。
-UI 上的音量滑块（`#volBar` / `#volBtn`）已重新启用并绑定到 bgAudio。
-注意：iframe 内 B 站播放器的音量无法跨域控制，两者音量独立。
+| 函数 | 作用 |
+|------|------|
+| `_bgPreload(bvid)` | 静音加载 bgAudio，不 play，前台预热 |
+| `_bgUnmuteAndPlay(seekSec)` | 解除静音，seek 后 play |
+| `_bgStop()` | 停止并清空 bgAudio |
+| `startVideo()` | 前台→挂 iframe + 预缓冲；后台→换 bgAudio src + play |
+| `visibilitychange hidden` | 销毁 iframe，调 `_bgUnmuteAndPlay(elapsed)` |
+| `visibilitychange visible` | 校正进度，建 iframe，1.8s 后停 bgAudio |
 
-### 核心代码位置（`src/player.js`）
+### 音量
 
-- `_bgPlay(bvid, seekSec)` / `_bgStop()` — bgAudio 启停，支持 seek
-- `startVideo()` — 后台时走 bgAudio，前台时走 iframe
-- `visibilitychange` — 切后台启 bgAudio，回前台停 bgAudio 建 iframe
-- `destroyVideo()` — 同步停 bgAudio
-- `initPlayer()` 音量控件初始化
+- WeMusic 维护独立音量 `_bgVolume`（存 `localStorage`），控制 bgAudio
+- 底部播放栏音量滑块（🔊）控制后台音量，前台 iframe 音量需在 B 站播放器内调节（跨域限制）
 
 ---
 
 ## 废弃方案
 
-### bgAudio 与 iframe 共存（❌）
-切后台时不销毁 iframe，同时启动 bgAudio → **双重声音、音量变大**，且 bgAudio 从 0 开始导致进度重置。
+**bgAudio 与 iframe 共存**：切后台时不销毁 iframe，双轨同时播 → 双重声音叠加、音量变大、进度从 0 开始。
 
 ---
 
-## 文件索引
+## 相关文件
 
 | 文件 | 说明 |
 |------|------|
-| `src/player.js` | 播放核心，包含所有后台逻辑 |
-| `src/utils.js` | `biliEmbed(bvid, startSec)` 支持 `&t=` 时间戳 |
+| `src/player.js` | 所有后台逻辑 |
+| `src/utils.js` | `biliEmbed(bvid, startSec)` 支持 `&t=` |
 | `server/routes/play.js` | `/api/play/stream` 音频流代理 |
-| `server/services/bilibili.js` | `getAudioStream`：DASH → html5 durl 降级 |
-| `public/index.html` | `<audio id="audio">` 元素 |
+| `server/services/bilibili.js` | `getAudioStream`：DASH 优先，失败降级 html5 durl |
 | `restart.sh` | 重启服务器 |
