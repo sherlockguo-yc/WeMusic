@@ -106,38 +106,88 @@ export async function fetchLyrics(name, singer = '') {
   if (nameClean !== name) add(nameClean);
 
   let best = null;
-  let usedSongs = null;
 
   for (const q of queries) {
     const songs = await neSearchSongs(q);
     if (!songs.length) continue;
 
-    // 先尝试精确歌名匹配，若匹配质量差则用去括号歌名重试
+    // 先尝试精确歌名匹配
     const candidate = pickBest(songs, name, singerFirst);
     const isGood = candidate && candidate.name?.toLowerCase() === name.toLowerCase();
-
-    if (isGood) { best = candidate; usedSongs = songs; break; }
+    if (isGood) { best = candidate; break; }
 
     // 若精确歌名未匹配，尝试去括号歌名
     if (nameClean !== name) {
       const alt = pickBest(songs, nameClean, singerFirst);
-      if (alt) { best = alt; usedSongs = songs; break; }
+      if (alt && alt.name?.toLowerCase() === nameClean.toLowerCase()) { best = alt; break; }
     }
     // 兜底：接受第一个非精确匹配
-    if (candidate) { best = candidate; usedSongs = songs; break; }
+    if (candidate) { best = candidate; break; }
   }
 
-  if (!best && usedSongs?.length) best = usedSongs[0];
   if (!best) throw new Error('未找到匹配歌词');
 
-  // 拉取歌词
   const raw = await neFetchLyric(best.id);
   if (!raw.trim()) throw new Error('该歌曲暂无歌词');
 
   return {
     song:   best.name,
     artist: (best.artists || []).map((a) => a.name).join(' / '),
+    sourceId: best.id,
     raw,
     lines: parseLrc(raw),
   };
+}
+
+/** 按歌名+歌手搜索，返回候选列表（用于歌词换源），排好序 */
+export async function searchLyricsCandidates(name, singer = '') {
+  const singerFirst = singer.split(/[\/、,，&]/)[0].trim();
+  const nameClean = stripBrackets(name);
+
+  const queries = [];
+  const seenQ = new Set();
+  const addQ = (q) => { if (!seenQ.has(q)) { seenQ.add(q); queries.push(q); } };
+  if (singerFirst) { addQ(`${name} ${singerFirst}`); if (nameClean !== name) addQ(`${nameClean} ${singerFirst}`); }
+  addQ(name);
+  if (nameClean !== name) addQ(nameClean);
+
+  const idSeen = new Set();
+  const candidates = [];
+
+  for (const q of queries) {
+    const songs = await neSearchSongs(q);
+    for (const s of songs) {
+      const sid = s.id;
+      if (!sid || idSeen.has(sid)) continue;
+      idSeen.add(sid);
+
+      const artistText = (s.artists || []).map((a) => a.name).join(' / ');
+      const exactName = s.name?.toLowerCase() === name.toLowerCase();
+      const hasSinger = singerFirst && (s.artists || []).some((a) => a.name?.toLowerCase().includes(singerFirst.toLowerCase()));
+
+      let quality = 0;
+      if (exactName) quality += 3;
+      if (hasSinger) quality += 2;
+      if (s.name?.toLowerCase().includes(name.toLowerCase())) quality += 1;
+
+      candidates.push({
+        id: s.id,
+        name: s.name,
+        artist: artistText,
+        quality,
+      });
+    }
+  }
+
+  // 按 quality 降序排列
+  candidates.sort((a, b) => b.quality - a.quality);
+  // 前 8 个候选
+  return candidates.slice(0, 8);
+}
+
+/** 按 网易云 songId 直接拉取歌词 */
+export async function fetchLyricsById(songId) {
+  const raw = await neFetchLyric(songId);
+  if (!raw.trim()) throw new Error('该歌曲暂无歌词');
+  return { raw, lines: parseLrc(raw) };
 }

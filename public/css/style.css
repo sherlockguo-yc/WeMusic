@@ -975,7 +975,7 @@ input[type='range']::-moz-range-thumb {
   #helpBtn, #userName { display: none; }
   #logoutBtn { display: none; } /* 退出放到设置面板里，顶栏不显示 */
   .user-menu { gap: 6px; }
-  #settingsBtn { font-size: 20px; }
+
 
   /* ---- 侧边栏：改为底部 Tab Bar 样式 ---- */
   .sidebar {

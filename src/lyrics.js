@@ -1,11 +1,24 @@
-// ---------------- 歌词全屏页 ----------------
+// ---------------- 歌词全屏页（含换源支持） ----------------
 import { $, esc, albumCover, toast } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 
 export let lyricsLines = [];
 export let lyricsFor = '';
+export let lyricsCandidates = []; // 当前候选列表
+export let lyricsCurrentSourceId = null; // 当前使用的网易云 songId
 export function setLyricsFor(v) { lyricsFor = v; }
+
+// ---- localStorage 缓存：song_mid → netease_song_id ----
+function getSourceCache() {
+  try { return JSON.parse(localStorage.getItem('wemusic_lyrics_src') || '{}'); }
+  catch { return {}; }
+}
+function saveSourceCache(songMid, sourceId) {
+  const cache = getSourceCache();
+  cache[songMid] = sourceId;
+  localStorage.setItem('wemusic_lyrics_src', JSON.stringify(cache));
+}
 
 export function updateLyricsPanelMeta(song) {
   if (!song) return;
@@ -24,6 +37,7 @@ export function updateLyricsPanelMeta(song) {
   $('lpLikeRow').innerHTML = `
     ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? '❤' : '🤍'}</button>` : ''}
     <button class="lp-action-btn" title="添加到歌单" id="lpAddBtn">＋ 歌单</button>
+    <button class="lp-action-btn" title="歌词换源" id="lpSwitchBtn">⤢ 歌词</button>
   `;
   const lpLikeBtn = document.getElementById('lpLikeBtn');
   if (lpLikeBtn) {
@@ -40,6 +54,7 @@ export function updateLyricsPanelMeta(song) {
     const { addSongs } = await import('./playlist-ui.js');
     addSongs([song]);
   };
+  document.getElementById('lpSwitchBtn').onclick = () => openLyricsSwitchModal(song);
 }
 
 export function openLyricsPanel() {
@@ -63,15 +78,34 @@ export function closeLyricsPanel() {
 export async function loadLyrics(song) {
   const key = `${song.name}__${song.singer || ''}`;
   if (lyricsFor === key && lyricsLines.length) return;
+
+  // 检查是否有缓存的 sourceId
+  const cache = getSourceCache();
+  const cachedSourceId = song.song_mid && cache[song.song_mid];
+  await doLoadLyrics(song, cachedSourceId || undefined);
+}
+
+async function doLoadLyrics(song, forceSourceId) {
+  const key = `${song.name}__${song.singer || ''}`;
   $('lpBody').innerHTML = '<div class="lp-loading">加载歌词中…</div>';
+
   try {
-    const data = await api(`/stats/lyrics?name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}`);
+    const params = `name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}${forceSourceId ? `&sourceId=${forceSourceId}` : ''}`;
+    const data = await api(`/stats/lyrics?${params}`);
+
     lyricsLines = data.lines || [];
     lyricsFor = key;
-    renderLyricsLines();
+    lyricsCandidates = data.candidates || [];
+    lyricsCurrentSourceId = data.sourceId || forceSourceId || null;
+
+    if (!lyricsLines.length && lyricsCandidates.length && data.error) {
+      $('lpBody').innerHTML = `<div class="lp-placeholder">${esc(data.error)}<br><span style="font-size:12px;color:var(--text-dim)">点「⤢ 歌词」选择其他版本</span></div>`;
+    } else {
+      renderLyricsLines();
+    }
   } catch (e) {
     $('lpBody').innerHTML = `<div class="lp-error">${esc(e.message)}</div>`;
-    lyricsLines = []; lyricsFor = '';
+    lyricsLines = []; lyricsFor = ''; lyricsCandidates = []; lyricsCurrentSourceId = null;
   }
 }
 
@@ -81,6 +115,56 @@ function renderLyricsLines() {
     return;
   }
   $('lpBody').innerHTML = lyricsLines.map((l, i) => `<div class="lp-line" data-i="${i}">${esc(l.text)}</div>`).join('');
+}
+
+// ---- 歌词换源弹层 ----
+async function openLyricsSwitchModal(song) {
+  // 先确保有候选列表
+  if (!lyricsCandidates.length) {
+    // 实时拉取候选
+    try {
+      const data = await api(`/stats/lyrics?name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}`);
+      lyricsCandidates = data.candidates || [];
+    } catch { toast('获取候选列表失败'); return; }
+  }
+
+  if (!lyricsCandidates.length) { toast('暂无其他歌词版本'); return; }
+
+  const modal = $('candModal');
+  const list = $('candList');
+  // 复用换源弹层 → 改标题
+  modal.querySelector('h3').textContent = '选择歌词版本（网易云音乐）';
+
+  list.innerHTML = lyricsCandidates.map((c, i) => {
+    const isCurrent = c.id === lyricsCurrentSourceId;
+    return `<div class="cand-row ${isCurrent ? 'live' : ''}" data-i="${i}">
+      <div class="ct">
+        <div class="title">${esc(c.name)}</div>
+        <div class="meta">歌手：${esc(c.artist || '未知')} ${isCurrent ? '（当前）' : ''}</div>
+      </div>
+      <span class="tag ${isCurrent ? 'live' : ''}">${isCurrent ? '当前' : '选择'}</span>
+    </div>`;
+  }).join('');
+
+  modal.classList.add('show');
+
+  // 关闭时总是恢复标题（无论点叉还是选候选）
+  const restoreTitle = () => { modal.querySelector('h3').textContent = '选择播放资源（Bilibili）'; };
+
+  list.querySelectorAll('.cand-row').forEach((row) => {
+    row.onclick = async () => {
+      const c = lyricsCandidates[Number(row.dataset.i)];
+      modal.classList.remove('show');
+      restoreTitle();
+      if (song.song_mid) saveSourceCache(song.song_mid, c.id);
+      await doLoadLyrics(song, c.id);
+      toast(`已切换到：${c.name}`);
+    };
+  });
+
+  // 点叉关闭时恢复标题（openCandModal 总会再设回 Bilibili 标题）
+  const origClose = $('candClose').onclick;
+  $('candClose').onclick = () => { restoreTitle(); modal.classList.remove('show'); $('candClose').onclick = origClose; };
 }
 
 export function syncLyrics(sec) {
@@ -108,10 +192,6 @@ export function initLyrics() {
   $('lpPrevBtn').onclick = () => import('./player.js').then(({ playPrev }) => playPrev());
   $('lpNextBtn').onclick = () => import('./player.js').then(({ playNext }) => playNext(false));
   $('lpPlayBtn').onclick = () => {
-    import('./player.js').then(({ playCurrent, timerPaused: tp, autoTimer: at }) => {
-      // 读取当前 timerPaused 值需要动态引用
-    });
-    // 直接操作 DOM 按钮触发
     if (!state.current) return toast('请选择一首歌曲播放');
     const mounted = $('videoContainer').children.length > 0;
     if (!mounted) { import('./player.js').then(({ playCurrent }) => playCurrent()); return; }
@@ -127,7 +207,6 @@ export function initLyrics() {
     $('seekBar').dispatchEvent(new Event('input'));
   });
 
-  // 500ms 同步进度条显示
   setInterval(() => {
     if (!$('lyricsPanel').classList.contains('show')) return;
     $('lpCurTime').textContent = $('curTime').textContent;
@@ -136,7 +215,6 @@ export function initLyrics() {
     $('lpPlayBtn').textContent = $('playPauseBtn').textContent;
   }, 500);
 
-  // 每秒歌词同步 + 封面旋转动画
   setInterval(() => {
     const panel = $('lyricsPanel');
     import('./player.js').then(({ autoTimer, timerPaused, elapsed }) => {

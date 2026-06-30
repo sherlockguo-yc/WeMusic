@@ -228,11 +228,10 @@ export async function searchSongs(keyword) {
   const singer = (full.singer?.mid ? full.singer : null) || (sb.singer?.mid ? sb.singer : null);
   let songs;
 
-  let total = undefined;
-  let hasMore = false;
+  let total;
+  let hasMore;
 
   if (singer && singer.mid) {
-    // 命中歌手：直接用 GetSingerSongList，数量准确（第一批 100 首，total 告知前端总数）
     try {
       const ss = await getSingerSongs(singer.mid, 100, 0);
       songs = ss.songs;
@@ -240,10 +239,14 @@ export async function searchSongs(keyword) {
       hasMore = total > 100;
     } catch {
       songs = full.songs.length > 0 ? full.songs : sb.songs;
+      total = songs.length; hasMore = false;
     }
   } else {
     songs = full.songs.length > 0 ? full.songs : sb.songs;
   }
+
+  // 非歌手命中时用实际歌曲数，不支持分页
+  if (total === undefined) { total = songs.length; hasMore = false; }
 
   // 精选集软去重 + 高音质优先
   songs = deduplicateByAlbum(songs);

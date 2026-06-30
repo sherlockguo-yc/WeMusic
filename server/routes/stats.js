@@ -4,7 +4,7 @@
 import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
-import { fetchLyrics } from '../services/lyrics.js';
+import { fetchLyrics, searchLyricsCandidates, fetchLyricsById } from '../services/lyrics.js';
 import { getTopList, searchSongs } from '../services/qqmusic.js';
 
 const router = express.Router();
@@ -424,16 +424,31 @@ router.get('/recommend', async (req, res) => {
 });
 
 // ============================================================
-// 歌词查询（网易云音乐，按需拉取，不缓存）
+// 歌词查询（网易云音乐，支持 candidates + 换源 + 按 sourceId 精确拉取）
 // ============================================================
 router.get('/lyrics', async (req, res) => {
-  const { name, singer } = req.query;
+  const { name, singer, sourceId } = req.query;
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
   try {
-    const result = await fetchLyrics(name, singer || '');
-    res.json(result);
+    // 1. 若指定了 sourceId，直接按该 id 拉取
+    if (sourceId) {
+      const result = await fetchLyricsById(Number(sourceId));
+      return res.json({ lines: result.lines, sourceId: Number(sourceId) });
+    }
+
+    // 2. 拉取主结果 + 候选列表
+    const [main, candidates] = await Promise.all([
+      fetchLyrics(name, singer || '').catch(() => null),
+      searchLyricsCandidates(name, singer || ''),
+    ]);
+
+    if (main) {
+      res.json({ ...main, candidates });
+    } else {
+      res.json({ lines: [], candidates, error: '未找到匹配歌词' });
+    }
   } catch (e) {
-    res.status(404).json({ error: e.message });
+    res.status(404).json({ error: e.message, candidates: [] });
   }
 });
 

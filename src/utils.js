@@ -49,9 +49,11 @@ export function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-export function biliEmbed(bvid) {
-  const dm = localStorage.getItem('wemusic_danmaku') !== '0' ? 1 : 0;
-  return `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&high_quality=1&danmaku=${dm}&as_wide=1&muted=0`;
+export function biliEmbed(bvid, startSec = 0) {
+  // danmaku=1 默认开启，用户可通过 B 站播放器内置按钮开关
+  // t=秒数 让 B 站从指定位置开始播放（用于回前台时对齐进度）
+  const t = startSec > 5 ? `&t=${Math.floor(startSec)}` : '';
+  return `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&high_quality=1&danmaku=1&as_wide=1&muted=0${t}`;
 }
 
 export function albumCover(albumMid, size = 300) {

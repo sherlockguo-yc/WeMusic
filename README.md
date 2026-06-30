@@ -69,7 +69,8 @@
 ### 歌词
 - 点击底栏「词」或播放器封面进入**全屏歌词页**（毛玻璃背景 + 旋转封面 + LRC 同步滚动）。
 - 网易云音乐**多策略搜索**（歌名+歌手 → 去括号 → 纯歌名 → 回退），匹配质量优先。
-- 歌词页底部迷你播放控制栏 + ❤ 喜欢 + ＋ 歌单。
+- **歌词换源**：点「⤢ 歌词」查看最多 8 个候选版本，选择后自动切换；偏好按 `song_mid` 持久化到 localStorage，下次自动使用上次选择的源。
+- 歌词页底部迷你播放控制栏 + ❤ 喜欢 + ＋ 添加到歌单。
 
 ### 数据统计
 - 总播放次数 / 时长 / 不重复歌曲 / 听歌天数。
@@ -151,8 +152,8 @@ WeMusic/
 │   ├── settings.js             # 主题 / 头像 / 设置 / 侧边栏拖拽 / Sleep
 │   ├── player.js               # 播放核心（进度 / 模式 / 视频 / 缓存）
 │   ├── queue.js                # 播放队列 + 历史抽屉
-│   ├── lyrics.js               # 歌词全屏页
-│   ├── playlist-ui.js          # 歌单 / 列表渲染 / 拖拽 / 导入导出
+│   ├── lyrics.js               # 歌词全屏页（含换源 + 偏好记忆）
+│   ├── playlist-ui.js          # 歌单 / 列表渲染 / 拖拽 / 导入导出（共享 insertSongsBulk）
 │   ├── search.js               # 搜索 / 歌手页 / 专辑页
 │   ├── ui.js                   # 右键菜单 / 换源 / 弹幕 / 喜欢
 │   └── stats.js                # 统计页 / 发现页 / 喜欢页
@@ -169,13 +170,13 @@ WeMusic/
 │   ├── routes/
 │   │   ├── auth.js             # 注册 / 登录 / 头像
 │   │   ├── music.js            # 搜索 / 歌手 / 专辑 / 歌单解析
-│   │   ├── playlist.js         # 歌单 CRUD / 导出 / 导入 / 排序
-│   │   ├── play.js             # Bilibili 匹配 / 换源
+│   │   ├── playlist.js         # 歌单 CRUD / 导出 / 导入（router.param 统一校验 + 共享 insertSongsBulk）
+│   │   ├── play.js             # Bilibili 匹配 / 换源 / 音频流代理（pipeAudio 双向错误处理）
 │   │   └── stats.js            # 统计 / 红心 / 榜单 / 推荐 / 歌词
 │   └── services/
 │       ├── qqmusic.js          # QQ 音乐数据（搜索 / 歌手 / 榜单 + 去重）
 │       ├── bilibili.js         # Bilibili WBI 签名 + buvid 激活
-│       └── lyrics.js           # 网易云歌词（多策略搜索 + LRC 解析）
+│       └── lyrics.js           # 网易云歌词（多策略搜索 + LRC 解析 + 候选列表）
 ├── vite.config.js
 ├── data/                       # SQLite 数据库（运行后生成）
 └── package.json
@@ -235,11 +236,12 @@ WeMusic/
 | 画质低 | B 站服务端识别嵌入播放，主动降级码率 |
 | iframe 内置弹幕按钮无效 | 嵌入模式沙箱拦截交互事件 |
 | 无法登录 B 站账号 | iframe 隔离，不传递登录态 + 嵌入模式无视登录 |
+| 后台 Tab 切歌后视频未启动 | 浏览器 Autoplay Policy 阻止后台非静音播放（已通过 Page Visibility API 兜底：回到前台时自动重载 iframe） |
 
 ### 设计限制
 
 | 问题 | 说明 |
 |------|------|
 | 自动连播靠定时器非播放事件 | 视频 MV 时长不一致时可能提前/延迟切歌 |
-| app.js 依赖 import() 动态加载 | 构建产物 66KB（gzip 后 20KB），性能可接受 |
+| app.js 构建产物约 68KB（gzip 后 20KB） | 12 模块 Vite 打包，性能可接受 |
 | 单用户架构 | SQLite + 单机部署，不支持多用户并发 |

@@ -67,6 +67,7 @@ export async function openCandModal() {
   if (!state.current) return toast('请先播放一首歌曲');
   const modal = $('candModal');
   const list = $('candList');
+  modal.querySelector('h3').textContent = '选择播放资源（Bilibili）';
   modal.classList.add('show');
   let candidates = state.current._candidates;
   if (!candidates) {
@@ -100,17 +101,7 @@ export async function openCandModal() {
   });
 }
 
-// ---- 弹幕 ----
-export let danmakuOn = localStorage.getItem('wemusic_danmaku') !== '0';
-
-export function updateDanmakuBtn() {
-  const btn = $('vpDanmaku');
-  if (!btn) return;
-  if (danmakuOn) { btn.textContent = '弹幕 ✓'; btn.style.color = 'var(--accent)'; }
-  else { btn.textContent = '弹幕'; btn.style.color = ''; }
-}
-
-// ---- 喜欢 ----
+// ---- 换源 ----
 export async function toggleLike(song, btn) {
   if (!song.song_mid) return toast('该歌曲无 mid，无法标记喜欢');
   try {
@@ -145,20 +136,6 @@ export function initUI() {
   $('vpSwitch').onclick = openCandModal;
   $('candClose').onclick = () => $('candModal').classList.remove('show');
   $('candModal').onclick = (e) => { if (e.target.id === 'candModal') $('candModal').classList.remove('show'); };
-
-  // 弹幕
-  updateDanmakuBtn();
-  $('vpDanmaku').onclick = () => {
-    danmakuOn = !danmakuOn;
-    localStorage.setItem('wemusic_danmaku', danmakuOn ? '1' : '0');
-    updateDanmakuBtn();
-    if (state.current?.bvid && $('videoContainer').querySelector('iframe')) {
-      import('./player.js').then(({ mountVideo }) => mountVideo(state.current.bvid, state.current._biliTitle));
-      toast(danmakuOn ? '弹幕已开启' : '弹幕已关闭');
-    } else {
-      toast(danmakuOn ? '弹幕已开启，下次播放生效' : '弹幕已关闭，下次播放生效');
-    }
-  };
 
   // 播放器喜欢 + 三点菜单
   $('npLikeBtn').onclick = async () => {

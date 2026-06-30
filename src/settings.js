@@ -146,8 +146,12 @@ export function openSettings() {
     };
   });
   updateSleepHint();
+
+  // 定时停止按钮：当前有定时则高亮对应按钮，否则默认高亮「关闭」
+  const activeMin = sleepTimeout ? null : (sleepAfterSong ? 'song' : '0');
   document.querySelectorAll('.sleep-opt').forEach((b) => {
-    b.classList.toggle('active', false);
+    const isActive = (activeMin != null) ? (b.dataset.min === activeMin) : false;
+    b.classList.toggle('active', isActive);
     b.onclick = () => {
       setSleep(b.dataset.min);
       document.querySelectorAll('.sleep-opt').forEach((x) => x.classList.toggle('active', x === b));
@@ -158,7 +162,6 @@ export function openSettings() {
 
 export function initSettings() {
   $('userAvatarWrap').onclick = openSettings;
-  $('settingsBtn').onclick = openSettings;
   $('settingsClose').onclick = () => $('settingsModal').classList.remove('show');
   $('settingsModal').onclick = (e) => { if (e.target.id === 'settingsModal') $('settingsModal').classList.remove('show'); };
   $('settingsLogout').onclick = () => { Auth.clear(); location.href = '/login.html'; };

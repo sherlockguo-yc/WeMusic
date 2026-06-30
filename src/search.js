@@ -1,5 +1,5 @@
 // ---------------- 搜索、歌手页、专辑页 ----------------
-import { $, esc, fmtDur, fmtPlay, albumCover, toast } from './utils.js';
+import { $, esc, fmtDur, albumCover, toast } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 import { renderSongList, listToolsHtml, bindListTools, addSongs, songInPlaylists } from './playlist-ui.js';

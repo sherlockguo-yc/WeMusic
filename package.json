@@ -10,7 +10,8 @@
     "init-db": "node server/db.js",
     "build": "vite build",
     "build:watch": "vite build --watch",
-    "dev:full": "concurrently \"node --watch server/index.js\" \"vite build --watch\""
+    "dev:full": "concurrently \"node --watch server/index.js\" \"vite build --watch\"",
+    "webhook": "node server/webhook.js"
   },
   "keywords": [
     "music",

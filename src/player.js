@@ -104,20 +104,30 @@ export function setVpTitle(title) {
 }
 
 export function mountVideo(bvid, title) {
+  mountVideoAt(bvid, title, 0);
+}
+
+// 带起始时间戳挂载 iframe（回前台时对齐进度用）
+export function mountVideoAt(bvid, title, startSec) {
   setVpTitle(title);
   $('videoContainer').innerHTML =
-    `<iframe src="${biliEmbed(bvid)}" allowfullscreen allow="autoplay; fullscreen" scrolling="no" frameborder="0"></iframe>`;
+    `<iframe src="${biliEmbed(bvid, startSec)}" allowfullscreen allow="autoplay; fullscreen" scrolling="no" frameborder="0"></iframe>`;
 }
 
 export function destroyVideo() {
   $('videoPane').classList.remove('show', 'fullscreen');
-  $('videoContainer').innerHTML = '';
+  const vc = $('videoContainer');
+  vc.innerHTML = '';
+  delete vc.dataset.pendingBvid;
+  _pendingMount = null;
+  _stopBgAudio();
   stopTimer();
 }
 
 export function applyPaneVisibility() {
   const pane = $('videoPane');
-  const mounted = $('videoContainer').children.length > 0;
+  const vc = $('videoContainer');
+  const mounted = vc.children.length > 0 || !!vc.dataset.pendingBvid;
   if (state.paneVisible && mounted) pane.classList.add('show');
   else pane.classList.remove('show');
   $('videoBtn').textContent = mounted ? (state.paneVisible ? '收起' : '展开') : '看视频';
@@ -323,10 +333,28 @@ export async function playCurrent() {
   startVideo(song.bvid, song._biliTitle, song._biliDur || song.duration);
 }
 
+// ---- 双轨播放：后台用 <audio> 代理流，前台用 iframe ----
+// 后台 Tab 时 iframe autoplay 会被浏览器阻止；<audio> 即使后台也可正常播放
+const bgAudio = $('audio'); // HTML 中已有 <audio id="audio">
+
+// 后台期间如果切了歌，记录需要在回前台时 mount 的 bvid/title
+let _pendingMount = null; // { bvid, title }
+
 export function startVideo(bvid, title, dur) {
-  mountVideo(bvid, title);
+  if (document.hidden) {
+    // 后台：只启动 bgAudio，不操作 iframe（避免 autoplay 失败）
+    // 记录待挂载信息，回前台时再建 iframe
+    _pendingMount = { bvid, title };
+    // 更新 videoContainer 占位信息（保证 applyPaneVisibility 判断正确）
+    $('videoContainer').dataset.pendingBvid = bvid;
+    _startBgAudio(bvid);
+  } else {
+    _pendingMount = null;
+    delete $('videoContainer').dataset.pendingBvid;
+    _stopBgAudio();
+    mountVideo(bvid, title);
+  }
   applyPaneVisibility();
-  setVpTitle(title);
   setStatus(`<span class="badge">▶ Bilibili</span> ${esc((title || '').slice(0, 26))}`);
   startTimer(dur);
   saveSession();
@@ -343,6 +371,50 @@ export function startVideo(bvid, title, dur) {
       loadLyrics(state.current);
     }
   });
+}
+
+let _bgAudioBvid = null;
+let _bgAudioEndedHandler = null;
+
+function _startBgAudio(bvid) {
+  if (_bgAudioBvid === bvid && !bgAudio.paused) return; // 已经在播这个
+  _bgAudioBvid = bvid;
+
+  // 移除旧的 ended 监听
+  if (_bgAudioEndedHandler) {
+    bgAudio.removeEventListener('ended', _bgAudioEndedHandler);
+    _bgAudioEndedHandler = null;
+  }
+
+  bgAudio.src = `/api/play/stream?bvid=${bvid}`;
+  bgAudio.volume = 1;
+  bgAudio.muted = false;
+  bgAudio.play().catch(() => {});
+  setStatus(`<span class="badge">▶ 后台播放</span> ${esc((state.current?.name || '').slice(0, 26))}`);
+
+  // bgAudio ended = 歌曲播完，触发自动切歌（补充计时器在后台被节流的情况）
+  _bgAudioEndedHandler = () => {
+    if (!document.hidden) return; // 前台不处理（由计时器负责）
+    if (timerPaused) return;
+    stopTimer();
+    _flushLog(totalDur || elapsed);
+    if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
+    if (state.playMode === 'single') { playCurrent(); return; }
+    playNext(true);
+  };
+  bgAudio.addEventListener('ended', _bgAudioEndedHandler);
+}
+
+function _stopBgAudio() {
+  if (_bgAudioEndedHandler) {
+    bgAudio.removeEventListener('ended', _bgAudioEndedHandler);
+    _bgAudioEndedHandler = null;
+  }
+  if (!bgAudio.src && !_bgAudioBvid) return;
+  bgAudio.pause();
+  bgAudio.src = '';
+  // 注意：不调用 bgAudio.load()，避免回前台时触发额外网络请求造成卡顿
+  _bgAudioBvid = null;
 }
 
 export function initPlayer() {
@@ -368,6 +440,11 @@ export function initPlayer() {
     if (!mounted) { playCurrent(); return; }
     timerPaused = !timerPaused;
     $('playPauseBtn').textContent = timerPaused ? '▶' : '⏸';
+    // 同步后台音频暂停/恢复
+    if (document.hidden && state.current?.bvid) {
+      if (timerPaused) { bgAudio.pause(); }
+      else { bgAudio.play().catch(() => {}); }
+    }
     toast(timerPaused ? '已暂停自动连播' : '继续自动连播');
   };
 
@@ -421,4 +498,40 @@ export function initPlayer() {
   });
   navigator.mediaSession.setActionHandler('previoustrack', playPrev);
   navigator.mediaSession.setActionHandler('nexttrack', () => playNext(false));
+
+  document.addEventListener('visibilitychange', () => {
+    if (!state.current?.bvid) return;
+
+    if (document.hidden) {
+      // 进入后台：启动 <audio> 代理流保持音频连续
+      if (!timerPaused) _startBgAudio(state.current.bvid);
+    } else {
+      // 回到前台：
+      // 1. 用 bgAudio.currentTime 校正 elapsed（消除后台计时器节流导致的进度滞后）
+      const bgPos = bgAudio.currentTime; // bgAudio 的实际播放位置（秒）
+      if (bgPos > 1 && bgPos < (totalDur || 99999)) {
+        elapsed = Math.round(bgPos);
+        $('curTime').textContent = fmtDur(elapsed);
+        if (totalDur > 0) $('seekBar').value = Math.min(1000, Math.round((elapsed / totalDur) * 1000));
+      }
+
+      // 2. 停止 bgAudio（不 load()，避免额外网络请求造成卡顿）
+      _stopBgAudio();
+
+      // 3. 挂载/重载 iframe：优先用 _pendingMount（后台切了歌），否则用当前歌
+      const target = _pendingMount || (
+        ($('videoContainer').children.length > 0 || $('videoContainer').dataset.pendingBvid)
+          ? { bvid: state.current.bvid, title: state.current._biliTitle }
+          : null
+      );
+      if (target) {
+        _pendingMount = null;
+        delete $('videoContainer').dataset.pendingBvid;
+        // 带时间戳参数让 B 站播放器从当前进度开始，减少体感滞后
+        const seekSec = elapsed > 5 ? elapsed : 0;
+        mountVideoAt(target.bvid, target.title, seekSec);
+        applyPaneVisibility();
+      }
+    }
+  });
 }

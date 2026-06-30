@@ -215,7 +215,10 @@ function pipeAudio(upstream, res, mime) {
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Cache-Control', 'no-store');
   if (upstream.body) {
-    Readable.fromWeb(upstream.body).pipe(res);
+    const stream = Readable.fromWeb(upstream.body);
+    stream.on('error', () => { if (!res.headersSent) res.status(502).end('流中断'); });
+    res.on('error', () => stream.destroy());
+    stream.pipe(res);
   } else {
     res.end();
   }
