@@ -238,9 +238,10 @@ export async function openAlbum(mid, name) {
         ${data.cur_song_num ? `<span class="album-meta-tag">${data.cur_song_num} 首</span>` : data.songs.length + ' 首'}
       </div>`
       : '';
-    const descHtml = data.desc
+    const descText = data.desc ? data.desc.split(/\n\n+/).filter((p, i, arr) => i === 0 || arr[i-1].trim().slice(0,30) !== p.trim().slice(0,30)).join('\n\n') : '';
+    const descHtml = descText
       ? `<div class="album-desc-wrap">
-          <div class="album-desc clamp" id="albumDesc">${esc(data.desc).replace(/\n/g, '<br>')}</div>
+          <div class="album-desc clamp" id="albumDesc">${esc(descText).replace(/\n/g, '<br>')}</div>
           <button class="album-desc-more" id="albumDescMore">展开全文</button>
         </div>`
       : '';

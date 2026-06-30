@@ -198,7 +198,7 @@ export function restoreSession() {
     state.current = state.queue[state.queueIndex];
     if (state.current) {
       $('npTitle').textContent = state.current.name;
-      $('npSinger').textContent = state.current.singer || '';
+      $('npTitle').textContent = state.current.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : state.current.name;
       updateNpCover(state.current);
       $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
       setStatus('上次播放 · 点 ▶ 继续');
@@ -235,15 +235,31 @@ export function updateMediaSession(song) {
 const MODE_META = {
   loop: {
     label: '列表循环',
-    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.5 22a9 9 0 1 0 2.1-18.4L1 10"/></svg>`,
+    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m17 2 4 4-4 4"/>
+      <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+      <path d="m7 22-4-4 4-4"/>
+      <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+    </svg>`,
   },
   single: {
     label: '单曲循环',
-    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.5 22a9 9 0 1 0 2.1-18.4L1 10"/><text x="15" y="17" text-anchor="middle" font-size="9" font-weight="700" fill="currentColor" stroke="none">1</text></svg>`,
+    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m17 2 4 4-4 4"/>
+      <path d="M3 11v-1a4 4 0 0 1 4-4h14"/>
+      <path d="m7 22-4-4 4-4"/>
+      <path d="M21 13v1a4 4 0 0 1-4 4H3"/>
+      <path d="M11 10h1v4"/>
+    </svg>`,
   },
   shuffle: {
     label: '随机播放',
-    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>`,
+    icon: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/>
+      <path d="m18 2 4 4-4 4"/>
+      <path d="M2 6h1.9c1.3 0 2.5.6 3.3 1.7l6.1 8.6c.7 1.1 2 1.7 3.3 1.7H22"/>
+      <path d="m22 18-4 4-4-4"/>
+    </svg>`,
   },
 };
 const MODE_ORDER = ['loop', 'single', 'shuffle'];
@@ -331,8 +347,7 @@ export async function playCurrent() {
   const seq = ++playSeq;
   state.current = song;
   highlightPlaying();
-  $('npTitle').textContent = song.name;
-  $('npSinger').textContent = song.singer || '';
+  $('npTitle').textContent = song.singer ? `${song.name} - ${song.singer.split('/')[0]}` : song.name;
   document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
   updateNpCover(song);
   updateMediaSession(song);
@@ -542,11 +557,13 @@ export function initPlayer() {
   _bgVolume = Number(localStorage.getItem('wemusic_vol') || 0.8);
   const volBar = $('volBar');
   const volBtn = $('volBtn');
+  const volOnIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19 11,5"/><path d="M15.5 8.5a4.5 4.5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>`;
+  const volOffIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19 11,5"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></svg>`;
   const _applyVol = () => {
     bgAudio.volume = _bgVolume;
     bgAudio.muted = (_bgVolume === 0);
     volBar.value = Math.round(_bgVolume * 100);
-    volBtn.textContent = _bgVolume === 0 ? '🔇' : '🔊';
+    volBtn.innerHTML = _bgVolume === 0 ? volOffIcon : volOnIcon;
     volBtn.title = document.hidden ? '后台音量' : '后台音量（前台请在视频内调节）';
   };
   _applyVol();
@@ -557,13 +574,23 @@ export function initPlayer() {
     _setIframeVolume(_bgVolume); // 同步 iframe 音量
   };
   let _prevVol = _bgVolume;
-  volBtn.onclick = () => {
-    if (_bgVolume > 0) { _prevVol = _bgVolume; _bgVolume = 0; }
-    else { _bgVolume = _prevVol || 0.8; }
-    localStorage.setItem('wemusic_vol', _bgVolume);
-    _applyVol();
-    _setIframeVolume(_bgVolume); // 同步 iframe 音量
+  const volWrap = document.querySelector('.volume-wrap');
+  volBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (!volWrap.classList.contains('open')) {
+      volWrap.classList.add('open');
+    } else {
+      if (_bgVolume > 0) { _prevVol = _bgVolume; _bgVolume = 0; }
+      else { _bgVolume = _prevVol || 0.8; }
+      localStorage.setItem('wemusic_vol', _bgVolume);
+      _applyVol();
+      _setIframeVolume(_bgVolume);
+    }
   };
+  // 点击其他地方关闭音量条
+  document.addEventListener('click', (e) => {
+    if (!volWrap.contains(e.target)) volWrap.classList.remove('open');
+  });
 
   $('modeBtn').onclick = () => {
     const idx = MODE_ORDER.indexOf(state.playMode);

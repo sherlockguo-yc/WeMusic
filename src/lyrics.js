@@ -24,24 +24,46 @@ function saveSourceCache(songMid, sourceId) {
 let _bgLoading = false;
 let _bgLoadedFor = '';
 
+// 清理 QQ 音乐专辑简介：截断重复内容、去营销语
+function cleanAlbumDesc(raw) {
+  if (!raw) return '';
+  // 去掉明显重复的段落（相同开头的段落保留第一个）
+  const paras = raw.split(/\n\n+/);
+  const seen = new Set();
+  const clean = [];
+  for (const p of paras) {
+    const key = p.trim().slice(0, 30);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    clean.push(p);
+  }
+  let text = clean.join('\n\n');
+  // 截断到 400 字左右
+  if (text.length > 450) {
+    text = text.slice(0, 450).replace(/\n[^\n]*$/, '') + '…';
+  }
+  return text;
+}
+
 export async function loadSongBackground(song) {
   const key = song.song_mid || `${song.name}__${song.singer || ''}`;
   if (_bgLoadedFor === key) return;
   _bgLoadedFor = key;
   if (_bgLoading) return;
   _bgLoading = true;
-  $('lpBgBtn').style.display = 'none';
+  const btn = document.getElementById('lpBgBtn');
+  if (btn) btn.classList.remove('has-bg');
   try {
     const bg = await api(`/music/song-background?name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}&album_mid=${encodeURIComponent(song.album_mid || '')}`);
     if (!bg || !bg.desc) return;
     const title = bg.album_name || song.album || '未知专辑';
-    const sub = [bg.aDate, bg.company, bg.genre, bg.lan].filter(Boolean).join(' / ');
-    const desc = bg.desc.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+    const sub = [bg.aDate, bg.genre, bg.lan, bg.company].filter(Boolean).join(' · ');
+    const desc = cleanAlbumDesc(bg.desc).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
     $('lpBgCardTitle').textContent = title;
     $('lpBgCardSub').textContent = sub;
     $('lpBgCardBody').innerHTML = `<p>${desc}</p>`;
-    $('lpBgBtn').style.display = 'block';
-  } catch { $('lpBgBtn').style.display = 'none'; }
+    if (btn) btn.classList.add('has-bg');
+  } catch {}
   _bgLoading = false;
 }
 
@@ -58,11 +80,14 @@ export function updateLyricsPanelMeta(song) {
   if (cover) bg.style.backgroundImage = `url(${cover})`;
   else bg.style.backgroundImage = 'none';
 
+  const lHeartO = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+  const lHeartF = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
   const isLiked = song.song_mid && state.likedMids && state.likedMids.has(song.song_mid);
   $('lpLikeRow').innerHTML = `
-    ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? '❤' : '🤍'}</button>` : ''}
+    ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? lHeartF : lHeartO}</button>` : ''}
     <button class="lp-action-btn" title="添加到歌单" id="lpAddBtn">＋ 歌单</button>
     <button class="lp-action-btn" title="歌词换源" id="lpSwitchBtn">⤢ 歌词</button>
+    <button class="lp-action-btn lp-bg-action" title="歌曲背景" id="lpBgBtn">💿 背景</button>
   `;
   const lpLikeBtn = document.getElementById('lpLikeBtn');
   if (lpLikeBtn) {
@@ -70,7 +95,7 @@ export function updateLyricsPanelMeta(song) {
       const { toggleLike } = await import('./ui.js');
       await toggleLike(song, null);
       const liked2 = state.likedMids.has(song.song_mid);
-      lpLikeBtn.textContent = liked2 ? '❤' : '🤍';
+      lpLikeBtn.innerHTML = liked2 ? lHeartF : lHeartO;
       lpLikeBtn.classList.toggle('liked', liked2);
       lpLikeBtn.title = liked2 ? '取消喜欢' : '喜欢';
     };
@@ -80,6 +105,11 @@ export function updateLyricsPanelMeta(song) {
     addSongs([song]);
   };
   document.getElementById('lpSwitchBtn').onclick = () => openLyricsSwitchModal(song);
+  const bgBtn = document.getElementById('lpBgBtn');
+  if (bgBtn) bgBtn.onclick = () => {
+    const ov = $('lpBgOverlay');
+    ov.style.display = ov.style.display === 'none' || !ov.style.display ? 'flex' : 'none';
+  };
 }
 
 export function openLyricsPanel() {
@@ -214,11 +244,7 @@ export function initLyrics() {
   $('npCover').onclick = openLyricsPanel;
   $('lpClose').onclick = closeLyricsPanel;
 
-  // 歌曲背景面板开关
-  $('lpBgBtn').onclick = () => {
-    const ov = $('lpBgOverlay');
-    ov.style.display = ov.style.display === 'none' || !ov.style.display ? 'flex' : 'none';
-  };
+  // 背景面板关闭方式（静态绑定）
   $('lpBgCardClose').onclick = () => { $('lpBgOverlay').style.display = 'none'; };
   $('lpBgOverlay').onclick = (e) => { if (e.target === e.currentTarget) $('lpBgOverlay').style.display = 'none'; };
   $('lpNextBtn').onclick = () => import('./player.js').then(({ playNext }) => playNext(false));

@@ -66,7 +66,7 @@ export function removeFromQueue(i) {
       state.queueIndex = -1; state.current = null;
       import('./player.js').then(({ destroyVideo, setStatus }) => destroyVideo());
       $('npTitle').textContent = '未在播放';
-      $('npSinger').textContent = '—';
+      $('npTitle').textContent = '未在播放';
       document.title = 'WeMusic · 个人音乐';
     } else {
       if (state.queueIndex >= state.queue.length) state.queueIndex = 0;
@@ -122,7 +122,6 @@ export function initQueue() {
         destroyVideo(); saveSession();
       });
       $('npTitle').textContent = '未在播放';
-      $('npSinger').textContent = '—';
       $('npCover').classList.remove('show');
       document.title = 'WeMusic · 个人音乐';
       renderQueue(); toast('已清空播放队列');

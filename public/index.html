@@ -71,33 +71,55 @@
 
     <!-- 播放器 -->
     <footer class="player">
-      <div class="np-cover" id="npCover"></div>
+      <div class="np-cover" id="npCover" title="点击查看歌词"></div>
       <div class="np">
-        <div class="t" id="npTitle">未在播放</div>
-        <div class="s" id="npSinger">—</div>
+        <div class="np-title-line" id="npTitle">未在播放</div>
+        <div class="np-actions">
+          <button class="np-act-btn" id="npLikeBtn" title="喜欢">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+          </button>
+          <button class="np-act-btn" id="npDislikeBtn" title="不喜欢">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
+          </button>
+          <button class="np-act-btn" id="npMoreBtn" title="更多操作">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+        </div>
       </div>
       <div class="controls">
         <button class="icon-btn" id="modeBtn" title="播放模式：列表循环">🔁</button>
-        <button class="icon-btn" id="prevBtn" title="上一首">⏮</button>
+        <button class="icon-btn" id="prevBtn" title="上一首">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="18" x2="5" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
         <button class="icon-btn play" id="playPauseBtn" title="播放/暂停">▶</button>
-        <button class="icon-btn" id="nextBtn" title="下一首">⏭</button>
+        <button class="icon-btn" id="nextBtn" title="下一首">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="6" x2="19" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
       </div>
-      <div class="progress-wrap">
-        <span class="time" id="curTime">0:00</span>
-        <input type="range" id="seekBar" min="0" max="1000" value="0" />
-        <span class="time" id="durTime">0:00</span>
+      <div class="progress-center">
+        <div class="progress-wrap">
+          <span class="time" id="curTime">0:00</span>
+          <input type="range" id="seekBar" min="0" max="1000" value="0" />
+          <span class="time" id="durTime">0:00</span>
+        </div>
       </div>
-      <div class="volume-wrap">
-        <button class="icon-btn vol" id="volBtn" title="静音">🔊</button>
-        <input type="range" id="volBar" min="0" max="100" value="80" />
+      <div class="player-right">
+        <div class="volume-wrap">
+          <button class="icon-btn vol" id="volBtn" title="静音">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11,5 6,9 2,9 2,15 6,15 11,19 11,5"/>
+              <path d="M15.5 8.5a4.5 4.5 0 0 1 0 7"/>
+              <path d="M19 5a9 9 0 0 1 0 14"/>
+            </svg>
+          </button>
+          <input type="range" id="volBar" min="0" max="100" value="80" />
+        </div>
+        <div class="player-status" id="playStatus"></div>
+        <button class="btn sm" id="lyricsBtn" title="歌词">词</button>
+        <button class="btn sm" id="queueBtn" title="播放队列 / 历史">队列</button>
+        <button class="btn sm" id="switchSrcBtn" title="换源">换源</button>
+        <button class="btn sm" id="videoBtn" title="观看 Bilibili 视频">看视频</button>
       </div>
-      <div class="player-status" id="playStatus"></div>
-      <button class="icon-btn" id="npLikeBtn" title="喜欢">🤍</button>
-      <button class="icon-btn" id="npMoreBtn" title="更多操作">···</button>
-      <button class="btn sm" id="lyricsBtn" title="歌词">词</button>
-      <button class="btn sm" id="queueBtn" title="播放队列 / 历史">队列</button>
-      <button class="btn sm" id="switchSrcBtn" title="换源">换源</button>
-      <button class="btn sm" id="videoBtn" title="观看 Bilibili 视频">看视频</button>
       <audio id="audio" preload="auto"></audio>
     </footer>
   </div>
@@ -139,8 +161,6 @@
             <div class="lp-bg-card-body" id="lpBgCardBody"></div>
           </div>
         </div>
-        <!-- 歌曲背景触发按钮 -->
-        <button class="lp-bg-btn" id="lpBgBtn" title="歌曲背景" style="display:none">💿</button>
       </div>
       <!-- 歌词页底部播放控制栏 -->
       <div class="lp-controls">
