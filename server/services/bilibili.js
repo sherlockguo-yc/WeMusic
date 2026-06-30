@@ -234,53 +234,85 @@ export async function getVideoPages(bvid) {
 }
 
 /**
- * 获取视频最佳音频流地址（DASH）。
+ * 通过 WBI 签名接口获取 DASH 纯音频流（高音质、体积小，但对游客易被 412 风控）。
+ */
+async function getDashAudio(bvid, cid) {
+  const cookie = await getCookie();
+  const signed = await encWbi({ bvid, cid, fnval: 16, fnver: 0, fourk: 1 });
+  const url = `https://api.bilibili.com/x/player/wbi/playurl?${signed}`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': UA, Cookie: cookie, Referer: `https://www.bilibili.com/video/${bvid}` },
+  });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { throw new Error('RISK_CONTROL'); }
+  if (json.code !== 0) throw new Error(`playurl code ${json.code} ${json.message || ''}`);
+  const audios = json?.data?.dash?.audio || [];
+  if (!audios.length) throw new Error('NO_DASH_AUDIO');
+  const best = [...audios].sort((a, b) => b.bandwidth - a.bandwidth)[0];
+  return {
+    cid,
+    url: best.baseUrl || best.base_url,
+    backup: best.backupUrl || best.backup_url || [],
+    bandwidth: best.bandwidth,
+    mime: best.mimeType || best.mime_type || 'audio/mp4',
+  };
+}
+
+/**
+ * 通过 H5 老接口获取 durl 流（音视频合一 mp4，<audio> 可直接播放）。
+ * platform=html5 风控宽松、无需 cookie，作为 DASH 被风控时的可靠兜底。
+ */
+async function getHtml5Durl(bvid, cid) {
+  const url = `https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&fnval=16&fnver=0&fourk=1&platform=html5&high_quality=1`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': UA, Referer: `https://www.bilibili.com/video/${bvid}` },
+  });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { throw new Error('RISK_CONTROL'); }
+  if (json.code !== 0) throw new Error(`playurl(html5) code ${json.code} ${json.message || ''}`);
+  const durl = json?.data?.durl || [];
+  if (!durl.length || !durl[0].url) throw new Error('NO_DURL');
+  return {
+    cid,
+    url: durl[0].url,
+    backup: durl[0].backup_url || durl[0].backupUrl || [],
+    bandwidth: 0,
+    mime: 'video/mp4', // durl 为音视频合一的 mp4，<audio> 能播其中音轨
+  };
+}
+
+/**
+ * 获取视频最佳音频流地址。
+ * 优先 DASH 纯音频；被风控（412/RISK_CONTROL）时回退 H5 durl。
  * 返回 { cid, url, backup, bandwidth, mime }，url 需经后端代理（带 Referer）后才能播放。
  */
 export async function getAudioStream(bvid, cid) {
+  if (!cid) {
+    const pages = await getVideoPages(bvid);
+    cid = pages[0]?.cid;
+  }
+  if (!cid) throw new Error('未获取到视频 cid');
+
+  // 1) 优先 DASH（纯音频高音质），失败重试一次刷新鉴权
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await getDashAudio(bvid, cid);
+    } catch (e) {
+      if (e.message === 'NO_DASH_AUDIO') break; // 无 dash 音频，直接走 html5
+      resetAuth();
+      await sleep(300);
+    }
+  }
+
+  // 2) 回退 H5 durl（platform=html5，风控宽松）
   let lastErr;
-  // playurl 接口对游客有频率型风控（412 / 返回 HTML），失败则刷新鉴权重试
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const cookie = await getCookie();
-      if (!cid) {
-        const pages = await getVideoPages(bvid);
-        cid = pages[0]?.cid;
-      }
-      if (!cid) throw new Error('未获取到视频 cid');
-
-      const signed = await encWbi({ bvid, cid, fnval: 16, fnver: 0, fourk: 1 });
-      const url = `https://api.bilibili.com/x/player/wbi/playurl?${signed}`;
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': UA,
-          Cookie: cookie,
-          Referer: `https://www.bilibili.com/video/${bvid}`,
-        },
-      });
-      const text = await res.text();
-      let json;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        throw new Error('RISK_CONTROL'); // 返回了 HTML 风控页
-      }
-      if (json.code !== 0) {
-        throw new Error(`playurl code ${json.code} ${json.message || ''}`);
-      }
-      const audios = json?.data?.dash?.audio || [];
-      if (!audios.length) throw new Error('该视频无可用音频流');
-      const best = [...audios].sort((a, b) => b.bandwidth - a.bandwidth)[0];
-      return {
-        cid,
-        url: best.baseUrl || best.base_url,
-        backup: best.backupUrl || best.backup_url || [],
-        bandwidth: best.bandwidth,
-        mime: best.mimeType || best.mime_type || 'audio/mp4',
-      };
+      return await getHtml5Durl(bvid, cid);
     } catch (e) {
       lastErr = e;
-      resetAuth(); // 刷新 buvid 与 wbi 密钥后重试
       await sleep(300);
     }
   }
