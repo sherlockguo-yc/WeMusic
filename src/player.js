@@ -396,23 +396,66 @@ function _bgUnmuteAndPlay(seekSec) {
 
   const doPlay = () => bgAudio.play().catch(() => setTimeout(() => bgAudio.play().catch(() => {}), 500));
 
-  if (seekSec > 2 && Math.abs(bgAudio.currentTime - seekSec) > 1) {
-    // 需要 seek：等 seeked 后再 play
+  const doSeekAndPlay = () => {
+    if (Math.abs(bgAudio.currentTime - seekSec) < 1) {
+      doPlay(); return; // 已经在目标位置附近，直接播
+    }
     const onSeeked = () => { bgAudio.removeEventListener('seeked', onSeeked); doPlay(); };
     bgAudio.addEventListener('seeked', onSeeked);
     bgAudio.currentTime = seekSec;
+  };
+
+  if (seekSec > 2) {
+    if (bgAudio.readyState >= 1) {
+      // 已有元数据，可以直接 seek
+      doSeekAndPlay();
+    } else {
+      // 等 canplay 再 seek（readyState=0 时 set currentTime 无效）
+      const onCanPlay = () => { bgAudio.removeEventListener('canplay', onCanPlay); doSeekAndPlay(); };
+      bgAudio.addEventListener('canplay', onCanPlay);
+    }
   } else {
     doPlay();
   }
 }
 
 function _bgStop() {
+  _stopBgSync();
   if (!_bgBvid) return;
   bgAudio.pause();
   bgAudio.muted = true;
   bgAudio.src = '';
   _bgBvid = null;
   _bgPlaying = false;
+}
+
+// 后台时每 4 秒用 bgAudio.currentTime 校准 elapsed（消除 setInterval 节流漂移）
+let _bgSyncTimer = null;
+function _startBgSync() {
+  _stopBgSync();
+  _bgSyncTimer = setInterval(() => {
+    if (!_bgPlaying || bgAudio.paused || !bgAudio.currentTime) return;
+    const real = Math.round(bgAudio.currentTime);
+    if (Math.abs(real - elapsed) >= 2) { // 偏差 ≥2 秒才校准，避免频繁跳变
+      elapsed = real;
+    }
+    if (totalDur > 0 && elapsed >= totalDur - 1) autoAdvance(); // 兜底切歌
+  }, 4000);
+}
+function _stopBgSync() {
+  if (_bgSyncTimer) { clearInterval(_bgSyncTimer); _bgSyncTimer = null; }
+}
+
+// 通过 postMessage 控制 B 站 iframe 音量（官方支持的消息协议）
+function _setIframeVolume(vol) {
+  const iframe = $('videoContainer').querySelector('iframe');
+  if (!iframe) return;
+  try {
+    iframe.contentWindow.postMessage(
+      JSON.stringify({ type: 'setVolume', data: { volume: Math.round(vol * 100) } }),
+      'https://player.bilibili.com'
+    );
+  } catch {}
 }
 
 export function startVideo(bvid, title, dur) {
@@ -507,6 +550,7 @@ export function initPlayer() {
     _bgVolume = volBar.value / 100;
     localStorage.setItem('wemusic_vol', _bgVolume);
     _applyVol();
+    _setIframeVolume(_bgVolume); // 同步 iframe 音量
   };
   let _prevVol = _bgVolume;
   volBtn.onclick = () => {
@@ -514,6 +558,7 @@ export function initPlayer() {
     else { _bgVolume = _prevVol || 0.8; }
     localStorage.setItem('wemusic_vol', _bgVolume);
     _applyVol();
+    _setIframeVolume(_bgVolume); // 同步 iframe 音量
   };
 
   $('modeBtn').onclick = () => {
@@ -597,17 +642,18 @@ export function initPlayer() {
     if (document.hidden) {
       // 切到后台：bgAudio 已预缓冲，直接 seek+play，几乎无延迟
       if (!state.current?.bvid || timerPaused) return;
-      // 确保 preload 的是当前歌曲（正常情况下 startVideo 已经 preload 过了）
       if (_bgBvid !== state.current.bvid) _bgPreload(state.current.bvid);
       $('videoContainer').innerHTML = '';
       _pendingMount = { bvid: state.current.bvid, title: state.current._biliTitle };
       $('videoContainer').dataset.pendingBvid = state.current.bvid;
       _bgUnmuteAndPlay(elapsed);
+      _startBgSync(); // 后台启动 bgAudio.currentTime 定期校准 elapsed
     } else {
-      // 回到前台：
+      // 回到前台
       if (!state.current?.bvid) return;
+      _stopBgSync(); // 停止后台校准
 
-      // 用 bgAudio.currentTime 校正进度（后台计时器可能有节流误差）
+      // 用 bgAudio.currentTime 校正进度
       if (_bgPlaying && bgAudio.currentTime > 1) {
         elapsed = Math.round(bgAudio.currentTime);
         $('curTime').textContent = fmtDur(elapsed);
@@ -621,9 +667,23 @@ export function initPlayer() {
       mountVideoAt(target.bvid, target.title, elapsed > 5 ? elapsed : 0);
       applyPaneVisibility();
 
-      // 交叉：等 iframe 内容开始加载后再停 bgAudio，避免空档期卡顿
-      // 用短延迟兜底（iframe canplay 跨域无法监听）
-      setTimeout(() => _bgStop(), 1800);
+      // 交叉：收到 B 站第一条 postMessage（视频已启动）时停 bgAudio；兜底 2s
+      let _crossStopped = false;
+      const stopCross = () => { if (_crossStopped) return; _crossStopped = true; _bgStop(); };
+      const crossMsg = (e) => {
+        try {
+          const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+          if (d && typeof d === 'object' && (d.type || d.event)) {
+            window.removeEventListener('message', crossMsg);
+            stopCross();
+          }
+        } catch {}
+      };
+      window.addEventListener('message', crossMsg);
+      setTimeout(() => { window.removeEventListener('message', crossMsg); stopCross(); }, 2000);
+
+      // 同步 iframe 音量（B 站 postMessage 协议）
+      setTimeout(() => _setIframeVolume(_bgVolume), 500);
     }
   });
 }

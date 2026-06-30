@@ -592,7 +592,9 @@ input[type='range']::-moz-range-thumb {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 18px 16px; display: flex; flex-direction: column; gap: 4px;
 }
-.stat-ov-card.accent { border-color: var(--accent); background: rgba(29,185,84,.08); }
+.stat-ov-card.accent  { border-color: var(--accent); background: rgba(29,185,84,.08); }
+.stat-ov-card.accent2 { border-color: #6c9ef8; background: rgba(108,158,248,.08); }
+.stat-ov-card.accent2 .soc-val { color: #6c9ef8; }
 .soc-val { font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1.1; }
 .soc-label { font-size: 12px; color: var(--text-dim); }
 
@@ -610,18 +612,35 @@ input[type='range']::-moz-range-thumb {
 }
 .stats-empty { color: var(--text-dim); font-size: 13px; padding: 20px 0; text-align: center; }
 
-/* 新柱状图 */
+/* 柱状图标题行 */
+.stats-panel-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.stats-panel-hd .stats-panel-title { margin-bottom: 0; }
+.stats-sub { font-size: 11px; color: var(--text-dim); font-weight: 400; margin-left: 8px; }
+.stats-bar-tabs { display: flex; gap: 4px; }
+.stats-bar-tab {
+  padding: 2px 10px; border-radius: 12px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 11px; cursor: pointer;
+}
+.stats-bar-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* 新柱状图：用百分比高度，撑满容器 */
 .bar-chart-new {
-  display: flex; align-items: stretch; gap: 2px; height: 110px;
+  display: flex; align-items: flex-end; gap: 2px;
+  height: 100px;  /* 固定高度，柱子用百分比填充，无空白 */
 }
 .bar-item {
   flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: flex-end; cursor: default; min-width: 0;
+  justify-content: flex-end; cursor: default; min-width: 0; height: 100%;
+  position: relative;
+}
+.bar-val-label {
+  font-size: 8px; color: var(--text-dim); line-height: 1; margin-bottom: 1px;
+  min-height: 10px; text-align: center; white-space: nowrap;
 }
 .bar-fill {
   width: 100%; background: var(--accent); border-radius: 3px 3px 0 0;
-  opacity: 0.75; transition: opacity .2s, height .4s ease;
-  /* height 由 inline style 直接设像素值，见下方 JS */
+  opacity: 0.7; transition: opacity .15s;
+  /* height 由 inline style 设百分比 */
 }
 .bar-item:hover .bar-fill { opacity: 1; }
 .bar-label {
@@ -668,8 +687,9 @@ input[type='range']::-moz-range-thumb {
 .ts-info { flex: 1; min-width: 0; }
 .ts-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ts-singer { font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ts-meta { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.ts-meta { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .ts-cnt { font-size: 12px; color: var(--text-dim); }
+.ts-dur { font-size: 11px; color: var(--text-dim); opacity: .7; }
 
 /* 兼容旧代码用到的 stat-card */
 .stat-card {

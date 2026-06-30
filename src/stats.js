@@ -11,6 +11,38 @@ const CHART_TABS = [
   { id: 67,  label: '👂 识曲榜' },
 ];
 
+// 格式化分钟数为可读字符串
+function fmtMin(sec) {
+  if (!sec) return '0 分钟';
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m} 分钟`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  return rm ? `${h} 小时 ${rm} 分` : `${h} 小时`;
+}
+
+// 自定义 tooltip（即时显示，无延迟）
+function bindTooltip(container) {
+  const tip = document.createElement('div');
+  tip.className = 'stats-tip';
+  tip.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap';
+  document.body.appendChild(tip);
+  container.addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (!el) return;
+    tip.innerHTML = el.dataset.tip;
+    tip.style.display = 'block';
+  });
+  container.addEventListener('mousemove', (e) => {
+    tip.style.left = (e.clientX + 12) + 'px';
+    tip.style.top = (e.clientY - 28) + 'px';
+  });
+  container.addEventListener('mouseout', (e) => {
+    if (!e.target.closest('[data-tip]')) tip.style.display = 'none';
+  });
+  container.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  return tip;
+}
+
 export async function openStats() {
   state.view = 'stats';
   setActiveNav('navStats');
@@ -31,58 +63,95 @@ export async function openStats() {
       const d = new Date(today); d.setDate(today.getDate() - 29 + i);
       const key = d.toISOString().slice(0, 10);
       const row = dailyMap.get(key);
-      return { day: key, play_count: row?.play_count || 0, label: `${d.getMonth() + 1}/${d.getDate()}` };
+      return {
+        day: key, label: `${d.getMonth() + 1}/${d.getDate()}`,
+        play_count: row?.play_count || 0,
+        total_sec: row?.total_sec || 0,
+      };
     });
-    const maxPlay = Math.max(...days30.map((d) => d.play_count), 1);
-    const BAR_MAX_PX = 82;
-    const barHtml = days30.map((d, i) => {
-      const px = d.play_count ? Math.max(3, Math.round((d.play_count / maxPlay) * BAR_MAX_PX)) : 0;
-      const showLabel = i === 0 || i === 14 || i === 29 || (d.play_count === maxPlay && d.play_count > 0);
-      return `<div class="bar-item" title="${d.day}: ${d.play_count}次"><div class="bar-fill" style="height:${px}px"></div><div class="bar-label">${showLabel ? d.label : ''}</div></div>`;
-    }).join('');
 
-    const maxH = Math.max(...(hourly.hourly.map((h) => h.play_count)), 1);
+    // 渲染柱状图（mode: 'count' | 'duration'）
+    function renderBarChart(mode) {
+      const vals = days30.map((d) => mode === 'count' ? d.play_count : Math.round(d.total_sec / 60));
+      const maxVal = Math.max(...vals, 1);
+      return days30.map((d, i) => {
+        const val = vals[i];
+        const pct = val ? Math.max(4, Math.round((val / maxVal) * 100)) : 0;
+        const showLabel = i === 0 || i === 14 || i === 29;
+        const tipContent = mode === 'count'
+          ? `${d.label}<br><b>${d.play_count} 次</b>　${fmtMin(d.total_sec)}`
+          : `${d.label}<br><b>${fmtMin(d.total_sec)}</b>　${d.play_count} 次`;
+        const valLabel = val > 0 ? (mode === 'count' ? val : (Math.round(d.total_sec / 60) + 'm')) : '';
+        return `<div class="bar-item" data-tip="${tipContent}">
+          <div class="bar-val-label">${valLabel}</div>
+          <div class="bar-fill" style="height:${pct}%"></div>
+          <div class="bar-label">${showLabel ? d.label : ''}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // 时段分布（次数）
+    const maxH = Math.max(...hourly.hourly.map((h) => h.play_count), 1);
     const hourHtml = Array.from({ length: 24 }, (_, i) => {
       const row = hourly.hourly.find((r) => r.hour === i);
       const cnt = row ? row.play_count : 0;
       const opacity = cnt ? 0.15 + (cnt / maxH) * 0.85 : 0;
+      const tipStr = `${i}:00 ~ ${i + 1}:00<br><b>${cnt} 次</b>`;
       return `<div class="hour-cell${cnt > 0 ? ' active' : ''}"
         style="${cnt > 0 ? `background:rgba(29,185,84,${opacity.toFixed(2)});color:#fff` : ''}"
-        title="${i}:00 — ${cnt}次">${i}</div>`;
+        data-tip="${tipStr}">${i}</div>`;
     }).join('');
 
-    const maxArtistPlay = Math.max(...(topArtists.artists.map((a) => a.play_count)), 1);
+    // 歌手条形图（次数 + 时长双行）
+    const maxArtistPlay = Math.max(...topArtists.artists.map((a) => a.play_count), 1);
     const artistBars = topArtists.artists.map((a) => {
       const pct = Math.round((a.play_count / maxArtistPlay) * 100);
-      return `<div class="artist-bar-row" data-singer="${esc(a.singer)}">
+      const tipStr = `${esc(a.singer)}<br><b>${a.play_count} 次</b>　${fmtMin(a.total_sec || 0)}`;
+      return `<div class="artist-bar-row" data-singer="${esc(a.singer)}" data-tip="${tipStr}">
         <div class="artist-bar-name">${esc(a.singer)}</div>
         <div class="artist-bar-wrap"><div class="artist-bar-fill" style="width:${pct}%"></div></div>
         <div class="artist-bar-val">${a.play_count}次</div>
       </div>`;
     }).join('');
 
+    // 近30天汇总
+    const sum30Plays = days30.reduce((s, d) => s + d.play_count, 0);
+    const sum30Sec = days30.reduce((s, d) => s + d.total_sec, 0);
+
     main.innerHTML = `
       <div class="view-title">我的数据</div>
       <div class="stats-overview">
         <div class="stat-ov-card accent"><div class="soc-val">${ov.plays}</div><div class="soc-label">总播放次数</div></div>
-        <div class="stat-ov-card"><div class="soc-val">${fmtSec(ov.total_sec)}</div><div class="soc-label">总播放时长</div></div>
+        <div class="stat-ov-card accent2"><div class="soc-val">${fmtSec(ov.total_sec)}</div><div class="soc-label">总播放时长</div></div>
         <div class="stat-ov-card"><div class="soc-val">${ov.unique_songs}</div><div class="soc-label">不重复歌曲</div></div>
         <div class="stat-ov-card"><div class="soc-val">${ov.active_days}</div><div class="soc-label">听歌天数</div></div>
       </div>
       <div class="stats-two-col">
         <div class="stats-panel">
-          <div class="stats-panel-title">最近 30 天趋势</div>
-          <div class="bar-chart-new">${days30.some((d) => d.play_count > 0) ? barHtml : '<div class="stats-empty">暂无数据</div>'}</div>
+          <div class="stats-panel-hd">
+            <div class="stats-panel-title">最近 30 天趋势
+              <span class="stats-sub">共 ${sum30Plays} 次 · ${fmtMin(sum30Sec)}</span>
+            </div>
+            <div class="stats-bar-tabs">
+              <button class="stats-bar-tab active" data-mode="count">次数</button>
+              <button class="stats-bar-tab" data-mode="duration">时长</button>
+            </div>
+          </div>
+          <div class="bar-chart-new" id="barChart">
+            ${days30.some((d) => d.play_count > 0) ? renderBarChart('count') : '<div class="stats-empty">暂无数据</div>'}
+          </div>
         </div>
         <div class="stats-panel">
-          <div class="stats-panel-title">听歌时段分布</div>
-          <div class="hour-grid">${hourHtml}</div>
+          <div class="stats-panel-hd">
+            <div class="stats-panel-title">听歌时段分布</div>
+          </div>
+          <div class="hour-grid" id="hourGrid">${hourHtml}</div>
         </div>
       </div>
       <div class="stats-two-col">
         <div class="stats-panel">
           <div class="stats-panel-title">最爱歌手</div>
-          <div class="artist-bars">${artistBars || '<div class="stats-empty">暂无数据</div>'}</div>
+          <div class="artist-bars" id="artistBars">${artistBars || '<div class="stats-empty">暂无数据</div>'}</div>
         </div>
         <div class="stats-panel">
           <div class="stats-panel-title">最常播放 Top 10</div>
@@ -90,12 +159,32 @@ export async function openStats() {
         </div>
       </div>`;
 
+    // 绑定自定义 tooltip
+    bindTooltip($('barChart'));
+    bindTooltip($('hourGrid'));
+    bindTooltip($('artistBars'));
+
+    // 次数/时长切换
+    main.querySelectorAll('.stats-bar-tab').forEach((btn) => {
+      btn.onclick = () => {
+        main.querySelectorAll('.stats-bar-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        const chart = $('barChart');
+        chart.innerHTML = renderBarChart(btn.dataset.mode);
+        bindTooltip(chart);
+      };
+    });
+
     $('statsTopSongs').innerHTML = topSongs.songs.length
       ? topSongs.songs.map((s, i) => `
         <div class="top-song-row" data-i="${i}">
           <span class="ts-rank">${i + 1}</span>
           <div class="ts-info"><div class="ts-name">${esc(s.name)}</div><div class="ts-singer">${esc(s.singer || '')}</div></div>
-          <div class="ts-meta"><span class="ts-cnt">${s.play_count}次</span><button class="icon-btn play ts-play" title="播放" data-i="${i}">▶</button></div>
+          <div class="ts-meta">
+            <span class="ts-cnt">${s.play_count}次</span>
+            <span class="ts-dur">${fmtMin(s.total_sec || 0)}</span>
+            <button class="icon-btn play ts-play" title="播放" data-i="${i}">▶</button>
+          </div>
         </div>`).join('')
       : '<div class="stats-empty">还没有播放记录</div>';
 
