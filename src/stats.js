@@ -71,23 +71,28 @@ export async function openStats() {
     });
 
     // 渲染柱状图（mode: 'count' | 'duration'）
+    // 结构：.bar-chart-wrap > .bar-chart-new（柱子）+ .bar-chart-axis（x轴标签）
+    const BAR_PX = 90; // 柱子区域高度（px），与 CSS .bar-chart-wrap height 保持一致
     function renderBarChart(mode) {
       const vals = days30.map((d) => mode === 'count' ? d.play_count : Math.round(d.total_sec / 60));
       const maxVal = Math.max(...vals, 1);
-      return days30.map((d, i) => {
+      const bars = days30.map((d, i) => {
         const val = vals[i];
-        const pct = val ? Math.max(4, Math.round((val / maxVal) * 100)) : 0;
-        const showLabel = i === 0 || i === 14 || i === 29;
+        const px = val ? Math.max(3, Math.round((val / maxVal) * BAR_PX)) : 0;
         const tipContent = mode === 'count'
-          ? `${d.label}<br><b>${d.play_count} 次</b>　${fmtMin(d.total_sec)}`
-          : `${d.label}<br><b>${fmtMin(d.total_sec)}</b>　${d.play_count} 次`;
-        const valLabel = val > 0 ? (mode === 'count' ? val : (Math.round(d.total_sec / 60) + 'm')) : '';
+          ? `${d.label}<br><b>${d.play_count} 次</b> · ${fmtMin(d.total_sec)}`
+          : `${d.label}<br><b>${fmtMin(d.total_sec)}</b> · ${d.play_count} 次`;
+        const valLabel = val > 0 ? (mode === 'count' ? val : Math.round(d.total_sec / 60) + 'm') : '';
         return `<div class="bar-item" data-tip="${tipContent}">
           <div class="bar-val-label">${valLabel}</div>
-          <div class="bar-fill" style="height:${pct}%"></div>
-          <div class="bar-label">${showLabel ? d.label : ''}</div>
+          <div class="bar-fill" style="height:${px}px"></div>
         </div>`;
       }).join('');
+      const axis = days30.map((d, i) => {
+        const showLabel = i === 0 || i === 14 || i === 29;
+        return `<div class="bar-axis-item">${showLabel ? d.label : ''}</div>`;
+      }).join('');
+      return `<div class="bar-chart-new">${bars}</div><div class="bar-chart-axis">${axis}</div>`;
     }
 
     // 时段分布（次数）
@@ -137,7 +142,7 @@ export async function openStats() {
               <button class="stats-bar-tab" data-mode="duration">时长</button>
             </div>
           </div>
-          <div class="bar-chart-new" id="barChart">
+          <div class="bar-chart-wrap" id="barChart">
             ${days30.some((d) => d.play_count > 0) ? renderBarChart('count') : '<div class="stats-empty">暂无数据</div>'}
           </div>
         </div>
@@ -159,21 +164,25 @@ export async function openStats() {
         </div>
       </div>`;
 
-    // 绑定自定义 tooltip
-    bindTooltip($('barChart'));
+    // 绑定自定义 tooltip（barChart 在切换逻辑里绑定）
     bindTooltip($('hourGrid'));
     bindTooltip($('artistBars'));
 
-    // 次数/时长切换
+    // 次数/时长切换：更新 wrap 内容，重新绑 tooltip
     main.querySelectorAll('.stats-bar-tab').forEach((btn) => {
       btn.onclick = () => {
         main.querySelectorAll('.stats-bar-tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
-        const chart = $('barChart');
-        chart.innerHTML = renderBarChart(btn.dataset.mode);
-        bindTooltip(chart);
+        const wrap = $('barChart');
+        wrap.innerHTML = renderBarChart(btn.dataset.mode);
+        // tooltip 绑在 .bar-chart-new 上
+        const chartInner = wrap.querySelector('.bar-chart-new');
+        if (chartInner) bindTooltip(chartInner);
       };
     });
+    // 初始 tooltip 绑定
+    const initChartInner = $('barChart').querySelector('.bar-chart-new');
+    if (initChartInner) { bindTooltip(initChartInner); }
 
     $('statsTopSongs').innerHTML = topSongs.songs.length
       ? topSongs.songs.map((s, i) => `

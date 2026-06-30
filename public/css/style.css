@@ -598,9 +598,10 @@ input[type='range']::-moz-range-thumb {
 .soc-val { font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1.1; }
 .soc-label { font-size: 12px; color: var(--text-dim); }
 
-/* 两列布局 */
+/* 两列布局：顶部对齐，各自高度独立，不互相拉伸 */
 .stats-two-col {
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;
+  align-items: start;
 }
 .stats-panel {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
@@ -623,29 +624,52 @@ input[type='range']::-moz-range-thumb {
 }
 .stats-bar-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* 新柱状图：用百分比高度，撑满容器 */
-.bar-chart-new {
-  display: flex; align-items: flex-end; gap: 2px;
-  height: 100px;  /* 固定高度，柱子用百分比填充，无空白 */
+/* 柱状图：固定区域，柱子底部对齐，高度用 px（JS 计算），不依赖百分比 */
+.bar-chart-wrap {
+  /* 柱区 90px + 轴标签 18px = 108px，精确匹配，无多余空白 */
+  height: 108px;
+  display: flex;
+  flex-direction: column;
 }
-.bar-item {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: flex-end; cursor: default; min-width: 0; height: 100%;
+.bar-chart-new {
+  flex: 1;               /* 占满 .bar-chart-wrap */
+  display: flex;
+  align-items: flex-end; /* 所有柱子底部对齐 */
+  gap: 2px;
+  overflow: hidden;
   position: relative;
 }
+.bar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  cursor: default;
+  min-width: 0;
+  /* 不设 height，由内容决定，底部对齐保证柱子从底部生长 */
+}
 .bar-val-label {
-  font-size: 8px; color: var(--text-dim); line-height: 1; margin-bottom: 1px;
-  min-height: 10px; text-align: center; white-space: nowrap;
+  font-size: 8px; color: var(--text-dim); line-height: 1.2;
+  text-align: center; white-space: nowrap; min-height: 10px;
 }
 .bar-fill {
   width: 100%; background: var(--accent); border-radius: 3px 3px 0 0;
   opacity: 0.7; transition: opacity .15s;
-  /* height 由 inline style 设百分比 */
+  /* height 由 JS 直接设 px 值 */
 }
 .bar-item:hover .bar-fill { opacity: 1; }
-.bar-label {
-  font-size: 9px; color: var(--text-dim); white-space: nowrap; flex-shrink: 0;
-  overflow: hidden; text-overflow: clip; max-width: 28px; text-align: center; margin-top: 2px;
+.bar-chart-axis {
+  /* x 轴标签行，紧贴柱子下方，高度固定 */
+  display: flex;
+  gap: 2px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.bar-axis-item {
+  flex: 1; text-align: center;
+  font-size: 9px; color: var(--text-dim); line-height: 18px;
+  white-space: nowrap; overflow: hidden; min-width: 0;
 }
 
 /* 时段热力格 */
