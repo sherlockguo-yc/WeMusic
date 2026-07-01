@@ -1,10 +1,28 @@
 // ---------------- 主题、设置面板、Sleep Timer、侧边栏拖拽 ----------------
-import { $, toast } from './utils.js';
+import { $, toast, uiPrompt } from './utils.js';
 import { Auth, api } from './api.js';
 import { state } from './state.js';
 
 // ---- 主题 ----
 const mq = window.matchMedia('(prefers-color-scheme: light)');
+const FONTS = {
+  default: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+  serif:   '"Noto Serif SC", "Songti SC", "STSong", Georgia, "Times New Roman", serif',
+  mono:    '"SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Courier New", monospace',
+  rounded: '"SF Pro Rounded", "PingFang SC", -apple-system, system-ui, sans-serif',
+  hei:     '"Hiragino Sans GB", "PingFang SC", "Microsoft YaHei", "STHeiti", sans-serif',
+  kai:     '"KaiTi", "STKaiti", "TW-Kai", "BiauKai", serif',
+};
+
+export function applyFont(key) {
+  key = FONTS[key] ? key : 'default';
+  document.documentElement.style.setProperty('--font', FONTS[key]);
+  document.querySelectorAll('.font-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.font === key);
+  });
+}
+applyFont(localStorage.getItem('wemusic_font') || 'default');
+
 export function applyTheme(theme) {
   const effective = theme === 'system' ? (mq.matches ? 'light' : 'dark') : theme;
   document.body.classList.toggle('light', effective === 'light');
@@ -128,11 +146,9 @@ export async function uploadAvatar(file) {
 export function openSettings() {
   $('settingsUser').textContent = Auth.user?.username || '';
   renderAvatar(Auth.user?.avatar || null);
-  const avatarUploadBtn = $('avatarUploadBtn');
-  const avatarFileInput = $('avatarFileInput');
   const avatarPreview = $('avatarPreview');
-  if (avatarUploadBtn) {
-    avatarUploadBtn.onclick = () => avatarFileInput.click();
+  const avatarFileInput = $('avatarFileInput');
+  if (avatarPreview && avatarFileInput) {
     avatarPreview.onclick = () => avatarFileInput.click();
     avatarFileInput.onchange = (e) => { uploadAvatar(e.target.files[0]); avatarFileInput.value = ''; };
   }
@@ -142,12 +158,19 @@ export function openSettings() {
     b.onclick = () => {
       localStorage.setItem('wemusic_theme', b.dataset.theme);
       applyTheme(b.dataset.theme);
-      document.querySelectorAll('.theme-opt').forEach((x) => x.classList.toggle('active', x === b));
+    };
+  });
+  const curFont = localStorage.getItem('wemusic_font') || 'default';
+  document.querySelectorAll('.font-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.font === curFont);
+    b.onclick = () => {
+      localStorage.setItem('wemusic_font', b.dataset.font);
+      applyFont(b.dataset.font);
     };
   });
   updateSleepHint();
 
-  // 定时停止按钮：当前有定时则高亮对应按钮，否则默认高亮「关闭」
+  // 定时停止按钮
   const activeMin = sleepTimeout ? null : (sleepAfterSong ? 'song' : '0');
   document.querySelectorAll('.sleep-opt').forEach((b) => {
     const isActive = (activeMin != null) ? (b.dataset.min === activeMin) : false;
@@ -155,8 +178,24 @@ export function openSettings() {
     b.onclick = () => {
       setSleep(b.dataset.min);
       document.querySelectorAll('.sleep-opt').forEach((x) => x.classList.toggle('active', x === b));
+      $('sleepCustomOpt')?.classList.remove('active');
     };
   });
+  // 自定义定时：按钮风格统一，点击弹出输入框
+  const customBtn = $('sleepCustomOpt');
+  if (customBtn) {
+    const isCustom = sleepTimeout && !sleepAfterSong;
+    customBtn.classList.toggle('active', isCustom);
+    customBtn.onclick = async () => {
+      const val = await uiPrompt('自定义时间（分钟，1-480）', sleepTimeout ? String(Math.round((Date.now() - 0) / 60000)) : '');
+      if (!val) return;
+      const min = parseInt(val, 10);
+      if (!min || min < 1 || min > 480) { toast('请输入 1-480 分钟'); return; }
+      setSleep(String(min));
+      document.querySelectorAll('.sleep-opt').forEach((x) => x.classList.remove('active'));
+      customBtn.classList.add('active');
+    };
+  }
   $('settingsModal').classList.add('show');
 }
 

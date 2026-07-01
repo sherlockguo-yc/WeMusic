@@ -11,7 +11,7 @@ export const Auth = {
   },
   get user() {
     try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); }
-    catch { return null; }
+    catch { localStorage.removeItem(USER_KEY); return null; }
   },
   save(token, user) {
     _tokenCache = token;
@@ -38,6 +38,7 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   if (res.status === 401) {
     Auth.clear();
     if (!location.pathname.endsWith('login.html')) location.href = '/login.html';
+    throw new Error((data && data.error) || '登录已过期，请重新登录');
   }
   if (!res.ok) {
     throw new Error((data && data.error) || `请求失败 (${res.status})`);

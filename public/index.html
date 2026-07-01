@@ -292,11 +292,40 @@
       <h3>设置</h3>
       <div class="settings-body">
         <div class="settings-section">
+          <div class="settings-label">账户</div>
+          <div class="settings-row" style="align-items:flex-start;gap:14px">
+            <div class="avatar-upload-wrap">
+              <div class="avatar-preview" id="avatarPreview">
+                <img id="avatarPreviewImg" src="" alt="" style="display:none" />
+                <span id="avatarPreviewFallback" class="avatar-preview-fallback"></span>
+              </div>
+              <input type="file" id="avatarFileInput" accept="image/*" hidden />
+            </div>
+            <div style="flex:1;min-width:0">
+              <div id="settingsUser" class="settings-username"></div>
+              <div style="margin-top:10px">
+                <button class="btn sm danger" id="settingsLogout">退出登录</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-section">
           <div class="settings-label">外观主题</div>
           <div class="settings-row theme-options">
             <button class="theme-opt" data-theme="system">跟随系统</button>
             <button class="theme-opt" data-theme="dark">深色</button>
             <button class="theme-opt" data-theme="light">浅色</button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-label">字体</div>
+          <div class="settings-row" style="flex-wrap:wrap;gap:6px">
+            <button class="font-opt" data-font="default">系统默认</button>
+            <button class="font-opt" data-font="serif">思源宋体</button>
+            <button class="font-opt" data-font="mono">等宽字体</button>
+            <button class="font-opt" data-font="rounded">圆体风格</button>
+            <button class="font-opt" data-font="hei">冬青黑体</button>
+            <button class="font-opt" data-font="kai">楷体</button>
           </div>
         </div>
         <div class="settings-section">
@@ -307,27 +336,9 @@
             <button class="btn sm sleep-opt" data-min="30">30 分钟</button>
             <button class="btn sm sleep-opt" data-min="60">60 分钟</button>
             <button class="btn sm sleep-opt" data-min="song">播完当前曲</button>
+            <button class="btn sm sleep-opt" id="sleepCustomOpt" title="输入自定义时间">自定义</button>
           </div>
           <div class="settings-hint" id="sleepHint"></div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-label">账户</div>
-          <div class="settings-row" style="align-items:flex-start;gap:14px">
-            <div class="avatar-upload-wrap">
-              <div class="avatar-preview" id="avatarPreview">
-                <img id="avatarPreviewImg" src="" alt="" style="display:none" />
-                <span id="avatarPreviewFallback" class="avatar-preview-fallback"></span>
-              </div>
-              <button class="btn sm" id="avatarUploadBtn" title="点击上传头像">上传头像</button>
-              <input type="file" id="avatarFileInput" accept="image/*" hidden />
-            </div>
-            <div style="flex:1;min-width:0">
-              <div id="settingsUser" class="settings-username"></div>
-              <div style="margin-top:10px">
-                <button class="btn sm danger" id="settingsLogout">退出登录</button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
       <div class="prompt-actions">

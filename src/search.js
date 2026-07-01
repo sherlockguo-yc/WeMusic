@@ -339,17 +339,4 @@ export function initSearch() {
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-box')) $('searchSuggest').classList.remove('show');
   });
-
-  // 浏览器前进后退
-  window.addEventListener('popstate', (e) => {
-    if (!e.state) return;
-    const { view, data } = e.state;
-    if (view === 'search' && data?.kw) {
-      $('searchInput').value = data.kw; doSearch();
-    } else if (view === 'artist' && data?.mid) {
-      openArtist(data.mid, data.name);
-    } else if (view === 'album' && data?.mid) {
-      openAlbum(data.mid, data.name);
-    }
-  });
 }

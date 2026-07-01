@@ -99,11 +99,13 @@ export function updateLyricsPanelMeta(song) {
       lpLikeBtn.title = liked2 ? '取消喜欢' : '喜欢';
     };
   }
-  document.getElementById('lpAddBtn').onclick = async () => {
+  const lpAdd = document.getElementById('lpAddBtn');
+  if (lpAdd) lpAdd.onclick = async () => {
     const { addSongs } = await import('./playlist-ui.js');
     addSongs([song]);
   };
-  document.getElementById('lpSwitchBtn').onclick = () => openLyricsSwitchModal(song);
+  const lpSwitch = document.getElementById('lpSwitchBtn');
+  if (lpSwitch) lpSwitch.onclick = () => openLyricsSwitchModal(song);
   const bgBtn = document.getElementById('lpBgBtn');
   if (bgBtn) bgBtn.onclick = () => {
     const ov = $('lpBgOverlay');

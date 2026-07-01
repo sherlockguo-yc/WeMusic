@@ -73,6 +73,6 @@ passwordEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { if (mode === 'register' && !confirmEl.value) { confirmEl.focus(); return; } submit(); }
 });
 usernameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') passwordEl.focus(); });
-confirmEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+if (confirmEl) confirmEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
 
 render();
