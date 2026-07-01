@@ -6,6 +6,8 @@ import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
 import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache } from '../services/lyrics.js';
 import { getTopList, searchSongs } from '../services/qqmusic.js';
+import { renderPosterPNG } from '../services/poster.js';
+import { POSTER_THEMES } from '../../shared/poster-template.js';
 
 const router = express.Router();
 router.use(authRequired);
@@ -65,7 +67,8 @@ router.get('/overview', (req, res) => {
 });
 
 // ============================================================
-// 本周听歌报告（含跳过率、新歌数、完播率分布、最爱搭档）
+// 本周 / 本月听歌报告（含跳过率、新歌数、完播率分布、听歌趋势）
+// 统一响应结构：period / lastPeriod / trend / label，供周报月报共用前端渲染逻辑
 // ============================================================
 router.get('/weekly', (req, res) => {
   const uid = req.user.id;
@@ -83,10 +86,10 @@ router.get('/weekly', (req, res) => {
   const lastUntil = thisSince;
 
   const fmtDate = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
-  const weekLabel = `${fmtDate(thisMonday)} — ${fmtDate(now)}`;
+  const label = `${fmtDate(thisMonday)} — ${fmtDate(now)}`;
 
   // —— 本周概览 ——
-  const weekT = db.prepare(`
+  const periodT = db.prepare(`
     SELECT COUNT(*) AS plays, SUM(played_sec) AS sec,
            COUNT(DISTINCT name||singer) AS unique_songs,
            COUNT(DISTINCT date(played_at/1000,'unixepoch','localtime')) AS days
@@ -94,14 +97,14 @@ router.get('/weekly', (req, res) => {
   `).get(uid, thisSince);
 
   // —— 上周概览（对比） ——
-  const lastT = db.prepare(`
+  const lastPeriodT = db.prepare(`
     SELECT COUNT(*) AS plays, SUM(played_sec) AS sec
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
   `).get(uid, lastSince, lastUntil);
 
-  // —— 本周 Top 歌曲 / 歌手 ——
+  // —— 本周 Top 歌曲 / 歌手（album_mid 用于分享海报封面拼贴）——
   const topSongs = db.prepare(`
-    SELECT name, singer, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
+    SELECT name, singer, MAX(album_mid) AS album_mid, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
     FROM play_logs WHERE user_id=? AND played_at>=?
     GROUP BY name, singer ORDER BY play_count DESC LIMIT 10
   `).all(uid, thisSince);
@@ -133,7 +136,7 @@ router.get('/weekly', (req, res) => {
   const compNone = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND (duration IS NULL OR duration=0)`).get(uid, thisSince).cnt;
 
   // —— 近 4 周趋势（自然周，每周播放次数） ——
-  const weeksTrend = [];
+  const trend = [];
   for (let w = 0; w < 4; w++) {
     const mon = new Date(thisMonday); mon.setDate(thisMonday.getDate() - w * 7);
     const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
@@ -141,12 +144,12 @@ router.get('/weekly', (req, res) => {
     const row = db.prepare(`
       SELECT COUNT(*) AS plays FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
     `).get(uid, mon.getTime(), end);
-    weeksTrend.push({
+    trend.push({
       label: `${fmtDate(mon)}-${fmtDate(sun)}`,
       plays: row?.plays || 0,
     });
   }
-  weeksTrend.reverse(); // 最早→最新
+  trend.reverse(); // 最早→最新
 
   // —— 本周最活跃时段 ——
   const peakHourRow = db.prepare(`
@@ -162,15 +165,15 @@ router.get('/weekly', (req, res) => {
   `).get(uid, thisSince).cnt;
 
   res.json({
-    week: {
-      plays: weekT.plays || 0,
-      sec: weekT.sec || 0,
-      uniqueSongs: weekT.unique_songs || 0,
-      days: weekT.days || 0,
+    period: {
+      plays: periodT.plays || 0,
+      sec: periodT.sec || 0,
+      uniqueSongs: periodT.unique_songs || 0,
+      days: periodT.days || 0,
     },
-    lastWeek: {
-      plays: lastT?.plays || 0,
-      sec: lastT?.sec || 0,
+    lastPeriod: {
+      plays: lastPeriodT?.plays || 0,
+      sec: lastPeriodT?.sec || 0,
     },
     topSongs,
     topArtists,
@@ -180,8 +183,112 @@ router.get('/weekly', (req, res) => {
     },
     newSongs: newSongs?.cnt || 0,
     completion: { low: comp0, mid: comp20, high: comp80, noDur: compNone },
-    weeksTrend,
-    weekLabel,
+    trend,
+    label,
+    peakHour: peakHourRow ? peakHourRow.hour : null,
+    uniqueArtists: uniqueArtists || 0,
+  });
+});
+
+// —— 本月听歌报告（自然月，字段结构与 /weekly 一致，供前端共用渲染逻辑） ——
+router.get('/monthly', (req, res) => {
+  const uid = req.user.id;
+  const now = new Date();
+
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const thisSince = thisMonthStart.getTime();
+
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+  const lastSince = lastMonthStart.getTime();
+  const lastUntil = thisSince;
+
+  const label = `${now.getFullYear()}年${now.getMonth() + 1}月`;
+
+  const periodT = db.prepare(`
+    SELECT COUNT(*) AS plays, SUM(played_sec) AS sec,
+           COUNT(DISTINCT name||singer) AS unique_songs,
+           COUNT(DISTINCT date(played_at/1000,'unixepoch','localtime')) AS days
+    FROM play_logs WHERE user_id=? AND played_at>=?
+  `).get(uid, thisSince);
+
+  const lastPeriodT = db.prepare(`
+    SELECT COUNT(*) AS plays, SUM(played_sec) AS sec
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+  `).get(uid, lastSince, lastUntil);
+
+  const topSongs = db.prepare(`
+    SELECT name, singer, MAX(album_mid) AS album_mid, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
+    FROM play_logs WHERE user_id=? AND played_at>=?
+    GROUP BY name, singer ORDER BY play_count DESC LIMIT 10
+  `).all(uid, thisSince);
+
+  const topArtists = db.prepare(`
+    SELECT singer, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
+    FROM play_logs WHERE user_id=? AND played_at>=? AND singer != ''
+    GROUP BY singer ORDER BY play_count DESC LIMIT 5
+  `).all(uid, thisSince);
+
+  const skipRow = db.prepare(`
+    SELECT COUNT(*) AS total, SUM(CASE WHEN played_sec < 30 THEN 1 ELSE 0 END) AS skipped
+    FROM play_logs WHERE user_id=? AND played_at>=?
+  `).get(uid, thisSince);
+
+  const newSongs = db.prepare(`
+    SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=?
+    AND (name||'__'||COALESCE(singer,'')) NOT IN (
+      SELECT name||'__'||COALESCE(singer,'') FROM play_logs WHERE user_id=? AND played_at < ?
+    )
+  `).get(uid, thisSince, uid, thisSince);
+
+  const comp0   = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND CAST(played_sec AS REAL)/NULLIF(duration,0) < 0.2`).get(uid, thisSince).cnt;
+  const comp20  = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND CAST(played_sec AS REAL)/NULLIF(duration,0) >= 0.2 AND CAST(played_sec AS REAL)/NULLIF(duration,0) < 0.8`).get(uid, thisSince).cnt;
+  const comp80  = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND CAST(played_sec AS REAL)/NULLIF(duration,0) >= 0.8`).get(uid, thisSince).cnt;
+  const compNone = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND (duration IS NULL OR duration=0)`).get(uid, thisSince).cnt;
+
+  // —— 近 6 个月趋势 ——
+  const trend = [];
+  for (let m = 0; m < 6; m++) {
+    const mStart = new Date(now.getFullYear(), now.getMonth() - m, 1, 0, 0, 0, 0);
+    const mEnd = m === 0 ? now.getTime() : new Date(now.getFullYear(), now.getMonth() - m + 1, 1, 0, 0, 0, 0).getTime();
+    const row = db.prepare(`
+      SELECT COUNT(*) AS plays FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    `).get(uid, mStart.getTime(), mEnd);
+    trend.push({ label: `${mStart.getMonth() + 1}月`, plays: row?.plays || 0 });
+  }
+  trend.reverse();
+
+  const peakHourRow = db.prepare(`
+    SELECT CAST(strftime('%H',played_at/1000,'unixepoch','localtime') AS INTEGER) AS hour,
+           COUNT(*) AS cnt
+    FROM play_logs WHERE user_id=? AND played_at>=?
+    GROUP BY hour ORDER BY cnt DESC LIMIT 1
+  `).get(uid, thisSince);
+
+  const uniqueArtists = db.prepare(`
+    SELECT COUNT(DISTINCT singer) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND singer != ''
+  `).get(uid, thisSince).cnt;
+
+  res.json({
+    period: {
+      plays: periodT.plays || 0,
+      sec: periodT.sec || 0,
+      uniqueSongs: periodT.unique_songs || 0,
+      days: periodT.days || 0,
+    },
+    lastPeriod: {
+      plays: lastPeriodT?.plays || 0,
+      sec: lastPeriodT?.sec || 0,
+    },
+    topSongs,
+    topArtists,
+    skip: {
+      total: skipRow?.total || 0,
+      skipped: skipRow?.skipped || 0,
+    },
+    newSongs: newSongs?.cnt || 0,
+    completion: { low: comp0, mid: comp20, high: comp80, noDur: compNone },
+    trend,
+    label,
     peakHour: peakHourRow ? peakHourRow.hour : null,
     uniqueArtists: uniqueArtists || 0,
   });
@@ -573,6 +680,27 @@ router.get('/lyrics', async (req, res) => {
     res.json(result);
   } catch (e) {
     res.status(404).json({ error: e.message, candidates: [] });
+  }
+});
+
+// ============================================================
+// 听歌报告海报生成（方案 B：服务端 Puppeteer 渲染，效果更精细）
+// body: { theme: 'mint'|'dark'|'sunset'|'ocean', data: {...posterData} }
+// ============================================================
+router.get('/poster/themes', (req, res) => {
+  res.json({ themes: Object.values(POSTER_THEMES).map(({ key, name }) => ({ key, name })) });
+});
+
+router.post('/poster', async (req, res) => {
+  const { theme, data } = req.body || {};
+  if (!data) return res.status(400).json({ error: '缺少海报数据' });
+  const themeKey = POSTER_THEMES[theme] ? theme : 'mint';
+  try {
+    const buffer = await renderPosterPNG(data, themeKey);
+    res.set('Content-Type', 'image/png');
+    res.send(buffer);
+  } catch (e) {
+    res.status(500).json({ error: '海报生成失败：' + e.message });
   }
 });
 

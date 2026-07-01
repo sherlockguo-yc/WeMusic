@@ -1,8 +1,10 @@
 // ---------------- 统计页、发现页、喜欢页 ----------------
 import { $, esc, fmtSec, albumCover, toast } from './utils.js';
-import { api } from './api.js';
+import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { renderSongList, listToolsHtml, bindListTools, setActiveNav } from './playlist-ui.js';
+import html2canvas from 'html2canvas';
+import { posterHTML, posterCSS, POSTER_THEME_LIST } from '../shared/poster-template.js';
 
 const CHART_TABS = [
   { id: 26,  label: '🔥 热歌榜' },
@@ -22,7 +24,6 @@ function fmtMin(sec) {
 
 // ---- 全局 tooltip：单例 div + 索引化内容，避免 data-tip 属性内嵌 HTML 导致的问题 ----
 const TIP_ID = '__stats_tooltip__';
-let _tipRegistry = []; // { el, html } — 每个绑定元素的 tooltip HTML 内容
 
 function getTip() {
   let el = document.getElementById(TIP_ID);
@@ -55,6 +56,278 @@ function attachTip(el, tipHtml) {
     getTip().style.display = 'none';
   });
 }
+
+// ============================================================
+// 本周 / 本月听歌报告：共用渲染逻辑（后端 /stats/weekly 和 /stats/monthly 返回相同结构）
+// ============================================================
+
+function timeLabel(h) {
+  if (h == null) return null;
+  if (h >= 5 && h < 9)  return { label: '清晨', icon: '🌅' };
+  if (h >= 9 && h < 12) return { label: '上午', icon: '☀️' };
+  if (h >= 12 && h < 14) return { label: '午间', icon: '🌤️' };
+  if (h >= 14 && h < 18) return { label: '午后', icon: '🌇' };
+  if (h >= 18 && h < 22) return { label: '晚间', icon: '🌆' };
+  return { label: '深夜', icon: '🌙' };
+}
+
+// 音乐人设标签（正向、音乐品味导向），week/month 复用同一套规则，仅阈值按周期缩放
+function computePersona(data, avgSec, compHighPct, periodWord) {
+  const scale = periodWord === '本月' ? 3 : 1; // 月度数据量级更大，阈值等比放宽
+  const topArtist = data.topArtists[0];
+  const topArtistShare = topArtist && data.period.plays ? topArtist.play_count / data.period.plays : 0;
+  const artistName = topArtist?.singer || '';
+  if (topArtistShare > 0.4) return { icon: '⭐', label: `${artistName} 铁粉`, desc: `${periodWord}最爱 ${artistName}，占了超四成播放` };
+  if (data.uniqueArtists > 30 * scale) return { icon: '🗺️', label: '音乐探险家', desc: `${periodWord}邂逅了 ${data.uniqueArtists} 位歌手` };
+  if (data.newSongs > 15 * scale) return { icon: '🔭', label: '新曲猎人', desc: `${periodWord}新发现了 ${data.newSongs} 首歌` };
+  if (avgSec > 240) return { icon: '💿', label: '深度聆听者', desc: '平均每首歌聆听超过 4 分钟' };
+  if (compHighPct > 55) return { icon: '🎼', label: '沉浸鉴赏家', desc: '超过半数的歌都完整听完' };
+  if (data.uniqueArtists > 15 * scale) return { icon: '🌊', label: '多元品味家', desc: '风格广泛，不设边界' };
+  return { icon: '🎶', label: '自由旋律人', desc: '按自己的节奏享受音乐' };
+}
+
+// 个性化听歌小结（时段 + 最爱歌手），同时返回 html（应用内展示）和 plain（海报纯文本）
+function computeInsight(peakHour, topArtistName, periodWord) {
+  const peak = timeLabel(peakHour);
+  if (peak && topArtistName) {
+    return {
+      html: `${peak.icon} ${periodWord}你最常在<b>${peak.label}</b>（${peakHour}:00 左右）听歌，最爱的旋律来自 <b>${esc(topArtistName)}</b>`,
+      plain: `${peak.icon} ${periodWord}你最常在${peak.label}（${peakHour}:00 左右）听歌，最爱的旋律来自 ${topArtistName}`,
+    };
+  }
+  if (peak) {
+    return {
+      html: `${peak.icon} ${periodWord}你最常在<b>${peak.label}</b>（${peakHour}:00 左右）听歌`,
+      plain: `${peak.icon} ${periodWord}你最常在${peak.label}（${peakHour}:00 左右）听歌`,
+    };
+  }
+  if (topArtistName) {
+    return { html: `🎧 ${periodWord}你最爱的旋律来自 <b>${esc(topArtistName)}</b>`, plain: `🎧 ${periodWord}你最爱的旋律来自 ${topArtistName}` };
+  }
+  return { html: '', plain: '' };
+}
+
+function buildTrendHtml(trend) {
+  const trendMax = Math.max(...trend.map((w) => w.plays), 1);
+  return trend.map((w, i) => `
+    <div class="tr-col${i === trend.length - 1 ? ' current' : ''}">
+      <div class="tr-bar-wrap"><div class="tr-bar" style="height:${Math.round(w.plays / trendMax * 100)}%"></div></div>
+      <div class="tr-val">${w.plays}</div>
+      <div class="tr-label">${esc(w.label)}</div>
+    </div>
+  `).join('');
+}
+
+const rankBadge = (i) => `<span class="wr-rank r${i + 1 <= 3 ? i + 1 : 0}">${i + 1}</span>`;
+
+/** 构建周报/月报卡片 HTML + 分享海报所需数据 */
+function buildReportHtml(data, periodType) {
+  const isWeek = periodType === 'week';
+  const periodWord = isWeek ? '本周' : '本月';
+  const title = isWeek ? '本周听歌报告' : '本月听歌报告';
+  const trendTitle = isWeek ? '近 4 周趋势' : '近 6 月趋势';
+
+  const skipPct = data.skip.total ? Math.round(data.skip.skipped / data.skip.total * 100) : 0;
+  const compTotal = data.completion.low + data.completion.mid + data.completion.high || 1;
+  const compLowPct  = Math.round(data.completion.low / compTotal * 100);
+  const compMidPct  = Math.round(data.completion.mid / compTotal * 100);
+  const compHighPct = 100 - compLowPct - compMidPct;
+
+  const vsPlays = data.period.plays - data.lastPeriod.plays;
+  const vsPlaysStr = vsPlays >= 0 ? `↑${vsPlays}` : `↓${Math.abs(vsPlays)}`;
+  const vsSecStr = data.period.sec > data.lastPeriod.sec ? '↑' : (data.period.sec < data.lastPeriod.sec ? '↓' : '→');
+
+  const avgSec = data.period.plays ? Math.round(data.period.sec / data.period.plays) : 0;
+  const persona = computePersona(data, avgSec, compHighPct, periodWord);
+  const topArtistName = data.topArtists[0]?.singer;
+  const insight = computeInsight(data.peakHour, topArtistName, periodWord);
+  const trendHtml = buildTrendHtml(data.trend);
+
+  const html = `
+    <div class="weekly-report">
+      <div class="wr-head">
+        <div class="wr-head-title">
+          <span class="wr-head-icon">📊</span>
+          <div>
+            <div class="wr-title">${title}</div>
+            <div class="wr-date">${esc(data.label)}</div>
+          </div>
+        </div>
+        ${insight.html ? `<div class="wr-insight">${insight.html}</div>` : ''}
+      </div>
+
+      <div class="wr-overview">
+        <div class="wr-stat">
+          <div class="wr-stat-icon c1">🎧</div>
+          <div class="wr-stat-body"><div class="wr-val">${data.period.plays}</div><div class="wr-label">播放次数</div></div>
+          <div class="wr-trend ${vsPlays >= 0 ? 'up' : 'down'}">${vsPlaysStr}</div>
+        </div>
+        <div class="wr-stat">
+          <div class="wr-stat-icon c2">⏱️</div>
+          <div class="wr-stat-body"><div class="wr-val">${fmtMin(data.period.sec)}</div><div class="wr-label">播放时长</div></div>
+          <div class="wr-trend ${data.period.sec >= data.lastPeriod.sec ? 'up' : 'down'}">${vsSecStr}</div>
+        </div>
+        <div class="wr-stat">
+          <div class="wr-stat-icon c3">🎵</div>
+          <div class="wr-stat-body"><div class="wr-val">${data.period.uniqueSongs}</div><div class="wr-label">不重复歌曲</div></div>
+        </div>
+        <div class="wr-stat">
+          <div class="wr-stat-icon c4">🔥</div>
+          <div class="wr-stat-body"><div class="wr-val">${data.period.days}</div><div class="wr-label">听歌天数</div></div>
+        </div>
+      </div>
+
+      <div class="wr-grid">
+        <div class="wr-card songs">
+          <div class="wr-card-hd"><span class="wr-card-icon i-song">🎵</span>Top 歌曲</div>
+          <ol class="wr-list">${data.topSongs.slice(0, 5).map((s, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(s.name)}</div><div class="wr-li-sub">${esc(s.singer)}</div></div><span>${s.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
+        </div>
+        <div class="wr-card artists">
+          <div class="wr-card-hd"><span class="wr-card-icon i-artist">🎤</span>Top 歌手</div>
+          <ol class="wr-list">${data.topArtists.map((a, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(a.singer)}</div><div class="wr-li-sub">${fmtMin(a.total_sec || 0)}</div></div><span>${a.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
+        </div>
+        <div class="wr-card habit">
+          <div class="wr-card-hd"><span class="wr-card-icon i-habit">⚡</span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${esc(persona.label)}</span></div>
+          <div class="wr-habit">
+            <div class="wr-h-row"><span>跳过率</span><span><b>${skipPct}%</b><small>&lt;30s / ${data.skip.total}次</small></span></div>
+            <div class="wr-h-row"><span>新歌发现</span><span><b>${data.newSongs}</b> 首</span></div>
+            <div class="wr-h-row"><span>歌手多样性</span><span><b>${data.uniqueArtists}</b> 位</span></div>
+            <div class="wr-h-row"><span>场均时长</span><span><b>${fmtSec(avgSec)}</b></span></div>
+          </div>
+        </div>
+        <div class="wr-card comp">
+          <div class="wr-card-hd"><span class="wr-card-icon i-comp">✅</span>完播率分布</div>
+          <div class="wr-stack-bar">
+            <div class="seg low" style="width:${compLowPct}%"></div>
+            <div class="seg mid" style="width:${compMidPct}%"></div>
+            <div class="seg high" style="width:${compHighPct}%"></div>
+          </div>
+          <div class="wr-stack-legend">
+            <div class="wr-sl-row"><span class="dot low"></span>浅尝 &lt;20%<b>${compLowPct}%</b></div>
+            <div class="wr-sl-row"><span class="dot mid"></span>一般 20–80%<b>${compMidPct}%</b></div>
+            <div class="wr-sl-row"><span class="dot high"></span>沉浸 ≥80%<b>${compHighPct}%</b></div>
+          </div>
+        </div>
+        <div class="wr-card trend">
+          <div class="wr-card-hd"><span class="wr-card-icon i-trend">📈</span>${trendTitle}<span class="wr-persona-desc">${persona.icon} ${esc(persona.desc)}</span></div>
+          <div class="wr-trend-chart">${trendHtml}</div>
+        </div>
+      </div>
+    </div>`;
+
+  const posterData = {
+    title,
+    dateRange: data.label,
+    plays: data.period.plays,
+    duration: fmtMin(data.period.sec),
+    uniqueSongs: data.period.uniqueSongs,
+    days: data.period.days,
+    persona: { icon: persona.icon, label: persona.label, desc: persona.desc },
+    insightText: insight.plain,
+    topSongs: data.topSongs.slice(0, 5).map((s) => ({ name: s.name, singer: s.singer, albumMid: s.album_mid || '' })),
+    topArtists: data.topArtists.slice(0, 6).map((a) => ({ name: a.singer })),
+    generatedAt: new Date().toLocaleDateString('zh-CN'),
+  };
+
+  return { html, posterData };
+}
+
+// ============================================================
+// 分享海报生成（方案 A：本地 html2canvas / 方案 B：服务端 Puppeteer）
+// ============================================================
+
+let _posterData = null;
+let _posterTheme = 'mint';
+let _posterModalBound = false;
+
+function renderPosterThemeGrid() {
+  const grid = $('posterThemeGrid');
+  grid.innerHTML = POSTER_THEME_LIST.map((t) => `
+    <div class="poster-theme-swatch${t.key === _posterTheme ? ' selected' : ''}" data-theme="${t.key}" style="background:${t.bg}">
+      <span class="pts-name" style="color:${t.text}">${esc(t.name)}</span>
+    </div>`).join('');
+  grid.querySelectorAll('.poster-theme-swatch').forEach((el) => {
+    el.onclick = () => { _posterTheme = el.dataset.theme; renderPosterThemeGrid(); };
+  });
+}
+
+function openPosterModal(posterData) {
+  if (!posterData) return;
+  _posterData = posterData;
+  renderPosterThemeGrid();
+  $('posterModal').classList.add('show');
+}
+
+function downloadUrl(url, filename) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// 方案 A：前端 html2canvas 截图（快，无需等待服务端）
+async function generatePosterLocal() {
+  if (!_posterData) return;
+  toast('正在本地生成海报…');
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;';
+  holder.innerHTML = `<style>${posterCSS(_posterTheme)}</style>${posterHTML(_posterData, _posterTheme)}`;
+  document.body.appendChild(holder);
+  try {
+    const node = holder.querySelector('.wm-poster');
+    const canvas = await html2canvas(node, { scale: 2, backgroundColor: null, useCORS: true });
+    downloadUrl(canvas.toDataURL('image/png'), `wemusic-report-${Date.now()}.png`);
+    toast('海报已生成，开始下载 🎉');
+    $('posterModal').classList.remove('show');
+  } catch (e) {
+    toast('本地生成失败：' + e.message);
+  } finally {
+    document.body.removeChild(holder);
+  }
+}
+
+// 方案 B：服务端 Puppeteer 渲染（效果更精细，需等待网络请求）
+async function generatePosterServer() {
+  if (!_posterData) return;
+  toast('正在请求服务端生成…');
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (Auth.token) headers.Authorization = `Bearer ${Auth.token}`;
+    const resp = await fetch('/api/stats/poster', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ theme: _posterTheme, data: _posterData }),
+    });
+    if (!resp.ok) {
+      let msg = `请求失败 (${resp.status})`;
+      try { msg = (await resp.json()).error || msg; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    downloadUrl(url, `wemusic-report-${Date.now()}.png`);
+    URL.revokeObjectURL(url);
+    toast('海报已生成，开始下载 🎉');
+    $('posterModal').classList.remove('show');
+  } catch (e) {
+    toast('服务端生成失败：' + e.message);
+  }
+}
+
+function bindPosterModalOnce() {
+  if (_posterModalBound) return;
+  _posterModalBound = true;
+  $('posterModalClose').onclick = () => $('posterModal').classList.remove('show');
+  $('posterModal').onclick = (e) => { if (e.target.id === 'posterModal') $('posterModal').classList.remove('show'); };
+  $('posterLocalBtn').onclick = generatePosterLocal;
+  $('posterServerBtn').onclick = generatePosterServer;
+}
+
+// ============================================================
+// 统计主页
+// ============================================================
 
 export async function openStats() {
   state.view = 'stats';
@@ -147,141 +420,8 @@ export async function openStats() {
     const sum30Plays = days30.reduce((s, d) => s + d.play_count, 0);
     const sum30Sec = days30.reduce((s, d) => s + d.total_sec, 0);
 
-    // —— 本周报告 ——
-    const skipPct = weekly.skip.total ? Math.round(weekly.skip.skipped / weekly.skip.total * 100) : 0;
-    const compTotal = weekly.completion.low + weekly.completion.mid + weekly.completion.high || 1;
-    const compLowPct  = Math.round(weekly.completion.low / compTotal * 100);
-    const compMidPct  = Math.round(weekly.completion.mid / compTotal * 100);
-    const compHighPct = 100 - compLowPct - compMidPct;
-
-    const lastPlays = weekly.lastWeek.plays || 1;
-    const vsPlays = weekly.week.plays - weekly.lastWeek.plays;
-    const vsPlaysStr = vsPlays >= 0 ? `↑${vsPlays}` : `↓${Math.abs(vsPlays)}`;
-    const vsSecStr = weekly.week.sec > weekly.lastWeek.sec ? '↑' : (weekly.week.sec < weekly.lastWeek.sec ? '↓' : '→');
-
-    // 本周范围由后端自然周计算（周一 ~ 周日）
-    const nowDate = new Date();
-    const weekRange = weekly.weekLabel || `${nowDate.getMonth() + 1}/${nowDate.getDate()}`;
-
-    // —— 音乐人设标签（正向、音乐品味导向） ——
-    const persona = (() => {
-      const topArtist = weekly.topArtists[0];
-      const topArtistShare = topArtist && weekly.week.plays ? topArtist.play_count / weekly.week.plays : 0;
-      const artistName = topArtist?.singer || '';
-      if (topArtistShare > 0.4)                            return { icon: '⭐', label: `${esc(artistName)} 铁粉`,   desc: `本周最爱 ${esc(artistName)}，占了超四成播放` };
-      if (weekly.uniqueArtists > 30)                       return { icon: '🗺️', label: '音乐探险家',   desc: `本周邂逅了 ${weekly.uniqueArtists} 位歌手` };
-      if (weekly.newSongs > 15)                            return { icon: '🔭', label: '新曲猎人',     desc: `本周新发现了 ${weekly.newSongs} 首歌` };
-      if (avgSec > 240)                                    return { icon: '💿', label: '深度聆听者',   desc: '平均每首歌聆听超过 4 分钟' };
-      if (compHighPct > 55)                                return { icon: '🎼', label: '沉浸鉴赏家',   desc: '超过半数的歌都完整听完' };
-      if (weekly.uniqueArtists > 15)                       return { icon: '🌊', label: '多元品味家',   desc: '风格广泛，不设边界' };
-      return                                                { icon: '🎶', label: '自由旋律人',   desc: '按自己的节奏享受音乐' };
-    })();
-
-    // —— 近 4 周趋势迷你柱状图 ——
-    const trendMax = Math.max(...weekly.weeksTrend.map((w) => w.plays), 1);
-    const trendHtml = weekly.weeksTrend.map((w, i) => `
-      <div class="tr-col${i === 3 ? ' current' : ''}">
-        <div class="tr-bar-wrap"><div class="tr-bar" style="height:${Math.round(w.plays / trendMax * 100)}%"></div></div>
-        <div class="tr-val">${w.plays}</div>
-        <div class="tr-label">${w.label}</div>
-      </div>
-    `).join('');
-
-    // —— 个性化听歌小结（时段 + 最爱歌手） ——
-    const timeLabel = (h) => {
-      if (h == null) return null;
-      if (h >= 5 && h < 9)  return { label: '清晨', icon: '🌅' };
-      if (h >= 9 && h < 12) return { label: '上午', icon: '☀️' };
-      if (h >= 12 && h < 14) return { label: '午间', icon: '🌤️' };
-      if (h >= 14 && h < 18) return { label: '午后', icon: '🌇' };
-      if (h >= 18 && h < 22) return { label: '晚间', icon: '🌆' };
-      return { label: '深夜', icon: '🌙' };
-    };
-    const peak = timeLabel(weekly.peakHour);
-    const topArtistName = weekly.topArtists[0]?.singer;
-    let insight = '';
-    if (peak && topArtistName) {
-      insight = `${peak.icon} 本周你最常在<b>${peak.label}</b>（${weekly.peakHour}:00 左右）听歌，最爱的旋律来自 <b>${esc(topArtistName)}</b>`;
-    } else if (peak) {
-      insight = `${peak.icon} 本周你最常在<b>${peak.label}</b>（${weekly.peakHour}:00 左右）听歌`;
-    } else if (topArtistName) {
-      insight = `🎧 本周你最爱的旋律来自 <b>${esc(topArtistName)}</b>`;
-    }
-
-    const avgSec = weekly.week.plays ? Math.round(weekly.week.sec / weekly.week.plays) : 0;
-    const rankBadge = (i) => `<span class="wr-rank r${i + 1 <= 3 ? i + 1 : 0}">${i + 1}</span>`;
-
-    const weekHtml = `
-      <div class="weekly-report">
-        <div class="wr-head">
-          <div class="wr-head-title">
-            <span class="wr-head-icon">📊</span>
-            <div>
-              <div class="wr-title">本周听歌报告</div>
-              <div class="wr-date">${weekRange}</div>
-            </div>
-          </div>
-          ${insight ? `<div class="wr-insight">${insight}</div>` : ''}
-        </div>
-
-        <div class="wr-overview">
-          <div class="wr-stat">
-            <div class="wr-stat-icon c1">🎧</div>
-            <div class="wr-stat-body"><div class="wr-val">${weekly.week.plays}</div><div class="wr-label">播放次数</div></div>
-            <div class="wr-trend ${vsPlays >= 0 ? 'up' : 'down'}">${vsPlaysStr}</div>
-          </div>
-          <div class="wr-stat">
-            <div class="wr-stat-icon c2">⏱️</div>
-            <div class="wr-stat-body"><div class="wr-val">${fmtMin(weekly.week.sec)}</div><div class="wr-label">播放时长</div></div>
-            <div class="wr-trend ${weekly.week.sec >= weekly.lastWeek.sec ? 'up' : 'down'}">${vsSecStr}</div>
-          </div>
-          <div class="wr-stat">
-            <div class="wr-stat-icon c3">🎵</div>
-            <div class="wr-stat-body"><div class="wr-val">${weekly.week.uniqueSongs}</div><div class="wr-label">不重复歌曲</div></div>
-          </div>
-          <div class="wr-stat">
-            <div class="wr-stat-icon c4">🔥</div>
-            <div class="wr-stat-body"><div class="wr-val">${weekly.week.days}</div><div class="wr-label">听歌天数</div></div>
-          </div>
-        </div>
-
-        <div class="wr-grid">
-          <div class="wr-card songs">
-            <div class="wr-card-hd"><span class="wr-card-icon i-song">🎵</span>Top 歌曲</div>
-            <ol class="wr-list">${weekly.topSongs.slice(0, 5).map((s, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(s.name)}</div><div class="wr-li-sub">${esc(s.singer)}</div></div><span>${s.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
-          </div>
-          <div class="wr-card artists">
-            <div class="wr-card-hd"><span class="wr-card-icon i-artist">🎤</span>Top 歌手</div>
-            <ol class="wr-list">${weekly.topArtists.map((a, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(a.singer)}</div><div class="wr-li-sub">${fmtMin(a.total_sec || 0)}</div></div><span>${a.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
-          </div>
-          <div class="wr-card habit">
-            <div class="wr-card-hd"><span class="wr-card-icon i-habit">⚡</span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${persona.label}</span></div>
-            <div class="wr-habit">
-              <div class="wr-h-row"><span>跳过率</span><span><b>${skipPct}%</b><small>&lt;30s / ${weekly.skip.total}次</small></span></div>
-              <div class="wr-h-row"><span>新歌发现</span><span><b>${weekly.newSongs}</b> 首</span></div>
-              <div class="wr-h-row"><span>歌手多样性</span><span><b>${weekly.uniqueArtists}</b> 位</span></div>
-              <div class="wr-h-row"><span>场均时长</span><span><b>${fmtSec(avgSec)}</b></span></div>
-            </div>
-          </div>
-          <div class="wr-card comp">
-            <div class="wr-card-hd"><span class="wr-card-icon i-comp">✅</span>完播率分布</div>
-            <div class="wr-stack-bar">
-              <div class="seg low" style="width:${compLowPct}%"></div>
-              <div class="seg mid" style="width:${compMidPct}%"></div>
-              <div class="seg high" style="width:${compHighPct}%"></div>
-            </div>
-            <div class="wr-stack-legend">
-              <div class="wr-sl-row"><span class="dot low"></span>浅尝 &lt;20%<b>${compLowPct}%</b></div>
-              <div class="wr-sl-row"><span class="dot mid"></span>一般 20–80%<b>${compMidPct}%</b></div>
-              <div class="wr-sl-row"><span class="dot high"></span>沉浸 ≥80%<b>${compHighPct}%</b></div>
-            </div>
-          </div>
-          <div class="wr-card trend">
-            <div class="wr-card-hd"><span class="wr-card-icon i-trend">📈</span>近 4 周趋势<span class="wr-persona-desc">${persona.icon} ${persona.desc}</span></div>
-            <div class="wr-trend-chart">${trendHtml}</div>
-          </div>
-        </div>
-      </div>`;
+    // —— 本周 / 本月报告：预取本周，本月懒加载并缓存 ——
+    const reportCache = { week: weekly, month: null };
 
     main.innerHTML = `
       <div class="view-title">我的数据</div>
@@ -291,7 +431,14 @@ export async function openStats() {
         <div class="stat-ov-card"><div class="soc-val">${ov.unique_songs}</div><div class="soc-label">不重复歌曲</div></div>
         <div class="stat-ov-card"><div class="soc-val">${ov.active_days}</div><div class="soc-label">听歌天数</div></div>
       </div>
-      ${weekHtml}
+      <div class="wr-toolbar">
+        <div class="wr-tabs">
+          <button class="wr-tab active" data-period="week">📅 本周</button>
+          <button class="wr-tab" data-period="month">🗓️ 本月</button>
+        </div>
+        <button class="wr-share-btn" id="wrShareBtn">🎨 生成分享海报</button>
+      </div>
+      <div id="reportSection"></div>
       <div class="stats-two-col">
         <div class="stats-panel">
           <div class="stats-panel-hd">
@@ -324,6 +471,37 @@ export async function openStats() {
           <div class="top-songs-list" id="statsTopSongs"></div>
         </div>
       </div>`;
+
+    // —— 本周/本月报告渲染 + 分享海报绑定 ——
+    let currentPosterData = null;
+    function renderReport(periodType) {
+      const data = reportCache[periodType];
+      const { html, posterData } = buildReportHtml(data, periodType);
+      $('reportSection').innerHTML = html;
+      currentPosterData = posterData;
+    }
+    renderReport('week');
+    bindPosterModalOnce();
+    $('wrShareBtn').onclick = () => openPosterModal(currentPosterData);
+
+    main.querySelectorAll('.wr-tab').forEach((btn) => {
+      btn.onclick = async () => {
+        const type = btn.dataset.period;
+        main.querySelectorAll('.wr-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (!reportCache[type]) {
+          $('reportSection').innerHTML = '<div class="loading">加载中…</div>';
+          try {
+            reportCache[type] = await api(type === 'week' ? '/stats/weekly' : '/stats/monthly');
+          } catch (e) {
+            $('reportSection').innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+            return;
+          }
+        }
+        renderReport(type);
+      };
+    });
+
     // 时段网格
     $('hourGrid').querySelectorAll('.hour-cell').forEach((el) => {
       const i = Number(el.dataset.idx);
