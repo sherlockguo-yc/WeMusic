@@ -13,7 +13,6 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
   const menu = $('ctxMenu');
   const inPlaylist = context === 'playlist';
   const items = [
-    { label: '▶ 播放', act: 'play' },
     { label: '＋ 添加到歌单', act: 'add' },
     { sep: true },
     { label: '🔗 复制 Bilibili 链接', act: 'copy', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
@@ -37,8 +36,7 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
       if (el.classList.contains('dim')) { closeCtxMenu(); toast(el.dataset.dimTip || '暂不可用'); return; }
       closeCtxMenu();
       const act = el.dataset.act;
-      if (act === 'play') import('./player.js').then(({ playFromList }) => playFromList(songs, i, context, playlistId));
-      else if (act === 'add') import('./playlist-ui.js').then(({ addSongs }) => addSongs([song]));
+      if (act === 'add') import('./playlist-ui.js').then(({ addSongs }) => addSongs([song]));
       else if (act === 'del') import('./playlist-ui.js').then(({ deleteSong }) => deleteSong(playlistId, song.id, row));
       else if (act === 'copy') copyBiliLink(song);
       else if (act === 'search') {
@@ -73,22 +71,28 @@ export async function openCandModal() {
   if (!candidates) {
     list.innerHTML = '<div class="loading">搜索中…</div>';
     try {
-      const kw = `${state.current.name} ${(state.current.singer || '').split('/')[0]}`;
-      const r = await api(`/play/search?keyword=${encodeURIComponent(kw)}`);
+      const name = state.current.name;
+      const singer = (state.current.singer || '').split('/')[0];
+      const params = new URLSearchParams({ keyword: `${name} ${singer}`, name, singer });
+      const r = await api(`/play/search?${params.toString()}`);
       candidates = r.candidates; state.current._candidates = candidates;
     } catch (e) { list.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   }
   const songKey = `${state.current.name}__${state.current.singer || ''}`;
-  list.innerHTML = candidates.map((c, i) => `
-    <div class="cand-row ${c.live ? 'live' : ''}" data-i="${i}">
+  const currentBvid = state.current.bvid || '';
+  list.innerHTML = candidates.map((c, i) => {
+    const isCurrent = c.bvid && c.bvid === currentBvid;
+    return `
+    <div class="cand-row ${c.live ? 'live' : ''}${isCurrent ? ' current' : ''}" data-i="${i}">
       <span class="cand-rank">${i + 1}</span>
       <div class="ct">
         <div class="title">${esc(c.title)}</div>
         <div class="meta">UP：${esc(c.author)} · ${fmtPlay(c.play)} 播放 · ${fmtDur(c.duration)}</div>
       </div>
-      <span class="tag ${c.live ? 'live' : ''}">${c.live ? '现场' : '推荐'}</span>
+      <span class="tag ${c.live ? 'live' : ''}${isCurrent ? ' current' : ''}">${isCurrent ? '当前' : (c.live ? '现场' : '推荐')}</span>
       <button class="cand-block-btn" title="屏蔽此视频源，以后不再出现">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   list.querySelectorAll('.cand-row').forEach((row) => {
     row.onclick = () => {
       const c = candidates[Number(row.dataset.i)];

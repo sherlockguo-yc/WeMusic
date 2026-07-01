@@ -7,10 +7,10 @@ import html2canvas from 'html2canvas';
 import { posterHTML, posterCSS, POSTER_THEME_LIST } from '../shared/poster-template.js';
 
 const CHART_TABS = [
-  { id: 26,  label: '🔥 热歌榜' },
-  { id: 27,  label: '✨ 新歌榜' },
-  { id: 4,   label: '📊 流行指数' },
-  { id: 67,  label: '👂 识曲榜' },
+  { id: 26,  label: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg> 热歌榜` },
+  { id: 27,  label: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> 新歌榜` },
+  { id: 4,   label: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg> 流行指数` },
+  { id: 67,  label: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0 0 7.75 3 3 0 1 0 6.997-.125 4 4 0 0 0 0-7.75"/><path d="M5 15v5h14v-5"/></svg> 推荐` },
 ];
 
 // 格式化分钟数为可读字符串
@@ -102,7 +102,7 @@ function computeInsight(peakHour, topArtistName, periodWord) {
     };
   }
   if (topArtistName) {
-    return { html: `🎧 ${periodWord}你最爱的旋律来自 <b>${esc(topArtistName)}</b>`, plain: `🎧 ${periodWord}你最爱的旋律来自 ${topArtistName}` };
+    return { html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3v5Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3v5Z"/></svg> ${periodWord}你最爱的旋律来自 <b>${esc(topArtistName)}</b>`, plain: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3v5Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3v5Z"/></svg> ${periodWord}你最爱的旋律来自 ${topArtistName}` };
   }
   return { html: '', plain: '' };
 }
@@ -147,7 +147,7 @@ function buildReportHtml(data, periodType) {
     <div class="weekly-report">
       <div class="wr-head">
         <div class="wr-head-title">
-          <span class="wr-head-icon">📊</span>
+          <span class="wr-head-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></span>
           <div>
             <div class="wr-title">${title}</div>
             <div class="wr-date">${esc(data.label)}</div>
@@ -158,36 +158,36 @@ function buildReportHtml(data, periodType) {
 
       <div class="wr-overview">
         <div class="wr-stat">
-          <div class="wr-stat-icon c1">🎧</div>
+          <div class="wr-stat-icon c1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3v5Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3v5Z"/></svg></div>
           <div class="wr-stat-body"><div class="wr-val">${data.period.plays}</div><div class="wr-label">播放次数</div></div>
           <div class="wr-trend ${vsPlays >= 0 ? 'up' : 'down'}">${vsPlaysStr}</div>
         </div>
         <div class="wr-stat">
-          <div class="wr-stat-icon c2">⏱️</div>
+          <div class="wr-stat-icon c2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
           <div class="wr-stat-body"><div class="wr-val">${fmtMin(data.period.sec)}</div><div class="wr-label">播放时长</div></div>
           <div class="wr-trend ${data.period.sec >= data.lastPeriod.sec ? 'up' : 'down'}">${vsSecStr}</div>
         </div>
         <div class="wr-stat">
-          <div class="wr-stat-icon c3">🎵</div>
+          <div class="wr-stat-icon c3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
           <div class="wr-stat-body"><div class="wr-val">${data.period.uniqueSongs}</div><div class="wr-label">不重复歌曲</div></div>
         </div>
         <div class="wr-stat">
-          <div class="wr-stat-icon c4">🔥</div>
+          <div class="wr-stat-icon c4"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></div>
           <div class="wr-stat-body"><div class="wr-val">${data.period.days}</div><div class="wr-label">听歌天数</div></div>
         </div>
       </div>
 
       <div class="wr-grid">
         <div class="wr-card songs">
-          <div class="wr-card-hd"><span class="wr-card-icon i-song">🎵</span>Top 歌曲</div>
+          <div class="wr-card-hd"><span class="wr-card-icon i-song"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>Top 歌曲</div>
           <ol class="wr-list">${data.topSongs.slice(0, 5).map((s, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(s.name)}</div><div class="wr-li-sub">${esc(s.singer)}</div></div><span>${s.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
         </div>
         <div class="wr-card artists">
-          <div class="wr-card-hd"><span class="wr-card-icon i-artist">🎤</span>Top 歌手</div>
+          <div class="wr-card-hd"><span class="wr-card-icon i-artist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span>Top 歌手</div>
           <ol class="wr-list">${data.topArtists.map((a, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(a.singer)}</div><div class="wr-li-sub">${fmtMin(a.total_sec || 0)}</div></div><span>${a.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
         </div>
         <div class="wr-card habit">
-          <div class="wr-card-hd"><span class="wr-card-icon i-habit">⚡</span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${esc(persona.label)}</span></div>
+          <div class="wr-card-hd"><span class="wr-card-icon i-habit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${esc(persona.label)}</span></div>
           <div class="wr-habit">
             <div class="wr-h-row"><span>跳过率</span><span><b>${skipPct}%</b><small>&lt;30s / ${data.skip.total}次</small></span></div>
             <div class="wr-h-row"><span>新歌发现</span><span><b>${data.newSongs}</b> 首</span></div>
@@ -196,7 +196,7 @@ function buildReportHtml(data, periodType) {
           </div>
         </div>
         <div class="wr-card comp">
-          <div class="wr-card-hd"><span class="wr-card-icon i-comp">✅</span>完播率分布</div>
+          <div class="wr-card-hd"><span class="wr-card-icon i-comp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>完播率分布</div>
           <div class="wr-stack-bar">
             <div class="seg low" style="width:${compLowPct}%"></div>
             <div class="seg mid" style="width:${compMidPct}%"></div>
@@ -209,7 +209,7 @@ function buildReportHtml(data, periodType) {
           </div>
         </div>
         <div class="wr-card trend">
-          <div class="wr-card-hd"><span class="wr-card-icon i-trend">📈</span>${trendTitle}<span class="wr-persona-desc">${persona.icon} ${esc(persona.desc)}</span></div>
+          <div class="wr-card-hd"><span class="wr-card-icon i-trend"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>${trendTitle}<span class="wr-persona-desc">${persona.icon} ${esc(persona.desc)}</span></div>
           <div class="wr-trend-chart">${trendHtml}</div>
         </div>
       </div>
@@ -433,10 +433,10 @@ export async function openStats() {
       </div>
       <div class="wr-toolbar">
         <div class="wr-tabs">
-          <button class="wr-tab active" data-period="week">📅 本周</button>
-          <button class="wr-tab" data-period="month">🗓️ 本月</button>
+          <button class="wr-tab active" data-period="week"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> 本周</button>
+          <button class="wr-tab" data-period="month"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg> 本月</button>
         </div>
-        <button class="wr-share-btn" id="wrShareBtn">🎨 生成分享海报</button>
+        <button class="wr-share-btn" id="wrShareBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg> 生成分享海报</button>
       </div>
       <div id="reportSection"></div>
       <div class="stats-two-col">
@@ -580,7 +580,7 @@ export async function openDiscover() {
   main.innerHTML = `
     <div class="view-title">发现音乐</div>
     <div class="discover-tabs" id="discoverTabs">
-      <button class="disc-tab active" data-tab="recommend">🎵 为你推荐</button>
+      <button class="disc-tab active" data-tab="recommend"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg> 为你推荐</button>
       ${CHART_TABS.map((t) => `<button class="disc-tab" data-tab="chart-${t.id}">${t.label}</button>`).join('')}
     </div>
     <div id="discoverContent"><div class="loading">加载中…</div></div>`;
@@ -604,7 +604,7 @@ async function loadDiscoverTab(tab) {
       if (!data.songs.length) {
         container.innerHTML = `
           <div class="discover-empty">
-            <div style="font-size:40px;margin-bottom:16px">🎵</div>
+            <div style="font-size:40px;margin-bottom:16px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
             <div>多听一些歌曲后，这里会根据你的喜好为你推荐</div>
             <div style="color:var(--text-dim);font-size:13px;margin-top:8px">
               推荐基于：❤️ 红心 · 加入歌单 · 完播率 · 重复播放次数
@@ -650,7 +650,7 @@ function renderChartList(container, songs) {
     const cover = s.album_mid ? albumCover(s.album_mid, 80) : '';
     return `<div class="chart-row" data-i="${i}">
       <span class="chart-rank ${rankClass}">${rank}</span>
-      ${cover ? `<img class="chart-cover" src="${cover}" loading="lazy" onerror="this.style.display='none'" />` : '<div class="chart-cover-ph">♪</div>'}
+      ${cover ? `<img class="chart-cover" src="${cover}" loading="lazy" onerror="this.style.display='none'" />` : '<div class="chart-cover-ph"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>'}
       <div class="chart-info"><div class="chart-name">${esc(s.name)}</div><div class="chart-singer">${esc(s.singer || '')}</div></div>
       <div class="chart-ops"><button class="icon-btn play" title="播放" data-act="play">▶</button><button class="icon-btn" title="添加到歌单" data-act="add">＋</button></div>
     </div>`;
@@ -767,7 +767,7 @@ export async function openSavedAlbums() {
   try {
     const { albums } = await api('/stats/albums');
     if (!albums.length) {
-      main.innerHTML = `<div class="view-title">📀 我的专辑</div><div class="empty">还没有收藏专辑<br><br>试试搜一个歌手，点击专辑进入详情页，然后点「＋ 收藏专辑」</div>`;
+      main.innerHTML = `<div class="view-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 我的专辑</div><div class="empty">还没有收藏专辑<br><br>试试搜一个歌手，点击专辑进入详情页，然后点「＋ 收藏专辑」</div>`;
       return;
     }
     const grid = albums.map((a) => {
@@ -782,7 +782,7 @@ export async function openSavedAlbums() {
         <button class="btn sm a-del-album" data-mid="${esc(a.album_mid)}">移除</button>
       </div>`;
     }).join('');
-    main.innerHTML = `<div class="view-title">📀 我的专辑（${albums.length}）</div><div class="album-grid" id="savedAlbumGrid">${grid}</div>`;
+    main.innerHTML = `<div class="view-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 我的专辑（${albums.length}）</div><div class="album-grid" id="savedAlbumGrid">${grid}</div>`;
 
     // 点击卡片跳转专辑详情
     $('savedAlbumGrid').querySelectorAll('.album-card').forEach((el) => {

@@ -241,7 +241,6 @@ export function renderSongList(container, songs, opts = {}) {
       <span class="dur">${fmtDur(s.duration)}</span>
       <span class="ops">
         ${likeBtns}
-        <button class="icon-btn play" title="播放" data-act="play">▶</button>
         ${showAdd ? '<button class="icon-btn" title="添加到歌单" data-act="add">＋</button>' : ''}
         ${showDelete ? '<button class="icon-btn" title="从歌单移除" data-act="del">✕</button>' : ''}
       </span>
@@ -255,8 +254,7 @@ export function renderSongList(container, songs, opts = {}) {
       btn.onclick = (e) => {
         e.stopPropagation();
         const act = btn.dataset.act;
-        if (act === 'play') import('./player.js').then(({ playFromList }) => playFromList(songs, i, context, playlistId));
-        else if (act === 'add') addSongs([songs[i]]);
+        if (act === 'add') addSongs([songs[i]]);
         else if (act === 'del') deleteSong(playlistId, songs[i].id, row);
         else if (act === 'like') import('./ui.js').then(({ toggleLike }) => toggleLike(songs[i], btn));
       };

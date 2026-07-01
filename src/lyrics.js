@@ -215,13 +215,13 @@ async function openLyricsSwitchModal(song) {
   const songKey = `${song.name}__${song.singer || ''}`;
   list.innerHTML = lyricsCandidates.map((c, i) => {
     const isCurrent = c.id === lyricsCurrentSourceId;
-    return `<div class="cand-row ${isCurrent ? 'live' : ''}" data-i="${i}">
+    return `<div class="cand-row ${isCurrent ? 'current' : ''}" data-i="${i}">
       <span class="cand-rank">${i + 1}</span>
       <div class="ct">
         <div class="title">${esc(c.name)}</div>
         <div class="meta">歌手：${esc(c.artist || '未知')} ${isCurrent ? '（当前）' : ''}</div>
       </div>
-      <span class="tag ${isCurrent ? 'live' : ''}">${isCurrent ? '当前' : '选择'}</span>
+      <span class="tag ${isCurrent ? 'current' : ''}">${isCurrent ? '当前' : '选择'}</span>
       <button class="cand-block-btn" title="屏蔽此歌词源，以后不再出现">✕</button>
     </div>`;
   }).join('');

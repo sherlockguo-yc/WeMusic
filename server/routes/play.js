@@ -126,15 +126,49 @@ function scoreVideo(v, name, singer, expectDur) {
   return Math.round(score);
 }
 
+// 从歌名中提取「长度 ≥ 2 的片段」（中文按 2 字切，拉丁按单词）
+// 用于过滤完全不相关的视频候选
+function nameSegments(name) {
+  if (!name) return [];
+  // 把字符串切成 中文段（连续汉字）/ 拉丁词（连续字母数字）
+  const segs = [];
+  let buf = '';
+  for (const c of name) {
+    if (/[一-龥]/.test(c)) {
+      if (/[a-zA-Z0-9]/.test(buf)) { segs.push(buf); buf = ''; }
+      buf += c;
+    } else {
+      if (/[一-龥]/.test(buf)) { segs.push(buf); buf = ''; }
+      buf += c;
+    }
+  }
+  if (buf) segs.push(buf);
+  // 中文段 → 拆成 2-gram；拉丁/数字段 → 整段（剔除过短的）
+  const out = [];
+  for (const s of segs) {
+    if (/[一-龥]/.test(s)) {
+      if (s.length >= 2) {
+        for (let i = 0; i <= s.length - 2; i++) out.push(s.slice(i, i + 2));
+      } else {
+        out.push(s); // 单字也保留
+      }
+    } else {
+      if (s.length >= 2) out.push(s);
+    }
+  }
+  return out;
+}
+
 function rank(videos, name, singer, expectDur) {
   const parts = singerParts(singer);
+  const segs = nameSegments(name);
   let scored = videos
     .filter((v) => !isExcluded(v.title))
-    // 歌名最低相关度：≥2 字符且零重合的直接剔除（避免完全无关的视频出现在候选里）
+    // 歌名相关度过滤：歌名中至少一个 ≥2 字符片段必须出现在标题里
     .filter((v) => {
-      if (!name || name.length < 2) return true;
+      if (!segs.length) return true;
       const t = (v.title || '').toLowerCase();
-      return [...name.toLowerCase()].some((c) => t.includes(c));
+      return segs.some((s) => t.includes(s.toLowerCase()));
     })
     .map((v) => ({
       ...v,
@@ -229,13 +263,16 @@ router.post('/resolve', authRequired, async (req, res) => {
  * 自由关键字搜索 Bilibili（手动换源用）
  */
 router.get('/search', authRequired, async (req, res) => {
-  const { keyword } = req.query;
-  if (!keyword) return res.status(400).json({ error: '请输入关键字' });
+  const keyword = req.query.keyword || '';
+  const songName = req.query.name || '';
+  const songSinger = req.query.singer || '';
+  if (!keyword && !songName) return res.status(400).json({ error: '请输入关键字' });
   try {
+    const searchKw = keyword || `${songName} ${songSinger}`;
     // 搜索 2 页并行（共 40 条），增加候选丰富度
     const [r1, r2] = await Promise.allSettled([
-      searchVideos(keyword, 1, 20),
-      searchVideos(keyword, 2, 20),
+      searchVideos(searchKw, 1, 20),
+      searchVideos(searchKw, 2, 20),
     ]);
     const seen = new Set();
     const all = [];
@@ -247,9 +284,10 @@ router.get('/search', authRequired, async (req, res) => {
         all.push(v);
       }
     }
-    const ranked = rank(all, keyword, '', 0);
-    // 过滤被拉黑的视频源（手动搜索没有固定 songKey，用 keyword 作为 key）
-    const blocked = getBlockedSet(req.user.id, songKey(keyword, ''), 'video');
+    // 关键：rank 时只对【歌名】做片段过滤，避免歌手名片段绕过过滤
+    const ranked = rank(all, songName, songSinger, 0);
+    // 过滤被拉黑的视频源
+    const blocked = getBlockedSet(req.user.id, songKey(songName, songSinger), 'video');
     const clean = ranked.filter((v) => !blocked.has(v.bvid));
     res.json({ candidates: clean });
   } catch (e) {

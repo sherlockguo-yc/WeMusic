@@ -201,7 +201,7 @@ export async function openArtist(mid, name) {
     const grid = $('artistAlbums');
     grid.innerHTML = data.albums.map((a) => `
       <div class="album-card" data-mid="${esc(a.album_mid)}" data-name="${esc(a.name)}">
-        <div class="cover">${a.album_mid ? `<img class="cover-img" src="${albumCover(a.album_mid)}" loading="lazy" onerror="this.remove()" />` : '♪'}</div>
+        <div class="cover">${a.album_mid ? `<img class="cover-img" src="${albumCover(a.album_mid)}" loading="lazy" onerror="this.remove()" />` : '💿'}</div>
         <div class="a-name">${esc(a.name)}</div>
         <div class="a-time">${esc(a.pub_time || '')}</div>
       </div>`).join('') || '<div class="empty">暂无专辑</div>';
@@ -301,7 +301,7 @@ export async function openAlbum(mid, name) {
           body: { name: data.name, singer, desc: data.desc || '', company: data.company || '', genre: data.genre || '', lan: data.lan || '', aDate: data.aDate || '' },
         });
         btn.textContent = '❤️ 已收藏'; isSaved = true;
-        toast('专辑已收藏 📀');
+        toast('专辑已收藏 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>');
       }
     };
   } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }

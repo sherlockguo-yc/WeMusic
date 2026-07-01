@@ -1419,6 +1419,8 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 }
 .cand-row:hover { background: var(--bg-soft); border-color: var(--border); }
 .cand-row.live { opacity: 0.7; }
+.cand-row.current { background: rgba(42, 183, 88, .08); border-color: var(--accent); }
+.cand-row.current .title { color: var(--accent); }
 .cand-row .cand-rank {
   flex: 0 0 auto; width: 20px; text-align: center;
   font-size: 12px; color: var(--text-dim); line-height: 20px;
@@ -1431,6 +1433,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   background: var(--accent); color: #062b16; height: fit-content;
 }
 .cand-row .tag.live { background: var(--danger); color: #fff; }
+.cand-row .tag.current { background: var(--accent); color: #062b16; }
 /* 屏蔽/黑名单按钮 — 用 visibility 而非 display:none，避免出现/消失时挤动标签位置 */
 .cand-block-btn {
   visibility: hidden;
