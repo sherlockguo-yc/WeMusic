@@ -88,7 +88,7 @@ export async function openStats() {
     });
 
     // 渲染柱状图（mode: 'count' | 'duration'）
-    const BAR_PX = 160; // 与 CSS .bar-chart-wrap height - 18px(axis) - 16px(padding-top) = 160px
+    const BAR_PX = 250; // 与 CSS .bar-chart-wrap 柱区高度一致
     // 存储每个柱子的 tooltip HTML，渲染后用 attachTip 绑定
     let _barTipMap = [];
     function renderBarChart(mode) {
@@ -99,14 +99,10 @@ export async function openStats() {
           ? `${d.label}<br><b>${d.play_count} 次</b> · ${fmtMin(d.total_sec)}`
           : `${d.label}<br><b>${fmtMin(d.total_sec)}</b> · ${d.play_count} 次`;
       });
-      // 对数缩放：避免极端值把其他柱子压成一条线
-      // log1p 让小值也能有可见高度，大值不会撑满整个区域
-      const logMax = Math.log1p(maxVal);
-      const scale = (val) => val > 0 ? (Math.log1p(val) / logMax) * BAR_PX : 0;
+      // 线性等比例：真实反映数值比例
       const bars = days30.map((d, i) => {
         const val = vals[i];
-        const px = val > 0 ? Math.max(4, Math.round(scale(val))) : 0;
-        // 有数据的柱子均显示标签（绝对定位在柱子外侧，不占空间）
+        const px = val > 0 ? Math.max(2, Math.round((val / maxVal) * BAR_PX)) : 0;
         const showLabel = val > 0;
         const valLabel = showLabel
           ? (mode === 'count' ? val : (d.total_sec >= 3600 ? Math.round(d.total_sec / 3600) + 'h' : Math.round(d.total_sec / 60) + 'm'))

@@ -79,6 +79,11 @@ app.get('/sw.js', (req, res) => {
 
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
+    // HTML / JS / CSS 禁止缓存，确保刷新后拿到最新前端
+    if (/\.(html|js|css)$/.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+    // manifest 也禁用缓存
     if (filePath.endsWith('manifest.json')) {
       res.setHeader('Cache-Control', 'no-cache');
     }

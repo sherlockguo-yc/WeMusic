@@ -161,32 +161,42 @@ export function highlightPlaying() {
   if (!state.current) return;
   const curKey = `${state.current.name}__${state.current.singer || ''}`;
   document.querySelectorAll('.song-list').forEach((list) => {
-    if (list._songs === state.queue) {
+    if (!list._songs) return; // 跳过无数据引用的列表
+    // 当前播放列表：直接用 index 查找
+    if (list._songs === state.queue && state.queueIndex >= 0) {
       const row = list.querySelector(`.song-row[data-i="${state.queueIndex}"]`);
       if (row) { row.classList.add('playing'); try { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {} }
       return;
     }
-    list.querySelectorAll('.song-row').forEach((row) => {
-      const i = Number(row.dataset.i);
-      const s = list._songs && list._songs[i];
-      if (s && `${s.name}__${s.singer || ''}` === curKey) row.classList.add('playing');
-    });
+    // 其他列表：用内存数组查找索引，再取 DOM 行（避免遍历所有 DOM 行）
+    const idx = list._songs.findIndex((s) => `${s.name}__${s.singer || ''}` === curKey);
+    if (idx >= 0) {
+      const row = list.querySelector(`.song-row[data-i="${idx}"]`);
+      if (row) row.classList.add('playing');
+    }
   });
 }
 
 // ---- 会话持久化 ----
+let _saveSessTimer = null;
 export function saveSession() {
-  try {
-    const q = state.queue.slice(0, 800).map((s) => ({
-      id: s.id, song_mid: s.song_mid, name: s.name, singer: s.singer,
-      album: s.album, album_mid: s.album_mid, duration: s.duration, bvid: s.bvid,
-      _biliTitle: s._biliTitle, _biliDur: s._biliDur,
-    }));
-    localStorage.setItem('wemusic_session', JSON.stringify({
-      queue: q, queueIndex: state.queueIndex, currentContext: state.currentContext,
-    }));
-  } catch {}
+  // debounce 500ms：避免高频切歌/修改队列时阻塞主线程
+  if (_saveSessTimer) clearTimeout(_saveSessTimer);
+  _saveSessTimer = setTimeout(() => {
+    try {
+      const q = state.queue.slice(0, 800).map((s) => ({
+        id: s.id, song_mid: s.song_mid, name: s.name, singer: s.singer,
+        album: s.album, album_mid: s.album_mid, duration: s.duration, bvid: s.bvid,
+        _biliTitle: s._biliTitle, _biliDur: s._biliDur,
+      }));
+      localStorage.setItem('wemusic_session', JSON.stringify({
+        queue: q, queueIndex: state.queueIndex, currentContext: state.currentContext,
+      }));
+    } catch {}
+  }, 500);
 }
+
+export function flushSession() { if (_saveSessTimer) { clearTimeout(_saveSessTimer); saveSession(); } }
 
 export function restoreSession() {
   try {
@@ -573,7 +583,12 @@ export function initPlayer() {
   const _applyVol = () => {
     bgAudio.volume = _bgVolume;
     bgAudio.muted = (_bgVolume === 0);
-    volBar.value = Math.round(_bgVolume * 100);
+    const pct = Math.round(_bgVolume * 100);
+    volBar.value = pct;
+    volBar.style.setProperty('--vol-fill', pct + '%');
+    // 静音时隐掉滑块拇指，避免残留的 accent 色
+    volBar.style.setProperty('--vol-thumb-bg', pct === 0 ? 'transparent' : 'var(--accent)');
+    volBar.style.setProperty('--vol-thumb-border', pct === 0 ? 'transparent' : 'var(--accent)');
     volBtn.innerHTML = _bgVolume === 0 ? volOffIcon : volOnIcon;
     volBtn.title = document.hidden ? '后台音量' : '后台音量（前台请在视频内调节）';
   };

@@ -456,18 +456,38 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 /* 音量 */
 .volume-wrap { display: flex; align-items: center; gap: 0; position: relative; }
 .volume-wrap #volBar {
-  position: absolute; bottom: calc(100% + 8px); left: 50%;
-  transform: translateX(-50%);
-  width: 4px; height: 0; opacity: 0; overflow: hidden;
-  -webkit-appearance: slider-vertical;
-  appearance: slider-vertical;
-  background: transparent; transition: height .2s, opacity .15s;
-  border-radius: 2px; writing-mode: bt-lr;
+  position: absolute;
+  /* 旋转后视觉高度 100px, bottom+50px 让视觉底端对齐按钮顶部上方 8px */
+  bottom: calc(100% + 58px);
+  left: 50%;
+  width: 100px; height: 4px;
+  -webkit-appearance: none; appearance: none;
+  background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--vol-fill, 0%), var(--bg-soft) var(--vol-fill, 0%));
+  border-radius: 2px; cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center center;
 }
 .volume-wrap.open #volBar {
-  height: 100px; opacity: 1; width: 4px;
+  opacity: 1;
 }
 .icon-btn.vol { width: 34px; height: 34px; flex-shrink: 0; }
+
+/* 音量滑块拇指：通过 CSS 变量控制，静音时透明 */
+#volBar::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--vol-thumb-bg, var(--accent));
+  border: 2px solid var(--vol-thumb-border, var(--accent));
+  cursor: pointer;
+}
+#volBar::-moz-range-thumb {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--vol-thumb-bg, var(--accent));
+  border: 2px solid var(--vol-thumb-border, var(--accent));
+  cursor: pointer;
+}
 
 /* 通用滑块样式 */
 input[type='range'] {
@@ -849,8 +869,8 @@ input[type='range']::-moz-range-thumb {
 
 /* 柱状图：固定区域，柱子底部对齐，高度用 px（JS 计算），不依赖百分比 */
 .bar-chart-wrap {
-  /* 柱区 160px + 轴标签 18px = 178px */
-  height: 178px;
+  /* 柱区 250px + 轴标签 18px = 268px */
+  height: 268px;
   display: flex;
   flex-direction: column;
 }

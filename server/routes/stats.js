@@ -228,14 +228,10 @@ function computeSongScores(uid) {
     GROUP BY name, singer
   `).all(uid, since90);
 
-  // 2. 红心 + 加入歌单的歌曲（单次查询合并，减少 DB 往返）
-  const likedMids = new Set(
-    db.prepare(`SELECT song_mid FROM likes WHERE user_id = ?`).all(uid).map((r) => r.song_mid)
-  );
-  const likedKeys = new Set(
-    db.prepare(`SELECT name, singer FROM likes WHERE user_id = ?`).all(uid)
-      .map((r) => `${r.name}__${r.singer}`)
-  );
+  // 2. 红心 + 加入歌单的歌曲（合并为一次查询，避免重复扫表）
+  const likesRows = db.prepare(`SELECT song_mid, name, singer FROM likes WHERE user_id = ?`).all(uid);
+  const likedMids = new Set(likesRows.map((r) => r.song_mid));
+  const likedKeys = new Set(likesRows.map((r) => `${r.name}__${r.singer}`));
   // 3. 歌单收录歌曲 key（包含非红心但加到歌单的）
   const inPlaylistKeys = new Set(
     db.prepare(`
@@ -275,8 +271,8 @@ function computeSongScores(uid) {
     if (score > 0) songScores.set(key, { score, ...row });
   }
 
-  // 补充：纯红心或纯歌单收藏（无播放记录）
-  for (const row of db.prepare(`SELECT * FROM likes WHERE user_id = ?`).all(uid)) {
+  // 补充：纯红心或纯歌单收藏（无播放记录，复用 likesRows）
+  for (const row of likesRows) {
     const key = `${row.name}__${row.singer}`;
     if (!songScores.has(key)) songScores.set(key, { score: 3.0, ...row, play_count: 0 });
   }

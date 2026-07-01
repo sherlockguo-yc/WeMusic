@@ -88,6 +88,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_playlists_user  ON playlists(user_id);
   CREATE INDEX IF NOT EXISTS idx_songs_playlist  ON songs(playlist_id);
   CREATE INDEX IF NOT EXISTS idx_play_logs_user  ON play_logs(user_id, played_at);
+  CREATE INDEX IF NOT EXISTS idx_play_logs_name   ON play_logs(user_id, name, singer);
+  CREATE INDEX IF NOT EXISTS idx_play_logs_singer ON play_logs(user_id, singer);
   CREATE INDEX IF NOT EXISTS idx_likes_user      ON likes(user_id, liked_at);
 `);
 

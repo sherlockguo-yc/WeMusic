@@ -108,8 +108,12 @@ updateNavArrows();
 
 // 应用初始化
 async function init() {
-  await loadPlaylists();
-  // 检查 URL 是否有历史记录参数，有则恢复，否则默认打开发现页
+  // loadPlaylists 与不依赖歌单数据的操作并行执行
+  const plPromise = loadPlaylists();
+  restoreSession();
+  Promise.allSettled([loadLikes(), loadAvatar()]);
+  // 等待歌单加载完成后渲染视图（openDiscover 依赖 songIndex）
+  await plPromise;
   const params = new URL(location.href).searchParams;
   const v = params.get('v');
   if (v) {
@@ -117,9 +121,6 @@ async function init() {
   } else {
     openDiscover();
   }
-  restoreSession();
-  loadLikes().catch(() => {});
-  loadAvatar().catch(() => {});
 }
 
 async function loadLikes() {

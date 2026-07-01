@@ -2,17 +2,24 @@
 const TOKEN_KEY = 'wemusic_token';
 const USER_KEY = 'wemusic_user';
 
+let _tokenCache = null; // 缓存 token，避免每次 API 调用读 localStorage
+
 export const Auth = {
-  get token() { return localStorage.getItem(TOKEN_KEY); },
+  get token() {
+    if (_tokenCache === null) _tokenCache = localStorage.getItem(TOKEN_KEY);
+    return _tokenCache;
+  },
   get user() {
     try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); }
     catch { return null; }
   },
   save(token, user) {
+    _tokenCache = token;
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   },
   clear() {
+    _tokenCache = null;
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   },

@@ -6,7 +6,7 @@
  *   - 音乐封面图（QQ 音乐 CDN）：Stale While Revalidate
  */
 
-const CACHE_VERSION = 'wemusic-v2';
+const CACHE_VERSION = 'wemusic-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const IMG_CACHE    = `${CACHE_VERSION}-img`;
 
@@ -70,8 +70,8 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 静态资源：Cache First
-  e.respondWith(cacheFirst(e.request, STATIC_CACHE));
+  // 静态资源：Network First（优先网络，确保拿到最新版本；离线时回退缓存）
+  e.respondWith(networkFirst(e.request, STATIC_CACHE));
 });
 
 // Cache First：先找缓存，缓存没有再走网络并缓存结果
@@ -86,8 +86,22 @@ async function cacheFirst(request, cacheName) {
     }
     return response;
   } catch {
-    // 网络失败且无缓存：返回离线页（如果有）
     return new Response('网络不可用', { status: 503, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+  }
+}
+
+// Network First：优先走网络拿最新内容，网络失败再回退缓存
+async function networkFirst(request, cacheName) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    return cached || new Response('网络不可用', { status: 503, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
   }
 }
 

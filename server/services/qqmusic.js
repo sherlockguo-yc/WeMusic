@@ -26,12 +26,13 @@ async function getJSON(url, options = {}) {
     body: options.body,
   });
   const text = await res.text();
-  const cleaned = text
-    .replace(/^[^({]*\(/, (m) => (m.endsWith('(') && m.length > 1 ? '' : m))
-    .replace(/\);?\s*$/, '');
   try {
     return JSON.parse(text);
   } catch {
+    // JSONP/非标准 JSON：去掉回调包裹再试一次
+    const cleaned = text
+      .replace(/^[^({]*\(/, (m) => (m.endsWith('(') && m.length > 1 ? '' : m))
+      .replace(/\);?\s*$/, '');
     try {
       return JSON.parse(cleaned);
     } catch {
