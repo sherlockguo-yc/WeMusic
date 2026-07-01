@@ -6,7 +6,7 @@
  *   - 音乐封面图（QQ 音乐 CDN）：Stale While Revalidate
  */
 
-const CACHE_VERSION = 'wemusic-v3';
+const CACHE_VERSION = 'wemusic-v4';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const IMG_CACHE    = `${CACHE_VERSION}-img`;
 

@@ -213,26 +213,65 @@ export function posterHTML(data, themeKey) {
 // ============================================================
 
 const PRO_ACCENTS = {
-  mint: '#3ddc78',
+  mint: '#1a8c3e',
   dark: '#2de37a',
   sunset: '#ffb37e',
   ocean: '#7ee6d8',
 };
+// 浅色主题：清新简约（白底）— 不使用模糊背景和深色叠加
+// 深色主题：沉浸感（封面模糊 + 暗化叠加）
 const PRO_TINTS = {
-  mint:   'linear-gradient(165deg, rgba(12,40,24,.55) 0%, rgba(6,10,8,.85) 100%)',
+  mint:   'transparent', // 浅色主题不叠加
   dark:   'linear-gradient(165deg, rgba(10,12,18,.55) 0%, rgba(4,5,7,.88) 100%)',
   sunset: 'linear-gradient(165deg, rgba(120,40,60,.45) 0%, rgba(50,15,55,.82) 100%)',
   ocean:  'linear-gradient(165deg, rgba(15,25,65,.5) 0%, rgba(25,12,55,.85) 100%)',
+};
+// 浅色主题基色：白底深字；深色主题：黑底浅字
+const PRO_LIGHT = {
+  bg: 'linear-gradient(165deg, #f6fbf7 0%, #ffffff 50%, #eefaf2 100%)',
+  text: '#1b1d22',
+  textDim: '#6b7280',
+  textSub: '#9aa0ad',
+  cardBg: 'rgba(29,185,84,.07)',
+  cardBorder: 'rgba(29,185,84,.22)',
+  chipBg: 'rgba(29,185,84,.1)',
+  chipBorder: 'rgba(29,185,84,.28)',
+  rowBorder: 'rgba(0,0,0,.08)',
+  statBg: 'rgba(29,185,84,.05)',
+  statBorder: 'rgba(29,185,84,.18)',
+  badgeBg: 'rgba(29,185,84,.12)',
+  badgeBorder: 'rgba(29,185,84,.4)',
+  badgeText: '#1a8c3e',
+  hasBlurBg: false,
+};
+const PRO_DARK = {
+  bg: '#0b0d10',
+  text: '#fff',
+  textDim: 'rgba(255,255,255,.78)',
+  textSub: 'rgba(255,255,255,.62)',
+  cardBg: 'rgba(255,255,255,.1)',
+  cardBorder: 'rgba(255,255,255,.2)',
+  chipBg: 'rgba(255,255,255,.1)',
+  chipBorder: 'rgba(255,255,255,.18)',
+  rowBorder: 'rgba(255,255,255,.12)',
+  statBg: 'rgba(255,255,255,.1)',
+  statBorder: 'rgba(255,255,255,.18)',
+  badgeBg: 'rgba(255,255,255,.16)',
+  badgeBorder: 'rgba(255,255,255,.32)',
+  badgeText: 'rgba(255,255,255,.9)',
+  hasBlurBg: true,
 };
 
 export function posterCSSPro(themeKey) {
   const accent = PRO_ACCENTS[themeKey] || PRO_ACCENTS.mint;
   const tint = PRO_TINTS[themeKey] || PRO_TINTS.mint;
+  const palette = themeKey === 'mint' ? PRO_LIGHT : PRO_DARK;
+  const shadow = palette === PRO_DARK ? '0 2px 12px rgba(0,0,0,.3)' : '0 2px 8px rgba(0,0,0,.05)';
   return `
 .wm-poster-pro {
   width: 690px; position: relative; overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: #fff; box-sizing: border-box; background: #0b0d10;
+  color: ${palette.text}; box-sizing: border-box; background: ${palette.bg};
 }
 .wm-poster-pro * { box-sizing: border-box; }
 .wpp-bg-cover {
@@ -243,58 +282,58 @@ export function posterCSSPro(themeKey) {
 .wpp-badge-pro {
   position: absolute; top: 22px; right: 22px; z-index: 3;
   font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
-  background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.32);
-  padding: 5px 12px; border-radius: 12px; color: rgba(255,255,255,.9);
+  background: ${palette.badgeBg}; border: 1px solid ${palette.badgeBorder};
+  padding: 5px 12px; border-radius: 12px; color: ${palette.badgeText};
 }
 .wpp-content { position: relative; z-index: 2; padding: 48px 40px 36px; }
 
 .wpp-brand { font-size: 15px; font-weight: 700; letter-spacing: .04em; opacity: .85; display: flex; align-items: center; gap: 6px; }
-.wpp-title { font-size: 30px; font-weight: 800; margin-top: 18px; line-height: 1.3; text-shadow: 0 2px 12px rgba(0,0,0,.3); }
-.wpp-date { font-size: 14px; color: rgba(255,255,255,.72); margin-top: 6px; }
+.wpp-title { font-size: 30px; font-weight: 800; margin-top: 18px; line-height: 1.3; text-shadow: ${shadow}; }
+.wpp-date { font-size: 14px; color: ${palette.textDim}; margin-top: 6px; }
 
 .wpp-hero { display: flex; align-items: baseline; gap: 10px; margin-top: 28px; }
-.wpp-hero-num { font-size: 62px; font-weight: 800; color: ${accent}; line-height: 1; text-shadow: 0 2px 18px rgba(0,0,0,.4); }
-.wpp-hero-label { font-size: 15px; color: rgba(255,255,255,.78); }
+.wpp-hero-num { font-size: 62px; font-weight: 800; color: ${accent}; line-height: 1; text-shadow: ${shadow}; }
+.wpp-hero-label { font-size: 15px; color: ${palette.textDim}; }
 
 .wpp-collage { display: flex; gap: 8px; margin-top: 22px; }
 .wpp-collage img {
   flex: 1; width: 100%; height: 84px; object-fit: cover; border-radius: 12px;
-  box-shadow: 0 6px 16px rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.18);
+  box-shadow: 0 6px 16px rgba(0,0,0,.2); border: 1px solid ${palette.cardBorder};
 }
 
 .wpp-persona {
   margin-top: 22px; padding: 18px 20px; border-radius: 20px;
-  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+  background: ${palette.cardBg}; border: 1px solid ${palette.cardBorder};
   display: flex; align-items: center; gap: 16px;
 }
 .wpp-persona-icon { font-size: 38px; flex: 0 0 auto; }
-.wpp-persona-label { font-size: 18px; font-weight: 800; }
-.wpp-persona-desc { font-size: 12.5px; color: rgba(255,255,255,.75); margin-top: 3px; }
+.wpp-persona-label { font-size: 18px; font-weight: 800; color: ${palette.text}; }
+.wpp-persona-desc { font-size: 12.5px; color: ${palette.textDim}; margin-top: 3px; }
 
-.wpp-insight { margin-top: 16px; font-size: 13.5px; line-height: 1.6; color: rgba(255,255,255,.78); font-style: italic; }
+.wpp-insight { margin-top: 16px; font-size: 13.5px; line-height: 1.6; color: ${palette.textDim}; font-style: italic; }
 
 .wpp-section { margin-top: 26px; }
 .wpp-section-title {
   font-size: 12.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: rgba(255,255,255,.6); margin-bottom: 12px;
+  color: ${palette.textSub}; margin-bottom: 12px;
 }
-.wpp-song-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.12); font-size: 14.5px; }
+.wpp-song-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid ${palette.rowBorder}; font-size: 14.5px; }
 .wpp-song-row:last-child { border-bottom: none; }
-.wpp-song-cover { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; background: rgba(255,255,255,.1); }
-.wpp-song-cover.ph { display: flex; align-items: center; justify-content: center; font-size: 15px; }
+.wpp-song-cover { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; background: ${palette.statBg}; }
+.wpp-song-cover.ph { display: flex; align-items: center; justify-content: center; font-size: 15px; color: ${palette.textSub}; }
 .wpp-rank { width: 18px; font-weight: 800; color: ${accent}; flex: 0 0 auto; font-size: 14px; }
 .wpp-song-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wpp-song-singer { font-size: 12px; color: rgba(255,255,255,.62); flex: 0 0 auto; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wpp-song-singer { font-size: 12px; color: ${palette.textSub}; flex: 0 0 auto; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .wpp-artist-chips { display: flex; flex-wrap: wrap; gap: 10px; }
-.wpp-chip { padding: 8px 16px; border-radius: 20px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); font-size: 13.5px; font-weight: 600; }
+.wpp-chip { padding: 8px 16px; border-radius: 20px; background: ${palette.chipBg}; border: 1px solid ${palette.chipBorder}; font-size: 13.5px; font-weight: 600; }
 
 .wpp-stats-row { display: flex; gap: 14px; margin-top: 26px; }
-.wpp-mini-stat { flex: 1; text-align: center; padding: 15px 8px; border-radius: 16px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); }
-.wpp-mini-stat b { display: block; font-size: 21px; font-weight: 800; }
-.wpp-mini-stat span { display: block; font-size: 11px; color: rgba(255,255,255,.68); margin-top: 4px; }
+.wpp-mini-stat { flex: 1; text-align: center; padding: 15px 8px; border-radius: 16px; background: ${palette.statBg}; border: 1px solid ${palette.statBorder}; }
+.wpp-mini-stat b { display: block; font-size: 21px; font-weight: 800; color: ${palette.text}; }
+.wpp-mini-stat span { display: block; font-size: 11px; color: ${palette.textSub}; margin-top: 4px; }
 
-.wpp-footer { margin-top: 30px; text-align: center; font-size: 11px; color: rgba(255,255,255,.55); padding-top: 16px; border-top: 1px solid rgba(255,255,255,.15); }
+.wpp-footer { margin-top: 30px; text-align: center; font-size: 11px; color: ${palette.textSub}; padding-top: 16px; border-top: 1px solid ${palette.rowBorder}; }
 `;
 }
 
@@ -314,9 +353,11 @@ export function posterHTMLPro(data, themeKey) {
     generatedAt = '',
   } = data || {};
 
+  const isMint = themeKey === 'mint';
   // 尺寸用 300（与全站 albumCover() 默认尺寸一致，命中率更稳定；400 在部分老专辑上会 404）
   const covers = topSongs.map((s) => (s.albumMid ? coverUrl(s.albumMid, 300) : '')).filter(Boolean);
-  const bgCover = covers[0] || '';
+  // 浅色主题不用模糊背景作为底图（避免白底看不清）；深色主题用 Top1 封面做模糊沉浸
+  const bgCover = isMint ? '' : (covers[0] || '');
   const collageCovers = covers.slice(0, 4);
 
   const songRows = topSongs.slice(0, 5).map((s, i) => {
