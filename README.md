@@ -147,6 +147,17 @@
 
 ## 快速开始
 
+### Docker（推荐）
+
+```bash
+docker pull sherlockguo/wemusic
+docker run -d -p 5174:5174 -v ~/wemusic-data:/app/data --name wemusic sherlockguo/wemusic
+```
+
+访问 `http://localhost:5174`，数据持久化在 `~/wemusic-data`。
+
+### 源码运行
+
 ```bash
 npm install
 npm run build          # 首次运行前必须构建一次前端
