@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="WeMusic" />
-  <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
-  <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icon-192-light.svg" />
+  <link rel="icon" href="/icons/icon-192-light.svg" type="image/svg+xml" />
   <style>
     *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
     body {
@@ -25,19 +25,21 @@
       width: 100%; max-width: 380px;
       box-shadow: 0 4px 32px rgba(20,40,30,.08), 0 1px 0 rgba(0,0,0,.04);
     }
-    .logo {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      margin-bottom: 14px;
+    .brand {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 28px; padding-bottom: 22px;
+      border-bottom: 1px solid #eef1f5;
     }
-    .logo-svg { width: 36px; height: 36px; }
+    .brand-logo { border-radius: 11px; flex-shrink: 0; border: 1px solid #e8ecf2; }
+    .brand-text { flex: 1; min-width: 0; }
     h1 {
-      font-size: 26px; font-weight: 800; text-align: center; color: #1a2025;
-      letter-spacing: -.02em;
+      font-size: 22px; font-weight: 800; color: #1a2025;
+      letter-spacing: -.02em; line-height: 1.2; margin: 0;
     }
     h1 span { color: #2ab758; }
     .sub {
-      text-align: center; color: #6b7280; font-size: 14px;
-      margin: 10px 0 26px;
+      color: #6b7280; font-size: 13px;
+      margin-top: 3px; line-height: 1.4;
     }
     .field { margin-bottom: 18px; }
     .field label {
@@ -80,13 +82,13 @@
 </head>
 <body>
   <div class="card">
-    <div class="logo">
-      <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="#2ab758" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
-      </svg>
+    <div class="brand">
+      <img src="/icons/icon-192-light.svg" width="64" height="64" alt="WeMusic" class="brand-logo" />
+      <div class="brand-text">
+        <h1>We<span>Music</span></h1>
+        <p class="sub" id="formSub">登录你的个人音乐空间</p>
+      </div>
     </div>
-    <h1>We<span>Music</span></h1>
-    <p class="sub" id="formSub">登录你的个人音乐空间</p>
 
     <div class="field">
       <label for="username">用户名</label>

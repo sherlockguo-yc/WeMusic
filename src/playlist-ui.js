@@ -133,9 +133,9 @@ export function renderSidebar() {
       const menu = document.getElementById('ctxMenu');
       if (!menu) return;
       menu.innerHTML = `
-        <div class="ctx-item" data-act="edit"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> 编辑歌单</div>
+        <div class="ctx-item" data-act="edit"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> 编辑歌单</div>
         <div class="ctx-sep"></div>
-        <div class="ctx-item danger" data-act="del"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 删除歌单</div>`;
+        <div class="ctx-item danger" data-act="del"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 删除歌单</div>`;
       menu.querySelectorAll('.ctx-item').forEach((it) => {
         it.onclick = async (ev) => {
           ev.stopPropagation();

@@ -776,18 +776,23 @@ export async function openSavedAlbums() {
     }
     const grid = albums.map((a) => {
       const cover = albumCover(a.album_mid, 500);
-      const tags = [a.genre, a.lan].filter(Boolean);
-      const meta = [a.company, a.aDate].filter(Boolean);
-      const tagHtml = [...tags, ...meta].map((t) => `<span class="album-card-tag">${esc(t)}</span>`).join('');
+      const tagPills = [a.genre, a.lan].filter(Boolean).map((t) => `<span class="album-pill">${esc(t)}</span>`).join('');
+      const metaRow = [
+        a.company ? `<span class="a-meta-item" title="发行公司"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg> ${esc(a.company)}</span>` : '',
+        a.aDate ? `<span class="a-meta-item" title="发行日期"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ${esc(a.aDate)}</span>` : '',
+      ].filter(Boolean).join('');
       const desc = a.desc ? `<div class="a-desc">${esc(a.desc.slice(0, 60))}${a.desc.length > 60 ? '…' : ''}</div>` : '';
       return `<div class="album-card saved" data-mid="${esc(a.album_mid)}" data-name="${esc(a.name)}">
-        <div class="cover">${cover ? `<img src="${cover}" loading="lazy" onerror="this.style.visibility='hidden'" />` : '<div class="ph"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>'}</div>
+        <div class="cover">${cover ? `<img src="${cover}" loading="lazy" onerror="this.style.visibility='hidden'" />` : '<div class="ph"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>'}
+          <div class="cover-play" data-mid="${esc(a.album_mid)}" title="播放"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+        </div>
         <div class="a-name" title="${esc(a.name)}">${esc(a.name)}</div>
         <div class="a-singer">${esc(a.singer || '')}</div>
         ${desc}
-        ${tagHtml ? `<div class="a-tags">${tagHtml}</div>` : ''}
+        ${tagPills ? `<div class="a-pills">${tagPills}</div>` : ''}
+        ${metaRow ? `<div class="a-meta">${metaRow}</div>` : ''}
         <div class="a-btns">
-          <button class="btn sm green a-play-all" data-mid="${esc(a.album_mid)}"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg> 播放</button>
+          <button class="btn sm green a-play-all" data-mid="${esc(a.album_mid)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg> 播放</button>
           <button class="a-del-album" data-mid="${esc(a.album_mid)}" title="取消收藏"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       </div>`;
@@ -803,19 +808,23 @@ export async function openSavedAlbums() {
       el.style.cursor = 'pointer';
     });
     // 播放
+    const playAlbum = async (mid) => {
+      const origHTML = $(`[data-mid="${CSS.escape(mid)}"].a-play-all`)?.innerHTML;
+      const btn = document.querySelector(`.a-play-all[data-mid="${CSS.escape(mid)}"]`);
+      if (btn) { btn.innerHTML = '<span>加载中…</span>'; btn.disabled = true; }
+      try {
+        const data = await api(`/music/album?mid=${encodeURIComponent(mid)}`);
+        if (!data.songs?.length) { toast('这张专辑暂无歌曲'); return; }
+        import('./player.js').then(({ playFromList }) => playFromList(data.songs, 0, 'album', null));
+      } catch (err) { toast('加载失败：' + err.message); }
+      finally { if (btn && origHTML) { btn.innerHTML = origHTML; btn.disabled = false; } }
+    };
     $('savedAlbumGrid').querySelectorAll('.a-play-all').forEach((btn) => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        const mid = btn.dataset.mid;
-        const origHTML = btn.innerHTML;
-        btn.innerHTML = '<span>加载中…</span>'; btn.disabled = true;
-        try {
-          const data = await api(`/music/album?mid=${encodeURIComponent(mid)}`);
-          if (!data.songs?.length) { toast('这张专辑暂无歌曲'); return; }
-          import('./player.js').then(({ playFromList }) => playFromList(data.songs, 0, 'album', null));
-        } catch (err) { toast('加载失败：' + err.message); }
-        finally { btn.innerHTML = origHTML; btn.disabled = false; }
-      };
+      btn.onclick = (e) => { e.stopPropagation(); playAlbum(btn.dataset.mid); };
+    });
+    // 封面右上角的悬浮播放按钮
+    $('savedAlbumGrid').querySelectorAll('.cover-play').forEach((el) => {
+      el.onclick = (e) => { e.stopPropagation(); playAlbum(el.dataset.mid); };
     });
     // 取消收藏
     $('savedAlbumGrid').querySelectorAll('.a-del-album').forEach((btn) => {

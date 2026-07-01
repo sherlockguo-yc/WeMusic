@@ -66,25 +66,39 @@ document.addEventListener('keydown', (e) => {
 let _popstateView = null; // popstate 恢复时设为对应 view，navPush 消费后置 null
 
 export function navPush(view, data) {
+  const wasPop = !!_popstateView;
+  console.log('[nav] navPush:', view, 'popstateView:', _popstateView || '(null)', 'len:', history.length);
   if (_popstateView) {
-    // 覆盖当前历史条目，不破坏前进栈
     history.replaceState({ view, data }, '', location.href);
     _popstateView = null;
   } else {
     history.pushState({ view, data }, '', location.href);
   }
+  // 如果是从 popstate 恢复的（wasPop），额外标记避免恢复时再次 push
+  if (wasPop) {
+    console.log('[nav] replaceState (popstate restore)');
+  }
 }
 
 async function restoreView(view, data) {
+  console.log('[nav] restoreView:', view, 'data:', JSON.stringify(data));
   _popstateView = view;
+  // 保险：5 秒后如果还没被 navPush 消费，自动清除（防止 import 失败等边缘情况卡住）
+  const safetyView = view;
+  setTimeout(() => {
+    if (_popstateView === safetyView) {
+      console.warn('[nav] _popstateView stuck at', safetyView, '— auto-clear');
+      _popstateView = null;
+    }
+  }, 5000);
   if (view === 'discover')    openDiscover();
-  else if (view === 'search'  && data?.kw) { document.getElementById('searchInput').value = data.kw; import('./search.js').then(({ doSearch }) => doSearch()); }
-  else if (view === 'artist'  && data?.mid) import('./search.js').then(({ openArtist }) => openArtist(data.mid, data.name));
-  else if (view === 'album'       && data?.mid) import('./search.js').then(({ openAlbum }) => openAlbum(data.mid, data.name));
-  else if (view === 'stats')       import('./stats.js').then(({ openStats }) => openStats());
-  else if (view === 'savedAlbums') import('./stats.js').then(({ openSavedAlbums }) => openSavedAlbums());
-  else if (view === 'likes')   import('./stats.js').then(({ openLikesPage }) => openLikesPage());
-  else if (view === 'playlist' && data?.id) import('./playlist-ui.js').then(({ openPlaylist }) => openPlaylist(data.id));
+  else if (view === 'search'  && data?.kw) { document.getElementById('searchInput').value = data.kw; import('./search.js').then(({ doSearch }) => doSearch()).catch((e) => { console.error('[nav] search restore fail:', e); _popstateView = null; }); }
+  else if (view === 'artist'  && data?.mid) import('./search.js').then(({ openArtist }) => openArtist(data.mid, data.name)).catch((e) => { console.error('[nav] artist restore fail:', e); _popstateView = null; });
+  else if (view === 'album'       && data?.mid) import('./search.js').then(({ openAlbum }) => openAlbum(data.mid, data.name)).catch((e) => { console.error('[nav] album restore fail:', e); _popstateView = null; });
+  else if (view === 'stats')       import('./stats.js').then(({ openStats }) => openStats()).catch((e) => { console.error('[nav] stats restore fail:', e); _popstateView = null; });
+  else if (view === 'savedAlbums') import('./stats.js').then(({ openSavedAlbums }) => openSavedAlbums()).catch((e) => { console.error('[nav] savedAlbums restore fail:', e); _popstateView = null; });
+  else if (view === 'likes')   import('./stats.js').then(({ openLikesPage }) => openLikesPage()).catch((e) => { console.error('[nav] likes restore fail:', e); _popstateView = null; });
+  else if (view === 'playlist' && data?.id) import('./playlist-ui.js').then(({ openPlaylist }) => openPlaylist(data.id)).catch((e) => { console.error('[nav] playlist restore fail:', e); _popstateView = null; });
 }
 
 
