@@ -423,7 +423,7 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .player .np-cover:hover .np-cover-txt { opacity: 1; }
 .player .np { min-width: 160px; max-width: 300px; }
 .player .np .np-title-line { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.np-actions { display: flex; gap: 2px; margin-top: 1px; }
+.np-actions { display: flex; gap: 8px; margin-top: 1px; }
 .np-act-btn {
   background: none; border: none; color: var(--text-dim); font-size: 15px;
   cursor: pointer; padding: 1px 5px; border-radius: 4px; transition: color .15s; line-height: 1;
@@ -624,6 +624,10 @@ input[type='range']::-moz-range-thumb {
 }
 .side-nav-item:hover { background: var(--bg-soft); color: var(--text); }
 .side-nav-item.active { background: var(--bg-card); color: var(--text); }
+.side-count {
+  margin-left: 6px; padding: 1px 7px; border-radius: 10px;
+  background: var(--bg-soft); font-size: 11px; color: var(--text-dim);
+}
 
 /* ---- 歌词全屏页 ---- */
 .lyrics-panel {
@@ -817,14 +821,184 @@ input[type='range']::-moz-range-thumb {
 .soc-val { font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1.1; }
 .soc-label { font-size: 12px; color: var(--text-dim); }
 
-/* 两列布局：顶部对齐，各自高度独立，不互相拉伸 */
+/* ---- 本周报告 ---- */
+.weekly-report {
+  position: relative;
+  background: linear-gradient(165deg, rgba(29,185,84,.07), var(--bg-card) 45%);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px 22px; margin-bottom: 18px;
+  overflow: hidden;
+}
+body.light .weekly-report { background: linear-gradient(165deg, rgba(29,185,84,.06), #fff 45%); }
+
+.wr-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 10px; margin-bottom: 18px;
+}
+.wr-head-title { display: flex; align-items: center; gap: 12px; }
+.wr-head-icon {
+  width: 38px; height: 38px; border-radius: 11px; flex: 0 0 auto;
+  background: rgba(29,185,84,.15); display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.wr-title { font-size: 16px; font-weight: 800; color: var(--text); line-height: 1.3; }
+.wr-date { font-weight: 500; font-size: 12px; color: var(--text-dim); margin-top: 1px; }
+.wr-insight {
+  font-size: 12.5px; color: var(--text); background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 20px; padding: 7px 16px;
+  max-width: 100%;
+}
+body.light .wr-insight { background: rgba(29,185,84,.07); border-color: rgba(29,185,84,.2); }
+.wr-insight b { color: var(--accent); font-weight: 700; }
+
+/* 概览统计：图标 + 数值 + 涨跌趋势 */
+.wr-overview {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px;
+}
+.wr-stat {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  transition: transform .15s, box-shadow .15s;
+}
+.wr-stat:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,.12); }
+.wr-stat-icon {
+  width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.wr-stat-icon.c1 { background: rgba(29,185,84,.14); }
+.wr-stat-icon.c2 { background: rgba(0,161,214,.14); }
+.wr-stat-icon.c3 { background: rgba(230,168,23,.14); }
+.wr-stat-icon.c4 { background: rgba(224,85,106,.14); }
+.wr-stat-body { flex: 1; min-width: 0; }
+.wr-val { font-size: 19px; font-weight: 800; color: var(--text); line-height: 1.2; }
+.wr-label { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+.wr-trend {
+  font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 8px; flex: 0 0 auto;
+}
+.wr-trend.up   { color: var(--accent); background: rgba(29,185,84,.12); }
+.wr-trend.down { color: var(--danger); background: rgba(224,85,106,.12); }
+
+/* 卡片网格：Top歌曲/Top歌手/播放习惯 一行，完播率+近4周趋势 一行 */
+.wr-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  grid-template-areas: "songs artists habit" "comp trend trend";
+}
+.wr-card.songs   { grid-area: songs; }
+.wr-card.artists { grid-area: artists; }
+.wr-card.habit   { grid-area: habit; }
+.wr-card.comp    { grid-area: comp; }
+.wr-card.trend   { grid-area: trend; }
+.wr-card.collab  { grid-area: trend; }
+
+.wr-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 16px;
+}
+.wr-card-hd {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 12px;
+}
+.wr-card-icon {
+  width: 24px; height: 24px; border-radius: 7px; flex: 0 0 auto; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.wr-card-icon.i-song   { background: rgba(29,185,84,.15); }
+.wr-card-icon.i-artist { background: rgba(0,161,214,.15); }
+.wr-card-icon.i-habit  { background: rgba(230,168,23,.15); }
+.wr-card-icon.i-comp   { background: rgba(29,185,84,.15); }
+.wr-card-icon.i-collab { background: rgba(180,110,224,.15); }
+
+.wr-list { list-style: none; padding: 0; margin: 0; }
+.wr-list li {
+  font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 8px;
+  padding: 5px 0;
+}
+.wr-list li + li { border-top: 1px solid var(--border); }
+.wr-list li span { font-size: 11.5px; color: var(--text-dim); white-space: nowrap; flex: 0 0 auto; }
+.wr-rank {
+  width: 20px; height: 20px; border-radius: 50%; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--text-dim); background: var(--bg-soft);
+}
+.wr-rank.r1 { background: #e6a817; color: #3a2a00; }
+.wr-rank.r2 { background: #b7c0cc; color: #2a2e3a; }
+.wr-rank.r3 { background: #d18a5c; color: #3a2000; }
+.wr-li-info { flex: 1; min-width: 0; }
+.wr-li-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wr-li-sub  { font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wr-empty { color: var(--text-dim); font-size: 12px; }
+
+.wr-habit { display: flex; flex-direction: column; gap: 11px; }
+.wr-h-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text-dim); }
+.wr-h-row span:last-child { color: var(--text); display: flex; align-items: baseline; gap: 5px; }
+.wr-h-row small { font-size: 10px; color: var(--text-dim); font-weight: 400; }
+
+/* 音乐人设标签 */
+.wr-persona {
+  margin-left: auto; font-size: 11px; font-weight: 600; color: var(--accent);
+  background: rgba(29,185,84,.1); padding: 2px 9px; border-radius: 10px;
+  display: flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.wr-persona-icon { font-size: 13px; }
+.wr-persona-desc {
+  margin-left: auto; font-size: 11px; font-weight: 500; color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* 近 4 周趋势迷你柱状图 */
+.wr-trend-chart {
+  display: flex; align-items: flex-end; justify-content: center; gap: 16px;
+  height: 130px; padding: 12px 8px 0;
+}
+.tr-col {
+  flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  height: 100%; justify-content: flex-end;
+}
+.tr-col.current .tr-bar { background: rgba(29,185,84,.8); }
+.tr-col.current .tr-val { color: var(--accent); font-weight: 800; }
+.tr-bar-wrap {
+  flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center;
+  min-height: 0;
+}
+.tr-bar {
+  width: 28px; background: var(--border); border-radius: 4px 4px 0 0;
+  min-height: 2px; transition: height .6s ease, background .3s;
+}
+.tr-col.current .tr-bar { background: var(--accent); }
+.tr-val {
+  font-size: 11px; font-weight: 700; color: var(--text); text-align: center;
+}
+.tr-label {
+  font-size: 10px; color: var(--text-dim); text-align: center; line-height: 1.2;
+  white-space: nowrap; margin-bottom: 4px;
+}
+
+/* 完播率：单条堆叠色带 + 图例 */
+.wr-stack-bar {
+  display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--bg-soft);
+  margin-bottom: 12px;
+}
+.wr-stack-bar .seg { transition: width .6s ease; }
+.wr-stack-bar .seg.low  { background: var(--danger); }
+.wr-stack-bar .seg.mid  { background: #e6a817; }
+.wr-stack-bar .seg.high { background: var(--accent); }
+.wr-stack-legend { display: flex; flex-direction: column; gap: 7px; }
+.wr-sl-row { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-dim); }
+.wr-sl-row b { margin-left: auto; color: var(--text); font-weight: 700; }
+.wr-sl-row .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.wr-sl-row .dot.low  { background: var(--danger); }
+.wr-sl-row .dot.mid  { background: #e6a817; }
+.wr-sl-row .dot.high { background: var(--accent); }
+
+/* 两列布局：等高拉伸，柱状图与时段分布对齐 */
 .stats-two-col {
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 .stats-panel {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 16px 18px;
+  display: flex; flex-direction: column;
 }
 .stats-panel-title {
   font-size: 13px; font-weight: 700; color: var(--text-dim);
@@ -867,12 +1041,12 @@ input[type='range']::-moz-range-thumb {
 }
 .stats-bar-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* 柱状图：固定区域，柱子底部对齐，高度用 px（JS 计算），不依赖百分比 */
+/* 柱状图：填满面板剩余空间，与时段分布等高 */
 .bar-chart-wrap {
-  /* 柱区 250px + 轴标签 18px = 268px */
-  height: 268px;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 200px;
 }
 .bar-chart-new {
   flex: 1;
@@ -885,13 +1059,14 @@ input[type='range']::-moz-range-thumb {
 }
 .bar-item {
   flex: 1;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
   cursor: default;
   min-width: 0;
-  position: relative;
+  height: 100%; /* 必需的：让 .bar-fill 的 height% 有参照 */
 }
 .bar-val-label {
   font-size: 9px; color: var(--text-dim); line-height: 1.2;
@@ -902,7 +1077,7 @@ input[type='range']::-moz-range-thumb {
 .bar-fill {
   width: 100%; background: var(--accent); border-radius: 3px 3px 0 0;
   opacity: 0.7; transition: opacity .15s;
-  /* height 由 JS 直接设 px 值 */
+  position: relative; /* 让内部 .bar-val-label 相对此定位 */
 }
 .bar-item:hover .bar-fill { opacity: 1; }
 .bar-chart-axis {
@@ -948,6 +1123,12 @@ input[type='range']::-moz-range-thumb {
 
 /* Top 歌曲列表 */
 .top-songs-list { display: flex; flex-direction: column; gap: 2px; }
+.top-more-btn {
+  margin-top: 10px; padding: 8px 0; border: 1px dashed var(--border);
+  border-radius: 8px; background: transparent; color: var(--text-dim);
+  font-size: 13px; cursor: pointer; transition: color .15s, border-color .15s;
+}
+.top-more-btn:hover { color: var(--accent); border-color: var(--accent); }
 .top-song-row {
   display: flex; align-items: center; gap: 10px; padding: 8px 6px;
   border-radius: 8px; cursor: pointer; transition: background .15s;

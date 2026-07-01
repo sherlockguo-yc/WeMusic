@@ -119,6 +119,8 @@ export async function toggleLike(song, btn) {
       if (btn) { btn.textContent = '🤍'; btn.classList.remove('liked'); }
       toast('已取消喜欢');
     }
+    // 更新侧边栏计数
+    updateLikesCount();
   } catch (e) { toast('操作失败：' + e.message); }
 }
 
@@ -132,7 +134,14 @@ export function updateNpLikeBtn() {
   btn.innerHTML = liked ? heartFilled : heartOutline;
   btn.title = liked ? '取消喜欢' : '喜欢';
   btn.classList.toggle('liked-active', !!liked);
-  btn.title = liked ? '取消喜欢' : '喜欢';
+}
+
+export function updateLikesCount() {
+  const el = document.getElementById('navLikes');
+  if (el) {
+    const n = state.likedMids.size;
+    el.innerHTML = `❤ 我喜欢的${n ? `<span class="side-count">${n}</span>` : ''}`;
+  }
 }
 
 export function initUI() {

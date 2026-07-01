@@ -63,12 +63,13 @@ export async function openStats() {
   const main = $('main');
   main.innerHTML = '<div class="loading">加载统计数据…</div>';
   try {
-    const [ov, topSongs, topArtists, daily, hourly] = await Promise.all([
+    const [ov, topSongs, topArtists, daily, hourly, weekly] = await Promise.all([
       api('/stats/overview'),
-      api('/stats/top-songs?limit=10'),
+      api('/stats/top-songs?limit=50'),
       api('/stats/top-artists?limit=8'),
       api('/stats/daily?days=30'),
       api('/stats/hourly'),
+      api('/stats/weekly'),
     ]);
 
     const today = new Date();
@@ -87,8 +88,7 @@ export async function openStats() {
       };
     });
 
-    // 渲染柱状图（mode: 'count' | 'duration'）
-    const BAR_PX = 250; // 与 CSS .bar-chart-wrap 柱区高度一致
+    // 渲染柱状图（mode: 'count' | 'duration'）—— 百分比高度适应动态容器
     // 存储每个柱子的 tooltip HTML，渲染后用 attachTip 绑定
     let _barTipMap = [];
     function renderBarChart(mode) {
@@ -99,17 +99,16 @@ export async function openStats() {
           ? `${d.label}<br><b>${d.play_count} 次</b> · ${fmtMin(d.total_sec)}`
           : `${d.label}<br><b>${fmtMin(d.total_sec)}</b> · ${d.play_count} 次`;
       });
-      // 线性等比例：真实反映数值比例
+      // 线性等比例，百分比
       const bars = days30.map((d, i) => {
         const val = vals[i];
-        const px = val > 0 ? Math.max(2, Math.round((val / maxVal) * BAR_PX)) : 0;
+        const pct = val > 0 ? ((val / maxVal) * 100) : 0;
         const showLabel = val > 0;
         const valLabel = showLabel
           ? (mode === 'count' ? val : (d.total_sec >= 3600 ? Math.round(d.total_sec / 3600) + 'h' : Math.round(d.total_sec / 60) + 'm'))
           : '';
         return `<div class="bar-item" data-idx="${i}">
-          ${valLabel ? `<div class="bar-val-label">${valLabel}</div>` : ''}
-          <div class="bar-fill" style="height:${px}px"></div>
+          <div class="bar-fill" style="height:${pct.toFixed(1)}%">${valLabel ? `<span class="bar-val-label">${valLabel}</span>` : ''}</div>
         </div>`;
       }).join('');
       const axis = days30.map((d, i) => {
@@ -148,6 +147,142 @@ export async function openStats() {
     const sum30Plays = days30.reduce((s, d) => s + d.play_count, 0);
     const sum30Sec = days30.reduce((s, d) => s + d.total_sec, 0);
 
+    // —— 本周报告 ——
+    const skipPct = weekly.skip.total ? Math.round(weekly.skip.skipped / weekly.skip.total * 100) : 0;
+    const compTotal = weekly.completion.low + weekly.completion.mid + weekly.completion.high || 1;
+    const compLowPct  = Math.round(weekly.completion.low / compTotal * 100);
+    const compMidPct  = Math.round(weekly.completion.mid / compTotal * 100);
+    const compHighPct = 100 - compLowPct - compMidPct;
+
+    const lastPlays = weekly.lastWeek.plays || 1;
+    const vsPlays = weekly.week.plays - weekly.lastWeek.plays;
+    const vsPlaysStr = vsPlays >= 0 ? `↑${vsPlays}` : `↓${Math.abs(vsPlays)}`;
+    const vsSecStr = weekly.week.sec > weekly.lastWeek.sec ? '↑' : (weekly.week.sec < weekly.lastWeek.sec ? '↓' : '→');
+
+    // 本周范围由后端自然周计算（周一 ~ 周日）
+    const nowDate = new Date();
+    const weekRange = weekly.weekLabel || `${nowDate.getMonth() + 1}/${nowDate.getDate()}`;
+
+    // —— 音乐人设标签（正向、音乐品味导向） ——
+    const persona = (() => {
+      const topArtist = weekly.topArtists[0];
+      const topArtistShare = topArtist && weekly.week.plays ? topArtist.play_count / weekly.week.plays : 0;
+      const artistName = topArtist?.singer || '';
+      if (topArtistShare > 0.4)                            return { icon: '⭐', label: `${esc(artistName)} 铁粉`,   desc: `本周最爱 ${esc(artistName)}，占了超四成播放` };
+      if (weekly.uniqueArtists > 30)                       return { icon: '🗺️', label: '音乐探险家',   desc: `本周邂逅了 ${weekly.uniqueArtists} 位歌手` };
+      if (weekly.newSongs > 15)                            return { icon: '🔭', label: '新曲猎人',     desc: `本周新发现了 ${weekly.newSongs} 首歌` };
+      if (avgSec > 240)                                    return { icon: '💿', label: '深度聆听者',   desc: '平均每首歌聆听超过 4 分钟' };
+      if (compHighPct > 55)                                return { icon: '🎼', label: '沉浸鉴赏家',   desc: '超过半数的歌都完整听完' };
+      if (weekly.uniqueArtists > 15)                       return { icon: '🌊', label: '多元品味家',   desc: '风格广泛，不设边界' };
+      return                                                { icon: '🎶', label: '自由旋律人',   desc: '按自己的节奏享受音乐' };
+    })();
+
+    // —— 近 4 周趋势迷你柱状图 ——
+    const trendMax = Math.max(...weekly.weeksTrend.map((w) => w.plays), 1);
+    const trendHtml = weekly.weeksTrend.map((w, i) => `
+      <div class="tr-col${i === 3 ? ' current' : ''}">
+        <div class="tr-bar-wrap"><div class="tr-bar" style="height:${Math.round(w.plays / trendMax * 100)}%"></div></div>
+        <div class="tr-val">${w.plays}</div>
+        <div class="tr-label">${w.label}</div>
+      </div>
+    `).join('');
+
+    // —— 个性化听歌小结（时段 + 最爱歌手） ——
+    const timeLabel = (h) => {
+      if (h == null) return null;
+      if (h >= 5 && h < 9)  return { label: '清晨', icon: '🌅' };
+      if (h >= 9 && h < 12) return { label: '上午', icon: '☀️' };
+      if (h >= 12 && h < 14) return { label: '午间', icon: '🌤️' };
+      if (h >= 14 && h < 18) return { label: '午后', icon: '🌇' };
+      if (h >= 18 && h < 22) return { label: '晚间', icon: '🌆' };
+      return { label: '深夜', icon: '🌙' };
+    };
+    const peak = timeLabel(weekly.peakHour);
+    const topArtistName = weekly.topArtists[0]?.singer;
+    let insight = '';
+    if (peak && topArtistName) {
+      insight = `${peak.icon} 本周你最常在<b>${peak.label}</b>（${weekly.peakHour}:00 左右）听歌，最爱的旋律来自 <b>${esc(topArtistName)}</b>`;
+    } else if (peak) {
+      insight = `${peak.icon} 本周你最常在<b>${peak.label}</b>（${weekly.peakHour}:00 左右）听歌`;
+    } else if (topArtistName) {
+      insight = `🎧 本周你最爱的旋律来自 <b>${esc(topArtistName)}</b>`;
+    }
+
+    const avgSec = weekly.week.plays ? Math.round(weekly.week.sec / weekly.week.plays) : 0;
+    const rankBadge = (i) => `<span class="wr-rank r${i + 1 <= 3 ? i + 1 : 0}">${i + 1}</span>`;
+
+    const weekHtml = `
+      <div class="weekly-report">
+        <div class="wr-head">
+          <div class="wr-head-title">
+            <span class="wr-head-icon">📊</span>
+            <div>
+              <div class="wr-title">本周听歌报告</div>
+              <div class="wr-date">${weekRange}</div>
+            </div>
+          </div>
+          ${insight ? `<div class="wr-insight">${insight}</div>` : ''}
+        </div>
+
+        <div class="wr-overview">
+          <div class="wr-stat">
+            <div class="wr-stat-icon c1">🎧</div>
+            <div class="wr-stat-body"><div class="wr-val">${weekly.week.plays}</div><div class="wr-label">播放次数</div></div>
+            <div class="wr-trend ${vsPlays >= 0 ? 'up' : 'down'}">${vsPlaysStr}</div>
+          </div>
+          <div class="wr-stat">
+            <div class="wr-stat-icon c2">⏱️</div>
+            <div class="wr-stat-body"><div class="wr-val">${fmtMin(weekly.week.sec)}</div><div class="wr-label">播放时长</div></div>
+            <div class="wr-trend ${weekly.week.sec >= weekly.lastWeek.sec ? 'up' : 'down'}">${vsSecStr}</div>
+          </div>
+          <div class="wr-stat">
+            <div class="wr-stat-icon c3">🎵</div>
+            <div class="wr-stat-body"><div class="wr-val">${weekly.week.uniqueSongs}</div><div class="wr-label">不重复歌曲</div></div>
+          </div>
+          <div class="wr-stat">
+            <div class="wr-stat-icon c4">🔥</div>
+            <div class="wr-stat-body"><div class="wr-val">${weekly.week.days}</div><div class="wr-label">听歌天数</div></div>
+          </div>
+        </div>
+
+        <div class="wr-grid">
+          <div class="wr-card songs">
+            <div class="wr-card-hd"><span class="wr-card-icon i-song">🎵</span>Top 歌曲</div>
+            <ol class="wr-list">${weekly.topSongs.slice(0, 5).map((s, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(s.name)}</div><div class="wr-li-sub">${esc(s.singer)}</div></div><span>${s.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
+          </div>
+          <div class="wr-card artists">
+            <div class="wr-card-hd"><span class="wr-card-icon i-artist">🎤</span>Top 歌手</div>
+            <ol class="wr-list">${weekly.topArtists.map((a, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(a.singer)}</div><div class="wr-li-sub">${fmtMin(a.total_sec || 0)}</div></div><span>${a.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
+          </div>
+          <div class="wr-card habit">
+            <div class="wr-card-hd"><span class="wr-card-icon i-habit">⚡</span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${persona.label}</span></div>
+            <div class="wr-habit">
+              <div class="wr-h-row"><span>跳过率</span><span><b>${skipPct}%</b><small>&lt;30s / ${weekly.skip.total}次</small></span></div>
+              <div class="wr-h-row"><span>新歌发现</span><span><b>${weekly.newSongs}</b> 首</span></div>
+              <div class="wr-h-row"><span>歌手多样性</span><span><b>${weekly.uniqueArtists}</b> 位</span></div>
+              <div class="wr-h-row"><span>场均时长</span><span><b>${fmtSec(avgSec)}</b></span></div>
+            </div>
+          </div>
+          <div class="wr-card comp">
+            <div class="wr-card-hd"><span class="wr-card-icon i-comp">✅</span>完播率分布</div>
+            <div class="wr-stack-bar">
+              <div class="seg low" style="width:${compLowPct}%"></div>
+              <div class="seg mid" style="width:${compMidPct}%"></div>
+              <div class="seg high" style="width:${compHighPct}%"></div>
+            </div>
+            <div class="wr-stack-legend">
+              <div class="wr-sl-row"><span class="dot low"></span>浅尝 &lt;20%<b>${compLowPct}%</b></div>
+              <div class="wr-sl-row"><span class="dot mid"></span>一般 20–80%<b>${compMidPct}%</b></div>
+              <div class="wr-sl-row"><span class="dot high"></span>沉浸 ≥80%<b>${compHighPct}%</b></div>
+            </div>
+          </div>
+          <div class="wr-card trend">
+            <div class="wr-card-hd"><span class="wr-card-icon i-trend">📈</span>近 4 周趋势<span class="wr-persona-desc">${persona.icon} ${persona.desc}</span></div>
+            <div class="wr-trend-chart">${trendHtml}</div>
+          </div>
+        </div>
+      </div>`;
+
     main.innerHTML = `
       <div class="view-title">我的数据</div>
       <div class="stats-overview">
@@ -156,6 +291,7 @@ export async function openStats() {
         <div class="stat-ov-card"><div class="soc-val">${ov.unique_songs}</div><div class="soc-label">不重复歌曲</div></div>
         <div class="stat-ov-card"><div class="soc-val">${ov.active_days}</div><div class="soc-label">听歌天数</div></div>
       </div>
+      ${weekHtml}
       <div class="stats-two-col">
         <div class="stats-panel">
           <div class="stats-panel-hd">
@@ -184,12 +320,10 @@ export async function openStats() {
           <div class="artist-bars" id="artistBars">${artistBars || '<div class="stats-empty">暂无数据</div>'}</div>
         </div>
         <div class="stats-panel">
-          <div class="stats-panel-title">最常播放 Top 10</div>
+          <div class="stats-panel-title">最常播放 Top ${topSongs.songs.length}</div>
           <div class="top-songs-list" id="statsTopSongs"></div>
         </div>
       </div>`;
-
-    // 绑定自定义 tooltip
     // 时段网格
     $('hourGrid').querySelectorAll('.hour-cell').forEach((el) => {
       const i = Number(el.dataset.idx);
@@ -219,26 +353,40 @@ export async function openStats() {
     });
     bindBarChartTips(); // 初始绑定
 
-    $('statsTopSongs').innerHTML = topSongs.songs.length
-      ? topSongs.songs.map((s, i) => `
-        <div class="top-song-row" data-i="${i}">
-          <span class="ts-rank">${i + 1}</span>
-          <div class="ts-info"><div class="ts-name">${esc(s.name)}</div><div class="ts-singer">${esc(s.singer || '')}</div></div>
-          <div class="ts-meta">
-            <span class="ts-cnt">${s.play_count}次</span>
-            <span class="ts-dur">${fmtMin(s.total_sec || 0)}</span>
-            <button class="icon-btn play ts-play" title="播放" data-i="${i}">▶</button>
-          </div>
-        </div>`).join('')
-      : '<div class="stats-empty">还没有播放记录</div>';
+    const INITIAL_SHOW = 10;
+    const hasMore = topSongs.songs.length > INITIAL_SHOW;
 
-    $('statsTopSongs').querySelectorAll('.ts-play').forEach((btn) => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const i = Number(btn.dataset.i);
-        import('./player.js').then(({ playFromList }) => playFromList(topSongs.songs, i, 'stats', null));
-      };
-    });
+    function renderTopSongs(expanded) {
+      const show = expanded ? topSongs.songs : topSongs.songs.slice(0, INITIAL_SHOW);
+      let html = show.length
+        ? show.map((s, i) => `
+          <div class="top-song-row" data-i="${i}">
+            <span class="ts-rank">${i + 1}</span>
+            <div class="ts-info"><div class="ts-name">${esc(s.name)}</div><div class="ts-singer">${esc(s.singer || '')}</div></div>
+            <div class="ts-meta">
+              <span class="ts-cnt">${s.play_count}次</span>
+              <span class="ts-dur">${fmtMin(s.total_sec || 0)}</span>
+              <button class="icon-btn play ts-play" title="播放" data-i="${i}">▶</button>
+            </div>
+          </div>`).join('')
+        : '<div class="stats-empty">还没有播放记录</div>';
+      if (hasMore && !expanded) {
+        html += `<button class="top-more-btn" id="topMoreBtn">展开全部（共 ${topSongs.songs.length} 首）</button>`;
+      }
+      $('statsTopSongs').innerHTML = html;
+
+      $('statsTopSongs').querySelectorAll('.ts-play').forEach((btn) => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const j = Number(btn.dataset.i);
+          import('./player.js').then(({ playFromList }) => playFromList(topSongs.songs, j, 'stats', null));
+        };
+      });
+      if (hasMore && !expanded) {
+        $('topMoreBtn').onclick = () => renderTopSongs(true);
+      }
+    }
+    renderTopSongs(false);
     main.querySelectorAll('.artist-bar-row').forEach((row) => {
       row.style.cursor = 'pointer';
       row.onclick = () => { $('searchInput').value = row.dataset.singer; import('./search.js').then(({ doSearch }) => doSearch()); };
