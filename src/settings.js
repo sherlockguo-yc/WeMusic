@@ -45,6 +45,9 @@ export function applyPalette(key) {
 }
 applyPalette(localStorage.getItem('wemusic_palette') || 'green');
 
+// 赞赏码 — base64 编码嵌入代码，避免开源分发后用户轻易替换二维码
+export const DONATE_QR_BASE64 = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" rx="12" fill="#f0f0f0"/><text x="100" y="108" text-anchor="middle" fill="#aaa" font-size="13" font-family="sans-serif">赞赏码占位</text></svg>');
+
 export function applyFontSize(size) {
   size = ['13','14','16','18'].includes(size) ? size : '14';
   document.documentElement.style.setProperty('--font-size', size + 'px');
@@ -260,8 +263,8 @@ export function initSettings() {
   $('settingsModal').onclick = (e) => { if (e.target.id === 'settingsModal') $('settingsModal').classList.remove('show'); };
   $('settingsLogout').onclick = () => { Auth.clear(); location.href = '/login.html'; };
 
-  // 打赏弹窗
-  $('donateBtn').onclick = () => { $('donateModal').classList.add('show'); };
+  // 打赏弹窗（使用 base64 嵌入式二维码，防止被轻易替换）
+  $('donateBtn').onclick = () => { $('donateModal').classList.add('show'); $('donateQR').src = DONATE_QR_BASE64; };
   $('donateClose').onclick = () => $('donateModal').classList.remove('show');
   $('donateModal').onclick = (e) => { if (e.target.id === 'donateModal') $('donateModal').classList.remove('show'); };
 
