@@ -174,12 +174,15 @@ async function doLoadLyrics(song, forceSourceId) {
 
     if (!lyricsLines.length && lyricsCandidates.length && data.error) {
       $('lpBody').innerHTML = `<div class="lp-placeholder">${esc(data.error)}<br><span style="font-size:12px;color:var(--text-dim)">点「⤢ 歌词」选择其他版本</span></div>`;
+      throw new Error(data.error); // 通知调用方失败
     } else {
       renderLyricsLines();
     }
+    return true;
   } catch (e) {
     $('lpBody').innerHTML = `<div class="lp-error">${esc(e.message)}</div>`;
     lyricsLines = []; lyricsFor = ''; lyricsCandidates = []; lyricsCurrentSourceId = null;
+    throw e; // 重新抛出，让调用方感知失败
   }
 }
 
@@ -212,6 +215,7 @@ async function openLyricsSwitchModal(song) {
   list.innerHTML = lyricsCandidates.map((c, i) => {
     const isCurrent = c.id === lyricsCurrentSourceId;
     return `<div class="cand-row ${isCurrent ? 'live' : ''}" data-i="${i}">
+      <span class="cand-rank">${i + 1}</span>
       <div class="ct">
         <div class="title">${esc(c.name)}</div>
         <div class="meta">歌手：${esc(c.artist || '未知')} ${isCurrent ? '（当前）' : ''}</div>
@@ -230,9 +234,13 @@ async function openLyricsSwitchModal(song) {
       const c = lyricsCandidates[Number(row.dataset.i)];
       modal.classList.remove('show');
       restoreTitle();
-      if (song.song_mid) saveSourceCache(song.song_mid, c.id);
-      await doLoadLyrics(song, c.id);
-      toast(`已切换到：${c.name}`);
+      try {
+        await doLoadLyrics(song, c.id);
+        if (song.song_mid) saveSourceCache(song.song_mid, c.id);
+        toast(`已切换到：${c.name}`);
+      } catch {
+        toast('该歌词源暂无内容，请换一个试试');
+      }
     };
   });
 

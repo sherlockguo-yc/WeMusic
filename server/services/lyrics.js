@@ -11,6 +11,24 @@
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const H  = { 'User-Agent': UA, Referer: 'https://music.163.com/' };
 
+// 内存歌词缓存：key = name__singer → { lines, candidates, sourceId, ts }
+const _lyricCache = new Map();
+const LYRIC_TTL = 24 * 3600_000; // 24h
+export function getLyricCache(key) {
+  const v = _lyricCache.get(key);
+  if (v && Date.now() - v.ts < LYRIC_TTL) return v;
+  _lyricCache.delete(key);
+  return null;
+}
+export function setLyricCache(key, data) {
+  _lyricCache.set(key, { ...data, ts: Date.now() });
+  // 最多缓存 200 首，超过清掉一半
+  if (_lyricCache.size > 200) {
+    const entries = [..._lyricCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    for (let i = 0; i < 100; i++) _lyricCache.delete(entries[i][0]);
+  }
+}
+
 /** 去掉括号内的修饰词，如 (Live)、（粤语版）、[Demo] */
 function stripBrackets(name) {
   return name
@@ -105,23 +123,22 @@ export async function fetchLyrics(name, singer = '') {
   add(name);
   if (nameClean !== name) add(nameClean);
 
+  // 并行发起所有搜索，按优先级顺序取第一个有效结果
+  const results = await Promise.allSettled(queries.map((q) => neSearchSongs(q)));
   let best = null;
 
-  for (const q of queries) {
-    const songs = await neSearchSongs(q);
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue;
+    const songs = r.value;
     if (!songs.length) continue;
 
-    // 先尝试精确歌名匹配
     const candidate = pickBest(songs, name, singerFirst);
-    const isGood = candidate && candidate.name?.toLowerCase() === name.toLowerCase();
-    if (isGood) { best = candidate; break; }
+    if (candidate && candidate.name?.toLowerCase() === name.toLowerCase()) { best = candidate; break; }
 
-    // 若精确歌名未匹配，尝试去括号歌名
     if (nameClean !== name) {
       const alt = pickBest(songs, nameClean, singerFirst);
       if (alt && alt.name?.toLowerCase() === nameClean.toLowerCase()) { best = alt; break; }
     }
-    // 兜底：接受第一个非精确匹配
     if (candidate) { best = candidate; break; }
   }
 
@@ -151,12 +168,15 @@ export async function searchLyricsCandidates(name, singer = '') {
   addQ(name);
   if (nameClean !== name) addQ(nameClean);
 
+  // 并行发起所有搜索
+  const results = await Promise.allSettled(queries.map((q) => neSearchSongs(q)));
+
   const idSeen = new Set();
   const candidates = [];
 
-  for (const q of queries) {
-    const songs = await neSearchSongs(q);
-    for (const s of songs) {
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue;
+    for (const s of r.value) {
       const sid = s.id;
       if (!sid || idSeen.has(sid)) continue;
       idSeen.add(sid);
@@ -170,30 +190,13 @@ export async function searchLyricsCandidates(name, singer = '') {
       if (hasSinger) quality += 2;
       if (s.name?.toLowerCase().includes(name.toLowerCase())) quality += 1;
 
-      candidates.push({
-        id: s.id,
-        name: s.name,
-        artist: artistText,
-        quality,
-      });
+      candidates.push({ id: s.id, name: s.name, artist: artistText, quality });
     }
   }
 
-  // 按 quality 降序排列，取足够多的候选（后续过滤无歌词的再保留 12 个）
   candidates.sort((a, b) => b.quality - a.quality);
-  const pool = candidates.slice(0, 30);
-
-  // 并发拉取歌词，过滤掉歌词为空的候选
-  const valid = [];
-  const fetchTasks = pool.map(async (c) => {
-    const raw = await neFetchLyric(c.id);
-    if (raw.trim()) valid.push(c);
-  });
-  await Promise.allSettled(fetchTasks);
-
-  // 按原始 quality 排序后返回前 12 个
-  valid.sort((a, b) => b.quality - a.quality);
-  return valid.slice(0, 12);
+  // 直接返回 top 12，歌词验证延迟到用户切换时再做
+  return candidates.slice(0, 12);
 }
 
 /** 按 网易云 songId 直接拉取歌词 */

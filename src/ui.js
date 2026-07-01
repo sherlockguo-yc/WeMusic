@@ -80,6 +80,7 @@ export async function openCandModal() {
   }
   list.innerHTML = candidates.map((c, i) => `
     <div class="cand-row ${c.live ? 'live' : ''}" data-i="${i}">
+      <span class="cand-rank">${i + 1}</span>
       <div class="ct">
         <div class="title">${esc(c.title)}</div>
         <div class="meta">UP：${esc(c.author)} · ${fmtPlay(c.play)} 播放 · ${fmtDur(c.duration)}</div>

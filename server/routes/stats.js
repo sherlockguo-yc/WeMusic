@@ -4,7 +4,7 @@
 import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
-import { fetchLyrics, searchLyricsCandidates, fetchLyricsById } from '../services/lyrics.js';
+import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache } from '../services/lyrics.js';
 import { getTopList, searchSongs } from '../services/qqmusic.js';
 
 const router = express.Router();
@@ -426,23 +426,28 @@ router.get('/lyrics', async (req, res) => {
   const { name, singer, sourceId } = req.query;
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
   try {
-    // 1. 若指定了 sourceId，直接按该 id 拉取
+    // 1. 若指定了 sourceId，直接按该 id 拉取（不缓存，换源操作）
     if (sourceId) {
       const result = await fetchLyricsById(Number(sourceId));
       return res.json({ lines: result.lines, sourceId: Number(sourceId) });
     }
 
-    // 2. 拉取主结果 + 候选列表
+    // 2. 检查缓存（同名同歌手 24h 内复用）
+    const cacheKey = `${name}__${singer || ''}`;
+    const cached = getLyricCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    // 3. 拉取主结果 + 候选列表
     const [main, candidates] = await Promise.all([
       fetchLyrics(name, singer || '').catch(() => null),
       searchLyricsCandidates(name, singer || ''),
     ]);
 
-    if (main) {
-      res.json({ ...main, candidates });
-    } else {
-      res.json({ lines: [], candidates, error: '未找到匹配歌词' });
-    }
+    const result = main
+      ? { ...main, candidates }
+      : { lines: [], candidates, error: '未找到匹配歌词' };
+    setLyricCache(cacheKey, result);
+    res.json(result);
   } catch (e) {
     res.status(404).json({ error: e.message, candidates: [] });
   }
