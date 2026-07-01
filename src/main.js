@@ -84,27 +84,34 @@ async function restoreView(view, data) {
   else if (view === 'stats')       import('./stats.js').then(({ openStats }) => openStats());
   else if (view === 'savedAlbums') import('./stats.js').then(({ openSavedAlbums }) => openSavedAlbums());
   else if (view === 'likes')   import('./stats.js').then(({ openLikesPage }) => openLikesPage());
+  else if (view === 'playlist' && data?.id) import('./playlist-ui.js').then(({ openPlaylist }) => openPlaylist(data.id));
 }
 
-window.addEventListener('popstate', (e) => {
-  if (!e.state?.view) return;
-  restoreView(e.state.view, e.state.data);
-  updateNavArrows();
-});
 
 // 顶栏前进后退按钮
 function updateNavArrows() {
+  // 后退：history.length > 1（有历史可退）
   document.getElementById('navBack').disabled = history.length <= 1;
-  document.getElementById('navFwd').disabled = !(history.state && history.state.view);
+  // 前进：始终可用，让浏览器自行判断（history.forward 无前进条目时静默无效）
+  document.getElementById('navFwd').disabled = false;
 }
 document.getElementById('navBack').onclick = () => history.back();
 document.getElementById('navFwd').onclick = () => history.forward();
 // 初始状态及每次 pushState 后更新
 const _origPush = history.pushState.bind(history);
 history.pushState = function(state, title, url) {
+  console.log('[nav] pushState:', state?.view, history.length);
   _origPush(state, title, url);
   updateNavArrows();
 };
+// 监控 popstate
+window.addEventListener('popstate', (e) => {
+  console.log('[nav] popstate:', e.state?.view, 'length:', history.length, 'current:', history.state?.view);
+  if (!e.state?.view) return;
+  restoreView(e.state.view, e.state.data);
+  updateNavArrows();
+});
+// 移除旧的 popstate 监听器（上面已注册）— 但下面还有一个重复的，需要合并
 updateNavArrows();
 
 // 应用初始化

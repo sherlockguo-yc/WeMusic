@@ -194,9 +194,8 @@ a { color: inherit; text-decoration: none; }
 }
 .playlist-item:hover { background: var(--bg-soft); color: var(--text); }
 .playlist-item.active { background: var(--bg-card); color: var(--text); }
-.pl-main { flex: 1; min-width: 0; overflow: hidden; }
-.pl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pl-desc { font-size: 10.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.pl-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-desc-detail { font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.6; max-width: 520px; }
 .pl-ops { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
 .playlist-item .count { font-size: 11px; opacity: 0.7; }
 .playlist-item .edit { display: none; }
@@ -261,11 +260,12 @@ a { color: inherit; text-decoration: none; }
 .album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
 .album-card {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 12px; cursor: pointer;
+  padding: 12px; cursor: pointer; transition: border-color .15s, transform .15s;
+  display: flex; flex-direction: column;
 }
-.album-card:hover { border-color: var(--accent); }
+.album-card:hover { border-color: var(--accent); transform: translateY(-2px); }
 .album-card .cover {
-  width: 100%; aspect-ratio: 1; border-radius: 8px; margin-bottom: 8px;
+  width: 100%; aspect-ratio: 1; border-radius: 10px; margin-bottom: 10px;
   background: linear-gradient(135deg, #2a3340, #1a1d26);
   display: flex; align-items: center; justify-content: center; font-size: 30px; color: #4a5160;
   overflow: hidden; position: relative;
@@ -274,16 +274,21 @@ a { color: inherit; text-decoration: none; }
 .cover-img {
   width: 100%; height: 100%; object-fit: cover; display: block;
 }
-.album-card .a-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.album-card .a-singer { color: var(--text-dim); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.album-card .a-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
-.album-card .a-play-all, .album-card .a-del-album {
-  margin-top: 6px; width: 100%; font-size: 11px; padding: 5px 0;
-  border-radius: 6px; cursor: pointer; transition: background .15s;
+.album-card .a-name { font-weight: 700; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+.album-card .a-singer { color: var(--text-dim); font-size: 11.5px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.album-card .a-desc { color: var(--text-dim); font-size: 11px; margin-top: 6px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.album-card .a-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: auto; padding-top: 8px; }
+.album-card-tag { font-size: 10.5px; padding: 2px 8px; border-radius: 8px; background: var(--bg-soft); color: var(--text-dim); white-space: nowrap; }
+.album-card .a-btns { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+.album-card .a-play-all { flex: 1; font-size: 11px; padding: 5px 0; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.album-card .a-del-album {
+  flex: 0 0 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim); cursor: pointer;
+  transition: border-color .15s, color .15s; padding: 0;
 }
-.album-card .a-del-album { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
 .album-card .a-del-album:hover { border-color: var(--danger); color: var(--danger); }
 .album-card .a-time { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
+.album-card .cover .ph { color: var(--text-dim); opacity: .5; }
 
 /* 专辑详情页操作按钮行 */
 .album-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1215,6 +1220,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px;
 }
 .disc-tab {
+  display: inline-flex; align-items: center; gap: 5px;
   padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
   background: var(--bg-card); border: 1px solid var(--border);
   color: var(--text-dim); cursor: pointer; transition: all .2s;
@@ -1232,7 +1238,9 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 14px 16px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px;
 }
-.rec-title { font-size: 14px; font-weight: 700; }
+.rec-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.rec-help { color: var(--text-dim); cursor: default; display: inline-flex; align-items: center; }
+.rec-help:hover { color: var(--accent); }
 .rec-artists { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--text-dim); }
 .rec-artist-tag {
   background: rgba(42,183,88,.12); border: 1px solid rgba(42,183,88,.3);

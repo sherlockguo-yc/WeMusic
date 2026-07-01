@@ -44,8 +44,8 @@ function renderSuggest() {
   box.innerHTML =
     `<div class="ss-head"><span>搜索历史</span><span class="ss-clear" id="ssClear">清空</span></div>` +
     list.map((k) => `<div class="ss-row" data-k="${esc(k)}">
-      <span class="ss-icon">🕘</span><span class="ss-key">${esc(k)}</span>
-      <span class="ss-del" data-del="${esc(k)}" title="删除">✕</span>
+      <span class="ss-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span><span class="ss-key">${esc(k)}</span>
+      <span class="ss-del" data-del="${esc(k)}" title="删除"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
     </div>`).join('');
   box.classList.add('show');
   $('ssClear').onclick = () => { clearSearchHistory(); box.classList.remove('show'); };
@@ -117,7 +117,7 @@ function appendLoadMore(main, container, songBuf, singer, total) {
         const i = prevLen + j;
         const inPls = songInPlaylists(s);
         const bookmark = inPls.size > 0
-          ? `<span class="in-pl-mark" data-tip="已在 ${inPls.size} 个歌单中">🔖</span>`
+          ? `<span class="in-pl-mark" data-tip="已在 ${inPls.size} 个歌单中"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg></span>`
           : '<span class="in-pl-placeholder"></span>';
         const div = document.createElement('div');
         div.className = 'song-row'; div.dataset.i = String(i);
@@ -201,7 +201,7 @@ export async function openArtist(mid, name) {
     const grid = $('artistAlbums');
     grid.innerHTML = data.albums.map((a) => `
       <div class="album-card" data-mid="${esc(a.album_mid)}" data-name="${esc(a.name)}">
-        <div class="cover">${a.album_mid ? `<img class="cover-img" src="${albumCover(a.album_mid)}" loading="lazy" onerror="this.remove()" />` : '💿'}</div>
+        <div class="cover">${a.album_mid ? `<img class="cover-img" src="${albumCover(a.album_mid)}" loading="lazy" onerror="this.remove()" />` : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>'}</div>
         <div class="a-name">${esc(a.name)}</div>
         <div class="a-time">${esc(a.pub_time || '')}</div>
       </div>`).join('') || '<div class="empty">暂无专辑</div>';
@@ -245,7 +245,7 @@ export async function openAlbum(mid, name) {
     try { const chk = await api(`/stats/albums/${encodeURIComponent(mid)}/check`); isSaved = chk.saved; } catch { /* ignore */ }
 
     const saveBtnHtml = isSaved
-      ? `<button class="btn sm" id="albumSaveBtn">❤️ 已收藏</button>`
+      ? `<button class="btn sm" id="albumSaveBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 已收藏</button>`
       : `<button class="btn sm" id="albumSaveBtn">＋ 收藏专辑</button>`;
 
     const coverUrl = albumCover(mid, 500);
@@ -300,7 +300,7 @@ export async function openAlbum(mid, name) {
           method: 'POST',
           body: { name: data.name, singer, desc: data.desc || '', company: data.company || '', genre: data.genre || '', lan: data.lan || '', aDate: data.aDate || '' },
         });
-        btn.textContent = '❤️ 已收藏'; isSaved = true;
+        btn.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 已收藏'; isSaved = true;
         toast('专辑已收藏 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>');
       }
     };

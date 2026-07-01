@@ -15,10 +15,10 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
   const items = [
     { label: '＋ 添加到歌单', act: 'add' },
     { sep: true },
-    { label: '🔗 复制 Bilibili 链接', act: 'copy', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
-    { label: '🔍 在 Bilibili 搜索此歌', act: 'search' },
+    { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 复制 Bilibili 链接', act: 'copy', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
+    { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> 在 Bilibili 搜索此歌', act: 'search' },
   ];
-  if (inPlaylist) items.push({ sep: true }, { label: '✕ 从歌单移除', act: 'del', danger: true });
+  if (inPlaylist) items.push({ sep: true }, { label: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 从歌单移除', act: 'del', danger: true });
   menu.innerHTML = items.map((it) =>
     it.sep ? '<div class="ctx-sep"></div>'
     : `<div class="ctx-item${it.danger ? ' danger' : ''}${it.dim ? ' dim' : ''}" data-act="${it.act}"${it.dimTip ? ` data-dim-tip="${esc(it.dimTip)}"` : ''}>${it.label}</div>`
@@ -90,7 +90,7 @@ export async function openCandModal() {
         <div class="meta">UP：${esc(c.author)} · ${fmtPlay(c.play)} 播放 · ${fmtDur(c.duration)}</div>
       </div>
       <span class="tag ${c.live ? 'live' : ''}${isCurrent ? ' current' : ''}">${isCurrent ? '当前' : (c.live ? '现场' : '推荐')}</span>
-      <button class="cand-block-btn" title="屏蔽此视频源，以后不再出现">✕</button>
+      <button class="cand-block-btn" title="屏蔽此视频源，以后不再出现"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>`;
   }).join('');
   list.querySelectorAll('.cand-row').forEach((row) => {
@@ -165,7 +165,7 @@ export function updateLikesCount() {
   const el = document.getElementById('navLikes');
   if (el) {
     const n = state.likedMids.size;
-    el.innerHTML = `❤ 我喜欢的${n ? `<span class="side-count">${n}</span>` : ''}`;
+    el.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 我喜欢的${n ? `<span class="side-count">${n}</span>` : ''}`;
   }
 }
 
@@ -174,7 +174,7 @@ export async function updateAlbumCount() {
   if (!el) return;
   try {
     const { albums } = await api('/stats/albums');
-    el.innerHTML = `📀 我的专辑${albums.length ? `<span class="side-count">${albums.length}</span>` : ''}`;
+    el.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 我的专辑${albums.length ? `<span class="side-count">${albums.length}</span>` : ''}`;
   } catch { /* ignore */ }
 }
 

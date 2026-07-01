@@ -30,7 +30,7 @@ function getTip() {
   if (!el) {
     el = document.createElement('div');
     el.id = TIP_ID;
-    el.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap;max-width:200px';
+    el.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap';
     document.body.appendChild(el);
   }
   return el;
@@ -63,12 +63,12 @@ function attachTip(el, tipHtml) {
 
 function timeLabel(h) {
   if (h == null) return null;
-  if (h >= 5 && h < 9)  return { label: '清晨', icon: '🌅' };
-  if (h >= 9 && h < 12) return { label: '上午', icon: '☀️' };
-  if (h >= 12 && h < 14) return { label: '午间', icon: '🌤️' };
-  if (h >= 14 && h < 18) return { label: '午后', icon: '🌇' };
-  if (h >= 18 && h < 22) return { label: '晚间', icon: '🌆' };
-  return { label: '深夜', icon: '🌙' };
+  if (h >= 5 && h < 9)  return { label: '清晨', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>' };
+  if (h >= 9 && h < 12) return { label: '上午', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>' };
+  if (h >= 12 && h < 14) return { label: '午间', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M12 7a5 5 0 0 0-4.546 2.914A5 5 0 1 0 12 17a5 5 0 0 0 4.546-2.086A5 5 0 0 0 12 7Z"/></svg>' };
+  if (h >= 14 && h < 18) return { label: '午后', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>' };
+  if (h >= 18 && h < 22) return { label: '晚间', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>' };
+  return { label: '深夜', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>' };
 }
 
 // 音乐人设标签（正向、音乐品味导向），week/month 复用同一套规则，仅阈值按周期缩放
@@ -78,12 +78,12 @@ function computePersona(data, avgSec, compHighPct, periodWord) {
   const topArtistShare = topArtist && data.period.plays ? topArtist.play_count / data.period.plays : 0;
   const artistName = topArtist?.singer || '';
   if (topArtistShare > 0.4) return { icon: '⭐', label: `${artistName} 铁粉`, desc: `${periodWord}最爱 ${artistName}，占了超四成播放` };
-  if (data.uniqueArtists > 30 * scale) return { icon: '🗺️', label: '音乐探险家', desc: `${periodWord}邂逅了 ${data.uniqueArtists} 位歌手` };
-  if (data.newSongs > 15 * scale) return { icon: '🔭', label: '新曲猎人', desc: `${periodWord}新发现了 ${data.newSongs} 首歌` };
-  if (avgSec > 240) return { icon: '💿', label: '深度聆听者', desc: '平均每首歌聆听超过 4 分钟' };
-  if (compHighPct > 55) return { icon: '🎼', label: '沉浸鉴赏家', desc: '超过半数的歌都完整听完' };
-  if (data.uniqueArtists > 15 * scale) return { icon: '🌊', label: '多元品味家', desc: '风格广泛，不设边界' };
-  return { icon: '🎶', label: '自由旋律人', desc: '按自己的节奏享受音乐' };
+  if (data.uniqueArtists > 30 * scale) return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="3" y2="18"/></svg>', label: '音乐探险家', desc: `${periodWord}邂逅了 ${data.uniqueArtists} 位歌手` };
+  if (data.newSongs > 15 * scale) return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6"/><path d="M17 3a4 4 0 0 1 0 8h-3.5"/><path d="M3 18v-2a4 4 0 0 1 4-4h2.5"/><circle cx="13" cy="13" r="2.5"/></svg>', label: '新曲猎人', desc: `${periodWord}新发现了 ${data.newSongs} 首歌` };
+  if (avgSec > 240) return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>', label: '深度聆听者', desc: '平均每首歌聆听超过 4 分钟' };
+  if (compHighPct > 55) return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21V5a2 2 0 0 1 2-2h6.5L20 6.5a2 2 0 0 1 0 2.83L12 17H10a2 2 0 0 0-2 2v2"/><circle cx="14" cy="18" r="2"/></svg>', label: '沉浸鉴赏家', desc: '超过半数的歌都完整听完' };
+  if (data.uniqueArtists > 15 * scale) return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.5 0 2.5 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.5 0 2.5 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.5 0 2.5 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></svg>', label: '多元品味家', desc: '风格广泛，不设边界' };
+  return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>', label: '自由旋律人', desc: '按自己的节奏享受音乐' };
 }
 
 // 个性化听歌小结（时段 + 最爱歌手），同时返回 html（应用内展示）和 plain（海报纯文本）
@@ -607,7 +607,7 @@ async function loadDiscoverTab(tab) {
             <div style="font-size:40px;margin-bottom:16px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
             <div>多听一些歌曲后，这里会根据你的喜好为你推荐</div>
             <div style="color:var(--text-dim);font-size:13px;margin-top:8px">
-              推荐基于：❤️ 红心 · 加入歌单 · 完播率 · 重复播放次数
+              推荐基于：<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 红心 · 加入歌单 · 完播率 · 重复播放次数
             </div>
           </div>`;
         return;
@@ -623,15 +623,19 @@ async function loadDiscoverTab(tab) {
         ).join('');
         headerHtml = `
           <div class="rec-header">
-            <div class="rec-title">根据你的兴趣推荐</div>
+            <div class="rec-title">根据你的兴趣推荐
+              <span class="rec-help" data-tip-text="推荐综合了：喜欢 · 歌单收藏 · 完播率 · 重复收听 · 同风格扩散"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></span>
+            </div>
             <div class="rec-artists">偏好：${artistTags}</div>
-            <div class="rec-hint">推荐综合了：❤️ 喜欢 · 歌单收藏 · 完播率 · 重复收听 · 同风格扩散</div>
           </div>`;
       } else if (data.artists?.length) {
         headerHtml = `<div class="discover-based-on">基于你喜欢的：${data.artists.slice(0, 4).map(esc).join(' · ')}</div>`;
       }
 
       container.innerHTML = `${headerHtml}<div class="song-list" id="discoverList"></div>`;
+      // 推荐说明 tooltip（立即出现，不走 title 属性延迟）
+      const recHelp = container.querySelector('.rec-help');
+      if (recHelp) attachTip(recHelp);
       renderSongList($('discoverList'), data.songs, { showAdd: true });
     } else {
       const topId = tab.replace('chart-', '');
@@ -772,14 +776,20 @@ export async function openSavedAlbums() {
     }
     const grid = albums.map((a) => {
       const cover = albumCover(a.album_mid, 500);
-      const metaTags = [a.genre, a.lan, a.company, a.aDate].filter(Boolean).map((t) => `<span class="album-meta-tag">${esc(t)}</span>`).join('');
-      return `<div class="album-card" data-mid="${esc(a.album_mid)}" data-name="${esc(a.name)}">
-        <div class="cover">${cover ? `<img src="${cover}" loading="lazy" onerror="this.style.visibility='hidden'" />` : '<div class="ph">💿</div>'}</div>
-        <div class="a-name">${esc(a.name)}</div>
+      const tags = [a.genre, a.lan].filter(Boolean);
+      const meta = [a.company, a.aDate].filter(Boolean);
+      const tagHtml = [...tags, ...meta].map((t) => `<span class="album-card-tag">${esc(t)}</span>`).join('');
+      const desc = a.desc ? `<div class="a-desc">${esc(a.desc.slice(0, 60))}${a.desc.length > 60 ? '…' : ''}</div>` : '';
+      return `<div class="album-card saved" data-mid="${esc(a.album_mid)}" data-name="${esc(a.name)}">
+        <div class="cover">${cover ? `<img src="${cover}" loading="lazy" onerror="this.style.visibility='hidden'" />` : '<div class="ph"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>'}</div>
+        <div class="a-name" title="${esc(a.name)}">${esc(a.name)}</div>
         <div class="a-singer">${esc(a.singer || '')}</div>
-        <div class="a-tags">${metaTags || ''}</div>
-        <button class="btn sm green a-play-all" data-mid="${esc(a.album_mid)}">▶ 播放</button>
-        <button class="btn sm a-del-album" data-mid="${esc(a.album_mid)}">移除</button>
+        ${desc}
+        ${tagHtml ? `<div class="a-tags">${tagHtml}</div>` : ''}
+        <div class="a-btns">
+          <button class="btn sm green a-play-all" data-mid="${esc(a.album_mid)}"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg> 播放</button>
+          <button class="a-del-album" data-mid="${esc(a.album_mid)}" title="取消收藏"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
       </div>`;
     }).join('');
     main.innerHTML = `<div class="view-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 我的专辑（${albums.length}）</div><div class="album-grid" id="savedAlbumGrid">${grid}</div>`;
@@ -792,18 +802,19 @@ export async function openSavedAlbums() {
       });
       el.style.cursor = 'pointer';
     });
-    // 播放整张
+    // 播放
     $('savedAlbumGrid').querySelectorAll('.a-play-all').forEach((btn) => {
       btn.onclick = async (e) => {
         e.stopPropagation();
         const mid = btn.dataset.mid;
-        btn.textContent = '加载中…'; btn.disabled = true;
+        const origHTML = btn.innerHTML;
+        btn.innerHTML = '<span>加载中…</span>'; btn.disabled = true;
         try {
           const data = await api(`/music/album?mid=${encodeURIComponent(mid)}`);
           if (!data.songs?.length) { toast('这张专辑暂无歌曲'); return; }
           import('./player.js').then(({ playFromList }) => playFromList(data.songs, 0, 'album', null));
         } catch (err) { toast('加载失败：' + err.message); }
-        finally { btn.textContent = '▶ 播放'; btn.disabled = false; }
+        finally { btn.innerHTML = origHTML; btn.disabled = false; }
       };
     });
     // 取消收藏

@@ -1,5 +1,9 @@
 // ---------------- 歌单侧边栏 + 歌曲列表渲染 + 导入导出 ----------------
 import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml } from './utils.js';
+
+const colHeader = `<div class="song-row-head">
+  <span class="h-idx">#</span><span class="h-name">歌名</span><span class="h-singer">歌手</span><span class="h-album">专辑</span><span class="h-bookmark"></span><span class="h-dur">时长</span><span class="h-ops"></span>
+</div>`;
 import { api } from './api.js';
 import { state } from './state.js';
 
@@ -47,7 +51,7 @@ export function refreshAllBookmarks() {
         const dur = row.querySelector('.dur');
         if (showBadge && !existing) {
           const mark = document.createElement('span');
-          mark.className = 'in-pl-mark'; mark.dataset.tip = `已在 ${inPls.size} 个歌单中`; mark.textContent = '🔖';
+          mark.className = 'in-pl-mark'; mark.dataset.tip = `已在 ${inPls.size} 个歌单中`; mark.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>';
           if (placeholder) placeholder.replaceWith(mark);
           else if (dur) dur.before(mark);
         } else if (!showBadge && existing) {
@@ -91,11 +95,8 @@ export function renderSidebar() {
   const box = $('playlistList');
   box.innerHTML = state.playlists.map((p) => `
     <div class="playlist-item ${p.id === state.targetPlaylistId ? 'active' : ''}" data-id="${p.id}" draggable="true">
-      <div class="pl-main">
-        <span class="pl-name">${esc(p.name)}</span>
-        ${p.desc ? `<span class="pl-desc">${esc(p.desc)}</span>` : ''}
-      </div>
-      <span class="pl-ops"><span class="count">${p.count}</span> <span class="edit" data-edit="${p.id}" title="编辑歌单"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span> <span class="del" data-del="${p.id}">✕</span></span>
+      <span class="pl-name">${esc(p.name)}</span>
+      <span class="pl-ops"><span class="count">${p.count}</span> <span class="edit" data-edit="${p.id}" title="编辑歌单"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span> <span class="del" data-del="${p.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></span>
     </div>`).join('');
 
   // 拖拽排序
@@ -132,9 +133,9 @@ export function renderSidebar() {
       const menu = document.getElementById('ctxMenu');
       if (!menu) return;
       menu.innerHTML = `
-        <div class="ctx-item" data-act="edit">✎ 编辑歌单</div>
+        <div class="ctx-item" data-act="edit"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> 编辑歌单</div>
         <div class="ctx-sep"></div>
-        <div class="ctx-item danger" data-act="del">✕ 删除歌单</div>`;
+        <div class="ctx-item danger" data-act="del"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 删除歌单</div>`;
       menu.querySelectorAll('.ctx-item').forEach((it) => {
         it.onclick = async (ev) => {
           ev.stopPropagation();
@@ -176,7 +177,7 @@ export function renderSidebar() {
 export function listToolsHtml() {
   return `<div class="list-tools">
     <button class="btn green sm" data-tool="playall">▶ 播放全部</button>
-    <button class="btn sm" data-tool="shuffle">🔀 随机播放</button>
+    <button class="btn sm" data-tool="shuffle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/></svg> 随机播放</button>
     <input class="filter-input" data-tool="filter" placeholder="在列表中筛选…" />
   </div>`;
 }
@@ -222,7 +223,7 @@ export function renderSongList(container, songs, opts = {}) {
   container.innerHTML = songs.map((s, i) => {
     const inPls = songInPlaylists(s);
     const bookmark = (!showDelete && inPls.size > 0)
-      ? `<span class="in-pl-mark" data-tip="已在 ${inPls.size} 个歌单中">🔖</span>`
+      ? `<span class="in-pl-mark" data-tip="已在 ${inPls.size} 个歌单中"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg></span>`
       : '<span class="in-pl-placeholder"></span>';
     const isLiked = s.song_mid ? (state.likedMids && state.likedMids.has(s.song_mid)) : false;
     const heartSVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
@@ -242,7 +243,7 @@ export function renderSongList(container, songs, opts = {}) {
       <span class="ops">
         ${likeBtns}
         ${showAdd ? '<button class="icon-btn" title="添加到歌单" data-act="add">＋</button>' : ''}
-        ${showDelete ? '<button class="icon-btn" title="从歌单移除" data-act="del">✕</button>' : ''}
+        ${showDelete ? '<button class="icon-btn" title="从歌单移除" data-act="del"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' : ''}
       </span>
     </div>`;
   }).join('');
@@ -305,7 +306,7 @@ function openAddModal() {
     const contained = pendingKeys.filter((k) => { const pls = state.songIndex.get(k); return pls && pls.has(p.id); }).length;
     const all = pendingKeys.length > 0 && contained === pendingKeys.length;
     const some = contained > 0 && !all;
-    const badge = all ? '<span class="add-pl-check all" title="全部已在此歌单">✓</span>'
+    const badge = all ? '<span class="add-pl-check all" title="全部已在此歌单"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'
       : some ? `<span class="add-pl-check some" title="${contained}/${pendingKeys.length} 首已在此歌单">•</span>` : '';
     return `<div class="add-pl-row" data-id="${p.id}"><span>${esc(p.name)}</span><span class="add-pl-meta">${badge}<span class="count">${p.count} 首</span></span></div>`;
   }).join('') || '<div class="empty">还没有歌单，点下方新建</div>';
@@ -359,6 +360,7 @@ export async function deleteSong(playlistId, songId, row) {
 // ---- 歌单详情 ----
 export async function openPlaylist(id) {
   state.view = 'playlist';
+  import('./main.js').then(({ navPush }) => navPush('playlist', { id }));
   const main = $('main');
   main.innerHTML = `<div class="loading">加载歌单...</div>`;
   try {
@@ -373,12 +375,14 @@ export async function openPlaylist(id) {
             <button class="pl-rename-btn" id="plRenameBtn" title="编辑歌单"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
           </div>
           <div class="view-sub">${data.songs.length} 首 · 总时长 ${fmtTotal(totalSec)}</div>
+          ${data.playlist.desc ? `<div class="pl-desc-detail">${esc(data.playlist.desc)}</div>` : ''}
           <div class="section-head" style="margin:12px 0 0">
             <button class="btn sm" id="exportPlBtn">⤓ 导出歌单</button>
           </div>
         </div>
       </div>
       ${data.songs.length ? listToolsHtml() : ''}
+      ${colHeader}
       <div class="song-list" id="plSongs"></div>`;
     $('exportPlBtn').onclick = () => exportPlaylist(id, data.playlist.name);
     $('plRenameBtn').onclick = async () => {

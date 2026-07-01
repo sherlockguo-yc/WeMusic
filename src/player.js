@@ -419,6 +419,15 @@ export async function playCurrent() {
 const bgAudio = document.getElementById('audio');
 let _bgBvid = null;         // 当前 bgAudio 加载的 bvid（preload 或正在播）
 let _bgPlaying = false;     // bgAudio 当前是否在有声播放（非 preload）
+
+// bgAudio ended 事件：后台切歌最可靠的通知（不被 Chrome 节流/冻结影响）
+bgAudio.addEventListener('ended', () => {
+  if (_bgPlaying) {
+    console.log('[bgAudio] ended — auto advance');
+    _bgPlaying = false;
+    autoAdvance();
+  }
+});
 let _pendingMount = null;   // { bvid, title }：回前台时需要挂载的 iframe
 let _bgVolume = 0.8;        // WeMusic 自维护音量（0~1），持久化
 
