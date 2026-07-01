@@ -156,7 +156,33 @@ docker run -d -p 5174:5174 -v ~/wemusic-data:/app/data --name wemusic sherlockgu
 
 访问 `http://localhost:5174`，数据持久化在 `~/wemusic-data`。
 
-### 源码运行
+### 手机部署（Android + Termux · 一键脚本）
+
+> 手机自己跑服务，自己访问自己。不依赖电脑、不上传数据。
+
+**① 安装 Termux**
+
+从 [F-Droid](https://f-droid.org/packages/com.termux/) 下载安装（**不用 Google Play 版，已停更**）。
+
+**② 复制粘贴下面这一行**（打开 Termux 后长按粘贴，回车）：
+
+```bash
+pkg install wget -y && wget -qO- https://raw.githubusercontent.com/sherlockguo/WeMusic/master/setup.sh | bash
+```
+
+等待几分钟（首次安装依赖），看到 `✅ 安装完成！` 即可。
+
+**③ 启动 + 安装到桌面**
+
+```bash
+cd ~/WeMusic && nohup npm start &
+```
+
+手机浏览器打开 `http://localhost:5174` → Chrome 菜单 → **「添加到主屏幕」**。
+
+以后桌面点 WeMusic 图标就能用（Termux 需要在后台保持运行）。
+
+### 源码运行（电脑）
 
 ```bash
 npm install
