@@ -130,30 +130,36 @@ function scoreVideo(v, name, singer, expectDur) {
 // 用于过滤完全不相关的视频候选
 function nameSegments(name) {
   if (!name) return [];
-  // 把字符串切成 中文段（连续汉字）/ 拉丁词（连续字母数字）
+  // 把字符串切成 中文段（连续汉字）/ 拉丁词（连续字母数字），括号作为分隔符不保留
   const segs = [];
   let buf = '';
   for (const c of name) {
+    // 括号字符：结束当前 buffer，不并入任何 segment
+    if (/[()（）]/.test(c)) {
+      if (buf.trim()) segs.push(buf.trim());
+      buf = '';
+      continue;
+    }
     if (/[一-龥]/.test(c)) {
-      if (/[a-zA-Z0-9]/.test(buf)) { segs.push(buf); buf = ''; }
+      if (/[a-zA-Z0-9]/.test(buf[buf.length - 1] || '')) { segs.push(buf.trim()); buf = ''; }
       buf += c;
     } else {
-      if (/[一-龥]/.test(buf)) { segs.push(buf); buf = ''; }
+      if (/[一-龥]/.test(buf[buf.length - 1] || '')) { segs.push(buf.trim()); buf = ''; }
       buf += c;
     }
   }
-  if (buf) segs.push(buf);
+  if (buf.trim()) segs.push(buf.trim());
   // 中文段 → 拆成 2-gram；拉丁/数字段 → 整段（剔除过短的）
   const out = [];
   for (const s of segs) {
-    if (/[一-龥]/.test(s)) {
+    if (/[一-龥]/.test(s[0])) {
       if (s.length >= 2) {
         for (let i = 0; i <= s.length - 2; i++) out.push(s.slice(i, i + 2));
       } else {
-        out.push(s); // 单字也保留
+        out.push(s);
       }
     } else {
-      if (s.length >= 2) out.push(s);
+      if (s.length >= 2) out.push(s.toLowerCase());
     }
   }
   return out;
@@ -201,6 +207,8 @@ router.post('/resolve', authRequired, async (req, res) => {
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
   try {
     const singerFirst = singer.split(/[\/、,&]/)[0].trim();
+    // 提取括号内的中文名（如 "El Hombre (笑面人)" → "笑面人"），作为额外搜索词
+    const bracketCN = (name.match(/[（(]([^)）]+)[）)]/) || [])[1] || '';
     // 分层并行查询：Wave 1 — 全部 query 首页并行打出；Wave 2 — 不够时再补第二页
     const queries = [];
     if (singerFirst) {
@@ -210,6 +218,9 @@ router.post('/resolve', authRequired, async (req, res) => {
     }
     queries.push(name);
     if (singerFirst) queries.push(`${singerFirst} ${name}`);
+    // 括号内中文名 + 歌手作为兜底（如 "笑面人 G.E.M. 邓紫棋"）
+    if (bracketCN && singerFirst) queries.push(`${bracketCN} ${singerFirst}`);
+    if (bracketCN) queries.push(bracketCN);
 
     const seen = new Set();
     let all = [];
@@ -225,8 +236,8 @@ router.post('/resolve', authRequired, async (req, res) => {
       }
     }
 
-    // Wave 2：如果还不够 50 条，所有 query × page 2 并行请求
-    if (all.length < 50) {
+    // Wave 2：如果还不够 80 条，所有 query × page 2 并行请求
+    if (all.length < 80) {
       const w2 = await Promise.allSettled(queries.map((q) => searchVideos(q, 2, 20)));
       for (const r of w2) {
         if (r.status !== 'fulfilled') continue;
@@ -259,7 +270,7 @@ router.post('/resolve', authRequired, async (req, res) => {
     const best = clean.find((v) => !v.live) || clean[0];
     const top5 = clean.slice(0, 5).map((v) => `[${v.score}] ${v.title.slice(0,40)} live:${v.live}`).join(' | ');
     console.log(`[video:resolve] top5 after clean: ${top5}`);
-    res.json({ best, candidates: clean.slice(0, 18) });
+    res.json({ best, candidates: clean.slice(0, 25) });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

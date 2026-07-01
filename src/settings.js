@@ -23,12 +23,45 @@ export function applyFont(key) {
 }
 applyFont(localStorage.getItem('wemusic_font') || 'default');
 
+const PALETTES = {
+  green:  '#2ab758',
+  blue:   '#298bbc',
+  red:    '#bc2929',
+  orange: '#bc6729',
+  yellow: '#bc9729',
+  pink:   '#bc294e',
+  purple: '#5a29bc',
+  teal:   '#29bca4',
+  indigo: '#295abc',
+  gray:   '#7a8590',
+};
+export function applyPalette(key) {
+  key = PALETTES[key] ? key : 'green';
+  const color = PALETTES[key];
+  document.documentElement.style.setProperty('--accent', color);
+  document.querySelectorAll('.palette-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.palette === key);
+  });
+}
+applyPalette(localStorage.getItem('wemusic_palette') || 'green');
+
+export function applyFontSize(size) {
+  size = ['13','14','16','18'].includes(size) ? size : '14';
+  document.documentElement.style.setProperty('--font-size', size + 'px');
+  document.querySelectorAll('.size-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.size === size);
+  });
+}
+applyFontSize(localStorage.getItem('wemusic_font_size') || '14');
+
 export function applyTheme(theme) {
   const effective = theme === 'system' ? (mq.matches ? 'light' : 'dark') : theme;
   document.body.classList.toggle('light', effective === 'light');
   document.querySelectorAll('.theme-opt').forEach((b) => {
     b.classList.toggle('active', b.dataset.theme === theme);
   });
+  // 切换配色方案后重新应用色板强调色
+  applyPalette(localStorage.getItem('wemusic_palette') || 'green');
 }
 mq.addEventListener('change', () => {
   if ((localStorage.getItem('wemusic_theme') || 'light') === 'system') applyTheme('system');
@@ -163,10 +196,17 @@ export function openSettings() {
   const curFont = localStorage.getItem('wemusic_font') || 'default';
   document.querySelectorAll('.font-opt').forEach((b) => {
     b.classList.toggle('active', b.dataset.font === curFont);
-    b.onclick = () => {
-      localStorage.setItem('wemusic_font', b.dataset.font);
-      applyFont(b.dataset.font);
-    };
+    b.onclick = () => { localStorage.setItem('wemusic_font', b.dataset.font); applyFont(b.dataset.font); };
+  });
+  const curFontSize = localStorage.getItem('wemusic_font_size') || '14';
+  document.querySelectorAll('.size-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.size === curFontSize);
+    b.onclick = () => { localStorage.setItem('wemusic_font_size', b.dataset.size); applyFontSize(b.dataset.size); };
+  });
+  const curPalette = localStorage.getItem('wemusic_palette') || 'green';
+  document.querySelectorAll('.palette-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.palette === curPalette);
+    b.onclick = () => { localStorage.setItem('wemusic_palette', b.dataset.palette); applyPalette(b.dataset.palette); };
   });
   updateSleepHint();
 
@@ -219,6 +259,37 @@ export function initSettings() {
   $('settingsClose').onclick = () => $('settingsModal').classList.remove('show');
   $('settingsModal').onclick = (e) => { if (e.target.id === 'settingsModal') $('settingsModal').classList.remove('show'); };
   $('settingsLogout').onclick = () => { Auth.clear(); location.href = '/login.html'; };
+
+  // 打赏弹窗
+  $('donateBtn').onclick = () => { $('donateModal').classList.add('show'); };
+  $('donateClose').onclick = () => $('donateModal').classList.remove('show');
+  $('donateModal').onclick = (e) => { if (e.target.id === 'donateModal') $('donateModal').classList.remove('show'); };
+
+  // 反馈弹窗（顶栏按钮入口）
+  $('feedbackTopBtn').onclick = () => {
+    $('feedbackModal').classList.add('show');
+    $('feedbackContent').value = '';
+    document.querySelectorAll('.feedback-type-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+    feedbackType = 'bug';
+  };
+  $('feedbackCancel').onclick = () => $('feedbackModal').classList.remove('show');
+  $('feedbackModal').onclick = (e) => { if (e.target.id === 'feedbackModal') $('feedbackModal').classList.remove('show'); };
+  let feedbackType = 'bug';
+  document.querySelectorAll('.feedback-type-btn').forEach((b) => {
+    b.onclick = () => {
+      feedbackType = b.dataset.type;
+      document.querySelectorAll('.feedback-type-btn').forEach((x) => x.classList.toggle('active', x === b));
+    };
+  });
+  $('feedbackSubmit').onclick = async () => {
+    const content = $('feedbackContent').value.trim();
+    if (!content) return toast('请输入反馈内容');
+    try {
+      await api('/stats/feedback', { method: 'POST', body: { type: feedbackType, content } });
+      $('feedbackModal').classList.remove('show');
+      toast('感谢你的反馈！');
+    } catch (e) { toast('提交失败：' + e.message); }
+  };
 
   // 侧边栏宽度拖拽
   const app = document.querySelector('.app');

@@ -21,11 +21,10 @@ router.get('/search', async (req, res) => {
   if (!keyword) return res.status(400).json({ error: '请输入搜索关键字' });
   try {
     const result = await searchSongs(keyword);
-    // 命中歌手时，同时获取专辑数量（用于前端显示）
     if (result.singer?.mid) {
       try {
-        const res = await getSingerAlbums(result.singer.mid, 1, 0);
-        result.album_count = res.total;
+        const albRes = await getSingerAlbums(result.singer.mid, 1, 0);
+        result.album_count = albRes.total;
       } catch { result.album_count = 0; }
     }
     res.json(result);

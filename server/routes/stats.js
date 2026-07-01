@@ -736,6 +736,21 @@ router.delete('/albums/:albumMid', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- 用户反馈 ----
+router.post('/feedback', (req, res) => {
+  const { type, content } = req.body || {};
+  if (!content || !content.trim()) return res.status(400).json({ error: '请输入反馈内容' });
+  if (!['bug', 'feature', 'other'].includes(type)) return res.status(400).json({ error: '无效的反馈类型' });
+  db.prepare('INSERT INTO feedback (user_id, type, content, created_at) VALUES (?, ?, ?, ?)')
+    .run(req.user.id, type, content.trim(), Date.now());
+  res.json({ ok: true });
+});
+
+router.get('/feedback', (req, res) => {
+  const rows = db.prepare('SELECT f.*, u.username FROM feedback f JOIN users u ON u.id=f.user_id ORDER BY f.created_at DESC LIMIT 50').all();
+  res.json({ feedback: rows });
+});
+
 // ============================================================
 // 歌词源 / 视频源黑名单（用户可手动屏蔽不想要的候选）
 // ============================================================

@@ -322,6 +322,12 @@ let _selIdx = -1;
 
 export function initSearch() {
   $('searchBtn').onclick = doSearch;
+  // 清除按钮
+  const si = $('searchInput'), sc = $('searchClear');
+  si.addEventListener('input', () => sc.classList.toggle('visible', si.value.length > 0));
+  si.addEventListener('focus', () => sc.classList.toggle('visible', si.value.length > 0));
+  si.addEventListener('blur', () => setTimeout(() => sc.classList.remove('visible'), 150)); // 延迟隐藏防止按钮点击不到
+  sc.addEventListener('click', () => { si.value = ''; sc.classList.remove('visible'); si.focus(); });
   $('searchInput').addEventListener('keydown', (e) => {
     const box = $('searchSuggest');
     const rows = box.querySelectorAll('.ss-row');

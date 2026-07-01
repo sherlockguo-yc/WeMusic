@@ -863,10 +863,15 @@ export async function openSavedAlbums() {
       el.style.cursor = 'pointer';
     });
     // 播放
+    // 保存每个按钮的原始 HTML，避免多次点击后丢失
+    const btnOrigHTML = {};
+    $('savedAlbumGrid').querySelectorAll('.a-play-all').forEach((btn) => {
+      btnOrigHTML[btn.dataset.mid] = btn.innerHTML;
+    });
     const playAlbum = async (mid) => {
-      const origHTML = $(`[data-mid="${CSS.escape(mid)}"].a-play-all`)?.innerHTML;
       const btn = document.querySelector(`.a-play-all[data-mid="${CSS.escape(mid)}"]`);
-      if (btn) { btn.innerHTML = '<span>加载中…</span>'; btn.disabled = true; }
+      const origHTML = btnOrigHTML[mid];
+      if (btn && origHTML) { btn.innerHTML = '<span>加载中…</span>'; btn.disabled = true; }
       try {
         const data = await api(`/music/album?mid=${encodeURIComponent(mid)}`);
         if (!data.songs?.length) { toast('这张专辑暂无歌曲'); return; }
@@ -877,7 +882,6 @@ export async function openSavedAlbums() {
     $('savedAlbumGrid').querySelectorAll('.a-play-all').forEach((btn) => {
       btn.onclick = (e) => { e.stopPropagation(); playAlbum(btn.dataset.mid); };
     });
-    // 封面右上角的悬浮播放按钮
     $('savedAlbumGrid').querySelectorAll('.cover-play').forEach((el) => {
       el.onclick = (e) => { e.stopPropagation(); playAlbum(el.dataset.mid); };
     });

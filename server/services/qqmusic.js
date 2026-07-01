@@ -333,6 +333,22 @@ export async function getSingerAlbums(singerMid, num = 80, begin = 0) {
 }
 
 /**
+ * 搜索专辑（t=8 为专辑搜索）
+ */
+export async function searchAlbums(keyword) {
+  const url = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp.fcg?format=json&w=${encodeURIComponent(keyword)}&t=8&n=6`;
+  const json = await getJSON(url);
+  const list = json?.data?.album?.list || [];
+  return list.map((a) => ({
+    mid:      a.albumMID || a.album_mid || '',
+    name:     a.albumName || a.album_name || a.name || '',
+    singer:   a.singerName || a.singer_name || '',
+    songCount: a.song_count || 0,
+    pubDate:  a.publicTime || '',
+  }));
+}
+
+/**
  * 获取专辑内全部歌曲 + 完整元数据（简介、公司、风格等）
  */
 export async function getAlbumDetail(albumMid) {

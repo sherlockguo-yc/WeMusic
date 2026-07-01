@@ -34,7 +34,7 @@ document.addEventListener('keydown', (e) => {
       import('./lyrics.js').then(({ closeLyricsPanel }) => closeLyricsPanel());
       return;
     }
-    ['candModal', 'addModal', 'promptModal', 'helpModal', 'settingsModal', 'importModal', 'posterModal'].forEach((id) => {
+    ['candModal', 'addModal', 'promptModal', 'helpModal', 'settingsModal', 'importModal', 'posterModal', 'donateModal', 'feedbackModal'].forEach((id) => {
       const el = document.getElementById(id);
       if (el?.classList.contains('show')) el.classList.remove('show');
     });

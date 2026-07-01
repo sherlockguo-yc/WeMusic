@@ -164,13 +164,20 @@ export async function fetchLyrics(name, singer = '') {
 export async function searchLyricsCandidates(name, singer = '') {
   const singerFirst = singer.split(/[\/、,，&]/)[0].trim();
   const nameClean = stripBrackets(name);
+  // 提取括号内的中文名作为额外搜索词
+  const bracketCN = (name.match(/[（(]([^)）]+)[）)]/) || [])[1] || '';
 
   const queries = [];
   const seenQ = new Set();
   const addQ = (q) => { if (!seenQ.has(q)) { seenQ.add(q); queries.push(q); } };
-  if (singerFirst) { addQ(`${name} ${singerFirst}`); if (nameClean !== name) addQ(`${nameClean} ${singerFirst}`); }
+  if (singerFirst) {
+    addQ(`${name} ${singerFirst}`);
+    if (nameClean !== name) addQ(`${nameClean} ${singerFirst}`);
+    if (bracketCN) addQ(`${bracketCN} ${singerFirst}`);
+  }
   addQ(name);
   if (nameClean !== name) addQ(nameClean);
+  if (bracketCN) addQ(bracketCN);
 
   // 并行发起所有搜索
   console.log(`[lyrics:candidates] "${name}" / "${singerFirst}" — queries: [${queries.join(' | ')}]`);

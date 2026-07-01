@@ -102,6 +102,15 @@ db.exec(`
     PRIMARY KEY (user_id, song_key, source_type, source_id)
   );
 
+  /* 用户反馈 */
+  CREATE TABLE IF NOT EXISTS feedback (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    type       TEXT NOT NULL,                -- 'bug' | 'feature' | 'other'
+    content    TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
   /* 收藏的专辑 */
   CREATE TABLE IF NOT EXISTS saved_albums (
     user_id     INTEGER NOT NULL,
