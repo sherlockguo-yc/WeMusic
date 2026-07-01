@@ -1,5 +1,5 @@
 // ---------------- 主题、设置面板、Sleep Timer、侧边栏拖拽 ----------------
-import { $, toast, uiPrompt } from './utils.js';
+import { $, toast } from './utils.js';
 import { Auth, api } from './api.js';
 import { state } from './state.js';
 
@@ -171,6 +171,11 @@ export function openSettings() {
   updateSleepHint();
 
   // 定时停止按钮
+  const customWrap = $('sleepCustomWrap');
+  const customBtn = $('sleepCustomBtn');
+  const customInput = $('sleepCustomInput');
+  customWrap?.classList.remove('editing');
+
   const activeMin = sleepTimeout ? null : (sleepAfterSong ? 'song' : '0');
   document.querySelectorAll('.sleep-opt').forEach((b) => {
     const isActive = (activeMin != null) ? (b.dataset.min === activeMin) : false;
@@ -178,16 +183,21 @@ export function openSettings() {
     b.onclick = () => {
       setSleep(b.dataset.min);
       document.querySelectorAll('.sleep-opt').forEach((x) => x.classList.toggle('active', x === b));
-      $('sleepCustomOpt')?.classList.remove('active');
+      customBtn?.classList.remove('active');
     };
   });
-  // 自定义定时：按钮风格统一，点击弹出输入框
-  const customBtn = $('sleepCustomOpt');
-  if (customBtn) {
+  // 自定义定时：点击按钮 → 变成输入框 → 回车确认
+  if (customBtn && customInput && customWrap) {
     const isCustom = sleepTimeout && !sleepAfterSong;
     customBtn.classList.toggle('active', isCustom);
-    customBtn.onclick = async () => {
-      const val = await uiPrompt('自定义时间（分钟，1-480）', sleepTimeout ? String(Math.round((Date.now() - 0) / 60000)) : '');
+    customBtn.onclick = () => {
+      customWrap.classList.add('editing');
+      customInput.value = '';
+      customInput.focus();
+    };
+    const commitCustom = () => {
+      const val = customInput.value.trim();
+      customWrap.classList.remove('editing');
       if (!val) return;
       const min = parseInt(val, 10);
       if (!min || min < 1 || min > 480) { toast('请输入 1-480 分钟'); return; }
@@ -195,6 +205,11 @@ export function openSettings() {
       document.querySelectorAll('.sleep-opt').forEach((x) => x.classList.remove('active'));
       customBtn.classList.add('active');
     };
+    customInput.onkeydown = (e) => {
+      if (e.key === 'Enter') commitCustom();
+      else if (e.key === 'Escape') { customWrap.classList.remove('editing'); customInput.value = ''; }
+    };
+    customInput.onblur = () => { customWrap.classList.remove('editing'); customInput.value = ''; };
   }
   $('settingsModal').classList.add('show');
 }

@@ -244,7 +244,11 @@ router.post('/resolve', authRequired, async (req, res) => {
       return res.status(404).json({ error: '未在 Bilibili 找到该歌曲的视频' });
     }
 
+    console.log(`[video:resolve] "${name}" / "${singerFirst}" — ${all.length} raw results (W1:${w1.filter(r=>r.status==='fulfilled').length}q), segs:${nameSegments(name).join('|')}`);
+
     const ranked = rank(all, name, singer, duration);
+    console.log(`[video:resolve] after rank: ${ranked.length} scored, blocked:${getBlockedSet(req.user.id, songKey(name, singer), 'video').size}`);
+
     // 过滤掉用户已拉黑的视频源
     const blocked = getBlockedSet(req.user.id, songKey(name, singer), 'video');
     const clean = ranked.filter((v) => !blocked.has(v.bvid));
@@ -253,6 +257,8 @@ router.post('/resolve', authRequired, async (req, res) => {
     }
     // best 也应该从干净列表里选，避免自动播放到已拉黑的源
     const best = clean.find((v) => !v.live) || clean[0];
+    const top5 = clean.slice(0, 5).map((v) => `[${v.score}] ${v.title.slice(0,40)} live:${v.live}`).join(' | ');
+    console.log(`[video:resolve] top5 after clean: ${top5}`);
     res.json({ best, candidates: clean.slice(0, 18) });
   } catch (e) {
     res.status(502).json({ error: e.message });

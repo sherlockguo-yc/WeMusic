@@ -52,7 +52,7 @@
         </button>
       </div>
       <div class="search-box">
-        <input id="searchInput" type="text" placeholder="搜索歌曲 / 歌手，回车检索" autocomplete="off" />
+        <input id="searchInput" type="text" placeholder="搜索歌曲、歌手或专辑" autocomplete="off" />
         <button id="searchBtn">搜索</button>
         <div class="search-suggest" id="searchSuggest"></div>
       </div>
@@ -336,7 +336,10 @@
             <button class="btn sm sleep-opt" data-min="30">30 分钟</button>
             <button class="btn sm sleep-opt" data-min="60">60 分钟</button>
             <button class="btn sm sleep-opt" data-min="song">播完当前曲</button>
-            <button class="btn sm sleep-opt" id="sleepCustomOpt" title="输入自定义时间">自定义</button>
+            <span class="sleep-custom-wrap" id="sleepCustomWrap">
+              <button class="btn sm sleep-opt" id="sleepCustomBtn">自定义</button>
+              <input id="sleepCustomInput" type="number" min="1" max="480" placeholder="分钟" />
+            </span>
           </div>
           <div class="settings-hint" id="sleepHint"></div>
         </div>

@@ -10,7 +10,6 @@ const CHART_TABS = [
   { id: 26,  label: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg> 热歌榜` },
   { id: 27,  label: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> 新歌榜` },
   { id: 4,   label: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg> 流行指数` },
-  { id: 67,  label: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0 0 7.75 3 3 0 1 0 6.997-.125 4 4 0 0 0 0-7.75"/><path d="M5 15v5h14v-5"/></svg> 推荐` },
 ];
 
 // 格式化分钟数为可读字符串
@@ -118,6 +117,20 @@ function buildTrendHtml(trend) {
   `).join('');
 }
 
+function buildPeakHtml(peakHour) {
+  if (peakHour == null) return '<div class="wr-empty">暂无数据</div>';
+  const label = ['凌晨','凌晨','凌晨','凌晨','凌晨','清晨','清晨','上午','上午','上午','午间','午间','午后','午后','午后','午后','傍晚','傍晚','晚间','晚间','深夜','深夜','深夜','深夜'][peakHour];
+  let dots = '';
+  for (let h = 0; h < 24; h++) {
+    const isPeak = h === peakHour;
+    dots += `<span class="pk-dot${isPeak ? ' active' : ''}" title="${h}:00">${isPeak ? h : ''}</span>`;
+  }
+  return `<div class="pk-clock">
+    <div class="pk-dots">${dots}</div>
+    <div class="pk-label"><span class="pk-hour">${peakHour}:00</span> ${label}</div>
+  </div>`;
+}
+
 const rankBadge = (i) => `<span class="wr-rank r${i + 1 <= 3 ? i + 1 : 0}">${i + 1}</span>`;
 
 /** 构建周报/月报卡片 HTML + 分享海报所需数据 */
@@ -142,6 +155,7 @@ function buildReportHtml(data, periodType) {
   const topArtistName = data.topArtists[0]?.singer;
   const insight = computeInsight(data.peakHour, topArtistName, periodWord);
   const trendHtml = buildTrendHtml(data.trend);
+  const peakHtml = buildPeakHtml(data.peakHour);
 
   const html = `
     <div class="weekly-report">
@@ -209,8 +223,13 @@ function buildReportHtml(data, periodType) {
           </div>
         </div>
         <div class="wr-card trend">
-          <div class="wr-card-hd"><span class="wr-card-icon i-trend"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>${trendTitle}<span class="wr-persona-desc">${persona.icon} ${esc(persona.desc)}</span></div>
+          <div class="wr-card-hd"><span class="wr-card-icon i-trend"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>${trendTitle}</div>
           <div class="wr-trend-chart">${trendHtml}</div>
+        </div>
+        <div class="wr-card peak">
+          <div class="wr-card-hd"><span class="wr-card-icon i-peak"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>活跃时段</div>
+          ${peakHtml}
+          <div class="wr-persona-desc">${persona.icon} ${esc(persona.desc)}</div>
         </div>
       </div>
     </div>`;
@@ -436,7 +455,13 @@ export async function openStats() {
           <button class="wr-tab active" data-period="week"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> 本周</button>
           <button class="wr-tab" data-period="month"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg> 本月</button>
         </div>
-        <button class="wr-share-btn" id="wrShareBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg> 生成分享海报</button>
+        <div class="wr-toolbar-right">
+          <button class="wr-share-btn" id="wrShareBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg> 生成分享海报</button>
+        <div class="wr-nav-arrows">
+          <button class="wr-nav-btn" id="wrPrevBtn" title="上一周期"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="wr-nav-btn" id="wrNextBtn" title="下一周期"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+        </div>
       </div>
       <div id="reportSection"></div>
       <div class="stats-two-col">
@@ -472,33 +497,61 @@ export async function openStats() {
         </div>
       </div>`;
 
-    // —— 本周/本月报告渲染 + 分享海报绑定 ——
+    // —— 本周/本月报告渲染 + 分享海报绑定 + 前后周月导航 ——
     let currentPosterData = null;
-    function renderReport(periodType) {
-      const data = reportCache[periodType];
-      const { html, posterData } = buildReportHtml(data, periodType);
+    let weeklyOffset = 0, monthlyOffset = 0;
+
+    function cacheKey(periodType, offset) { return `${periodType}$${offset}`; }
+
+    async function renderReport(type, offset = 0) {
+      const key = cacheKey(type, offset);
+      if (!reportCache[key]) {
+        $('reportSection').innerHTML = '<div class="loading">加载中…</div>';
+        try {
+          const endpoint = type === 'week' ? `/stats/weekly?weekOffset=${offset}` : `/stats/monthly?monthOffset=${offset}`;
+          reportCache[key] = await api(endpoint);
+        } catch (e) {
+          $('reportSection').innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+          return;
+        }
+      }
+      const data = reportCache[key];
+      const { html, posterData } = buildReportHtml(data, type);
       $('reportSection').innerHTML = html;
       currentPosterData = posterData;
+      updatePeriodNav(type, offset);
     }
+
+    function updatePeriodNav(type, offset) {
+      const prevBtn = $('wrPrevBtn'), nextBtn = $('wrNextBtn');
+      if (prevBtn) prevBtn.style.visibility = 'visible';
+      if (nextBtn) nextBtn.style.visibility = offset > 0 ? 'visible' : 'hidden';
+    }
+    updatePeriodNav('week', 0);
+
     renderReport('week');
     bindPosterModalOnce();
     $('wrShareBtn').onclick = () => openPosterModal(currentPosterData);
+
+    $('wrPrevBtn').onclick = async () => {
+      const type = document.querySelector('.wr-tab.active')?.dataset?.period || 'week';
+      const next = (type === 'week' ? ++weeklyOffset : ++monthlyOffset);
+      await renderReport(type, next);
+    };
+    $('wrNextBtn').onclick = async () => {
+      const type = document.querySelector('.wr-tab.active')?.dataset?.period || 'week';
+      const next = (type === 'week' ? Math.max(0, --weeklyOffset) : Math.max(0, --monthlyOffset));
+      await renderReport(type, next);
+    };
 
     main.querySelectorAll('.wr-tab').forEach((btn) => {
       btn.onclick = async () => {
         const type = btn.dataset.period;
         main.querySelectorAll('.wr-tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
-        if (!reportCache[type]) {
-          $('reportSection').innerHTML = '<div class="loading">加载中…</div>';
-          try {
-            reportCache[type] = await api(type === 'week' ? '/stats/weekly' : '/stats/monthly');
-          } catch (e) {
-            $('reportSection').innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
-            return;
-          }
-        }
-        renderReport(type);
+        // 切换周期类型时重置 offset
+        weeklyOffset = 0; monthlyOffset = 0;
+        await renderReport(type);
       };
     });
 
@@ -632,7 +685,9 @@ async function loadDiscoverTab(tab) {
         headerHtml = `<div class="discover-based-on">基于你喜欢的：${data.artists.slice(0, 4).map(esc).join(' · ')}</div>`;
       }
 
-      container.innerHTML = `${headerHtml}<div class="song-list" id="discoverList"></div>`;
+      container.innerHTML = `${headerHtml}<div class="song-row-head">
+        <span class="h-idx">#</span><span class="h-name">歌名</span><span class="h-singer">歌手</span><span class="h-album">专辑</span><span class="h-bookmark"></span><span class="h-dur">时长</span><span class="h-ops">操作</span>
+      </div><div class="song-list" id="discoverList"></div>`;
       // 推荐说明 tooltip（立即出现，不走 title 属性延迟）
       const recHelp = container.querySelector('.rec-help');
       if (recHelp) attachTip(recHelp);
@@ -738,7 +793,7 @@ function renderLikesView(main, songs, mode = 'list') {
     bindLikesToggle(main, songs);
   } else {
     const colHeader = `<div class="song-row-head">
-      <span class="h-idx">#</span><span class="h-name">歌名</span><span class="h-singer">歌手</span><span class="h-album">专辑</span><span class="h-bookmark"></span><span class="h-dur">时长</span><span class="h-ops"></span>
+      <span class="h-idx">#</span><span class="h-name">歌名</span><span class="h-singer">歌手</span><span class="h-album">专辑</span><span class="h-bookmark"></span><span class="h-dur">时长</span><span class="h-ops">操作</span>
     </div>`;
     main.innerHTML = `<div class="view-title">我喜欢的（${songs.length} 首）
       <span class="likes-toggle">

@@ -289,6 +289,7 @@ export function initLyrics() {
   // 背景面板关闭方式（静态绑定）
   $('lpBgCardClose').onclick = () => { $('lpBgOverlay').style.display = 'none'; };
   $('lpBgOverlay').onclick = (e) => { if (e.target === e.currentTarget) $('lpBgOverlay').style.display = 'none'; };
+  $('lpPrevBtn').onclick = () => import('./player.js').then(({ playPrev }) => playPrev());
   $('lpNextBtn').onclick = () => import('./player.js').then(({ playNext }) => playNext(false));
   $('lpPlayBtn').onclick = () => {
     if (!state.current) return toast('请选择一首歌曲播放');

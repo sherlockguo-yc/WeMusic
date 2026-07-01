@@ -16,7 +16,7 @@ const songColHeader = `<div class="song-row-head">
   <span class="h-album">专辑</span>
   <span class="h-bookmark"></span>
   <span class="h-dur">时长</span>
-  <span class="h-ops"></span>
+  <span class="h-ops">操作</span>
 </div>`;
 
 // ---- 搜索历史 ----
@@ -245,8 +245,8 @@ export async function openAlbum(mid, name) {
     try { const chk = await api(`/stats/albums/${encodeURIComponent(mid)}/check`); isSaved = chk.saved; } catch { /* ignore */ }
 
     const saveBtnHtml = isSaved
-      ? `<button class="btn sm" id="albumSaveBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 已收藏</button>`
-      : `<button class="btn sm" id="albumSaveBtn">＋ 收藏专辑</button>`;
+      ? `<button class="btn sm" id="albumSaveBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 已收藏</button>`
+      : `<button class="btn sm" id="albumSaveBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 收藏专辑</button>`;
 
     const coverUrl = albumCover(mid, 500);
     const coverHtml = `<img class="album-detail-cover" src="${coverUrl}" alt="" ${coverUrl ? 'onerror="this.style.display=\'none\'"' : ''} />`;
@@ -265,13 +265,14 @@ export async function openAlbum(mid, name) {
             </div>` : ''}
         </div>
       </div>
-      <div class="section-head"><h2>曲目</h2>
+      <div class="section-head album-head"><h2>曲目</h2>
         <div class="album-actions">
-          <button class="btn green sm" id="addAlbumAllSave">＋ 整张添加到歌单</button>
+          <button class="btn green sm" id="playAlbumAll"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg> 播放全部</button>
+          <button class="btn sm" id="shuffleAlbum"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/></svg> 随机播放</button>
+          <button class="btn sm" id="addAlbumAllSave"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg> 添加到歌单</button>
           ${saveBtnHtml}
         </div>
       </div>
-      ${data.songs.length ? listToolsHtml() : ''}
       ${songColHeader}
       <div class="song-list" id="albumSongs"></div>`;
 
@@ -286,22 +287,31 @@ export async function openAlbum(mid, name) {
     const albContainer = $('albumSongs');
     renderSongList(albContainer, data.songs, { showAdd: true });
     bindListTools(main, data.songs, albContainer, null, null);
-    // 整张添加到歌单
+    // 播放全部
+    $('playAlbumAll').onclick = () => import('./player.js').then(({ playFromList }) => playFromList(data.songs, 0, 'album', null));
+    // 随机播放
+    $('shuffleAlbum').onclick = () => import('./player.js').then(({ playFromList, renderMode }) => {
+      state.playMode = 'shuffle'; renderMode();
+      playFromList(data.songs, 0, 'album', null);
+    });
+    // 添加到歌单
     $('addAlbumAllSave').onclick = () => addSongs(data.songs);
     // 收藏/取消收藏
+    const hOut = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>';
+    const hFill = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>';
     $('albumSaveBtn').onclick = async () => {
       const btn = $('albumSaveBtn');
       if (isSaved) {
-        try { await api(`/stats/albums/${encodeURIComponent(mid)}`, { method: 'DELETE' }); } catch { /* ignore */ }
-        btn.textContent = '＋ 收藏专辑'; isSaved = false;
+        await api(`/stats/albums/${encodeURIComponent(mid)}`, { method: 'DELETE' });
+        btn.innerHTML = hOut + ' 收藏专辑'; isSaved = false;
         toast('已取消收藏');
       } else {
         await api(`/stats/albums/${encodeURIComponent(mid)}`, {
           method: 'POST',
           body: { name: data.name, singer, desc: data.desc || '', company: data.company || '', genre: data.genre || '', lan: data.lan || '', aDate: data.aDate || '' },
         });
-        btn.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 已收藏'; isSaved = true;
-        toast('专辑已收藏 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>');
+        btn.innerHTML = hFill + ' 已收藏'; isSaved = true;
+        toast('专辑已收藏');
       }
     };
   } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }

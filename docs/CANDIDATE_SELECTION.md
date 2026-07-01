@@ -1,0 +1,222 @@
+# 歌词源 & 视频源候选选择逻辑
+
+> **重要：** 任何修改候选评分/过滤/排序逻辑前，必须先阅读本文。逻辑经过多轮迭代优化，看似简单的改动可能导致候选质量急剧下降。
+
+---
+
+## 一、文件索引
+
+| 功能 | 文件 |
+|---|---|
+| 歌词搜索 + 候选评分 | `server/services/lyrics.js` |
+| 歌词路由（缓存/黑名单） | `server/routes/stats.js` → `/stats/lyrics` |
+| 视频搜索 + 评分 + 过滤 | `server/routes/play.js` |
+| 视频源黑名单 | `server/routes/stats.js` → `blocked_sources` 表 |
+| 前端视频换源弹窗 | `src/ui.js` → `openCandModal()` |
+| 前端歌词换源弹窗 | `src/lyrics.js` → `openLyricsSwitchModal()` |
+
+---
+
+## 二、歌词源候选逻辑
+
+### 2.1 搜索入口
+
+`fetchLyrics(name, singer)`: 返回**最佳匹配**（主歌词显示）  
+`searchLyricsCandidates(name, singer)`: 返回**候选列表**（歌词换源弹窗）  
+`fetchLyricsById(songId)`: 直接按网易云 songId 拉取（用户手动切换）
+
+两者共用 `pickBest()` 和相同的候选评分逻辑。
+
+### 2.2 搜索策略（多 query 并行）
+
+对每个搜索关键词，调用网易云 `search` 接口。query 生成顺序：
+
+1. `{name} {singerFirst}` — 歌名 + 歌手优先
+2. `{nameClean} {singerFirst}` — 去括号后的歌名 + 歌手
+3. `{name}` — 仅歌名
+4. `{nameClean}` — 去括号后的歌名
+
+> `singerFirst` = `singer.split(/[\/、,，&]/)[0].trim()` — 取第一个歌手名  
+> `nameClean` = `stripBrackets(name)` — 去掉括号及内容，如 `El Hombre (笑面人)` → `El Hombre`
+
+所有 query **并行发出** (`Promise.allSettled`)。
+
+### 2.3 候选评分（quality）
+
+对每个搜索结果按 3 个信号打分：
+
+| 信号 | 条件 | 分值 |
+|---|---|---|
+| 歌名完全匹配 | `result.name === name`（大小写不敏感）| **+4** |
+| 歌手匹配 | `singerFirst` ≥ 2 字符，且在 artist 名中以**词边界**形式出现 | **+3** |
+| 歌名模糊匹配 | `result.name` 包含 `name`（子串）| **+1** |
+
+> **歌手名匹配规则（含词边界检查）：**
+> - `artist.name.toLowerCase()` 包含 `singerFirst.toLowerCase()` → 匹配
+> - 或满足正则 `(^|[^\w])singerFirst($|[^\w])` → 匹配
+> - 单字符歌手名（如"G"）不参与歌手匹配，避免误匹配
+
+### 2.4 候选过滤（topCandidates）
+
+按 quality **递减排序**后，采用**三层兜底**策略，确保冷门歌曲仍有候选：
+
+```
+第 1 层：quality >= 2（至少有歌名模糊匹配或歌手匹配）
+第 2 层：如果第 1 层不足 8 个，补充 quality >= 1（至少歌名模糊匹配）
+第 3 层：如果仍不足 5 个，补充 quality < 1 的兜底候选
+```
+
+最终上限 20 个候选。然后**并行拉取**每个候选的歌词正文 → 过滤空内容 → 返回最多 12 个。
+
+### 2.5 pickBest（主歌词选取）
+
+与候选评分逻辑一致，但选出的是**一个最佳匹配**直接展示，规则：
+
+1. 优先：`exactName && hasSinger`（歌名完全匹配 + 歌手匹配）
+2. 次之：`exactName`（歌名完全匹配，不强制歌手）
+3. 兜底：第一个有结果的 query 的第一个有效结果
+
+### 2.6 缓存 & 黑名单
+
+- `setLyricCache` / `getLyricCache`：同名同歌手 24h 内复用（内存缓存，上限 200 首）
+- 黑名单过滤：`blocked_sources` 表 → 用户在歌词换源弹窗中点 ✕ 屏蔽的 sourceId 会被排除
+
+---
+
+## 三、视频源候选逻辑
+
+### 3.1 搜索入口
+
+`POST /play/resolve`: 自动匹配（播放歌曲时自动调用）  
+`GET /play/search`: 手动搜索（用户点"在B站搜索此歌"）
+
+### 3.2 搜索策略（并行 Wave）
+
+**resolve 自动匹配**：5 组 query 并行发出：
+
+1. `{name} {singerFirst}`
+2. `{name} {singerFirst} MV`
+3. `{name} {singerFirst} 官方`
+4. `{name}`（仅歌名）
+5. `{singerFirst} {name}`（歌手+歌名逆向）
+
+分两波：
+- **Wave 1**：所有 query × page 1 并行 → 最快 ~500ms
+- **Wave 2**：如果结果 < 50 条，所有 query × page 2 并行
+
+手动搜索：`{keyword}` × 2 页并行。
+
+### 3.3 排除规则（isExcluded）
+
+标题含以下任一关键词的视频**直接排除**：
+
+- 伴奏 / 纯音乐 / 消音 / karaoke / instrumental / off vocal
+- 翻唱 / cover / remix / DJ版
+- 教学 / 教程 / tutorial
+- Live / 现场 / 演唱会 / concert / 音乐节
+- Reaction / 反应 / reacts / 点评
+- 麦 / 鬼畜 / 配音 / 恶搞 / 短剧 / 剪辑
+- 拼凑 / 盘点 / 合集 / medley / mashup
+- 8D / 环绕 / 重制 / nightcore / slowed
+- 乐器 / 钢琴 / 吉他 / 小提琴 / violin / piano / guitar
+
+### 3.4 歌名片段过滤（nameSegments）
+
+歌名 ≥ 2 字符时，要求视频标题**至少包含歌名的一个 ≥2 字符片段**：
+
+- 中文：拆成 2-gram（如"少年与海"→"少年"/"年与"/"与海"）
+- 拉丁/数字：按词语边界切分
+
+**至少一个片段出现在标题中**，否则直接排除。避免"邓紫棋 官方 MV"的《无双的王者》出现在搜索 "Hell" 的候选中。
+
+### 3.5 评分函数（scoreVideo）
+
+| 信号 | 分值 | 说明 |
+|---|---|---|
+| 歌名完全匹配 | +50 | 标题包含歌名 |
+| 歌名字符匹配 | ≤+30 | 单字匹配比例 |
+| 标题含歌手名 | +30 | 直接包含 |
+| UP 主名含歌手 | +20 | 降级匹配 |
+| 时长差 ≤ 10s | +40 | 最佳 |
+| 时长差 ≤ 25s | +22 | 接近 |
+| 时长差 ≤ 60s | +6 | 可接受 |
+| 时长差 > 60s | -25 | 惩罚 |
+| 播放量 ≥ 1000万 | +55 | 分级加权 |
+| 播放量 ≥ 100万 | +40 | |
+| 播放量 ≥ 10万 | +25 | |
+| 播放量 ≥ 1万 | +12 | |
+| 官方 + MV 同时 | +42 | 最高品质信号 |
+| 仅官方 | +28 | |
+| 仅 MV | +20 | |
+| UP 主名 ≡ 歌手名 | +18 | 可能是官方频道 |
+| 高音质关键词 | +30 | 无损/母带/HiRes 等 |
+| 其他优质关键词 | +10 | complete/音源 等 |
+
+### 3.6 排序（rank）
+
+1. **歌手优先**：如果搜索词有歌手名，先筛出标题/UP 包含该歌手的视频 → 仅保留这部分
+2. **非现场优先**：`!v.live` 排前面
+3. **按 score 递减**
+
+### 3.7 黑名单过滤
+
+`blocked_sources` 表查询当前用户 + 当前歌曲的已屏蔽 bvid 集合 → 从结果中排除。
+
+---
+
+## 四、黑名单（屏蔽视频源/歌词源）
+
+### 4.1 存储
+
+`blocked_sources` 表，复合主键：`(user_id, song_key, source_type, source_id)`
+
+- `song_key` = `name__singer`（与 play_logs 保持一致）
+- `source_type` = `'video'` 或 `'lyrics'`
+- `source_id` = bvid（视频）| 网易云 songId 字符串（歌词）
+
+### 4.2 注入点
+
+| 场景 | 位置 |
+|---|---|
+| 视频自动匹配 | `/play/resolve` — best + candidates 均过滤 |
+| 视频手动搜索 | `/play/search` — candidates 过滤 |
+| 歌词候选缓存命中 | `/stats/lyrics` — 从缓存结果中排除 |
+| 歌词候选新拉取 | `/stats/lyrics` — 返回前排除 |
+
+### 4.3 误屏蔽处理
+
+如果所有候选都被屏蔽 → 返回 404 + 提示。用户可通过右键菜单"在B站搜索此歌"获取未过滤的手动搜索结果。
+
+---
+
+## 五、常见问题 & 修改注意事项
+
+### Q: 为什么某个完全无关的视频/歌词出现在候选顶部？
+
+**视频**：检查 `nameSegments()` 是否被绕过（如搜索词参数错误导致歌手名字段混入歌名字段）  
+**歌词**：检查 `hasSinger` 的词边界正则是否生效，单字符歌手名是否被排除
+
+### Q: 为什么一首歌完全没有候选？
+
+**视频**：检查 B 站是否风控（502），或歌名片段过滤是否过严（零片段匹配）  
+**歌词**：检查 quality 三层兜底是否正常执行，或网易云 API 是否返回了任何结果
+
+### Q: candidate 质量整体变差了？
+
+常见误操作：
+1. **改了评分权重**但没有相应调整过滤阈值
+2. **加了硬质量门槛**（如 `>= N`）没有兜底逻辑 → 冷门歌曲零候选
+3. **去掉了并行搜索** → 候选池缩小，质量下降
+4. **改了 quality 分值**导致排序混乱（exactName +4 / hasSinger +3 是经验值）
+
+### 修改检查清单
+
+- [ ] 已阅读本文档第 2-4 节
+- [ ] 改了评分函数后，同时检查 `pickBest` 和 `searchLyricsCandidates`
+- [ ] 加了过滤条件后，确保冷门/非中英文歌曲仍有兜底候选
+- [ ] 改了词搜索后，同时检查是否影响 `/play/search` 手动搜索
+- [ ] 修改后实际测试：热门歌（晴天）+ 冷门歌（El Hombre）+ 短歌名（Hell）
+
+---
+
+> 最后更新：2026-07-02

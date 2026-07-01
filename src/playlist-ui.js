@@ -2,7 +2,7 @@
 import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml } from './utils.js';
 
 const colHeader = `<div class="song-row-head">
-  <span class="h-idx">#</span><span class="h-name">歌名</span><span class="h-singer">歌手</span><span class="h-album">专辑</span><span class="h-bookmark"></span><span class="h-dur">时长</span><span class="h-ops"></span>
+  <span class="h-idx">#</span><span class="h-name">歌名</span><span class="h-singer">歌手</span><span class="h-album">专辑</span><span class="h-bookmark"></span><span class="h-dur">时长</span><span class="h-ops">操作</span>
 </div>`;
 import { api } from './api.js';
 import { state } from './state.js';

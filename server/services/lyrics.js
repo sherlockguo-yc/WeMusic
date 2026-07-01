@@ -65,12 +65,16 @@ export function parseLrc(lrc = '') {
 function pickBest(songs, name, singerFirst) {
   const nl = name.toLowerCase();
   const sf = (singerFirst || '').toLowerCase();
+  const sfRegex = sf.length >= 2 ? new RegExp(`(^|[^\\w])${sf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\w])`, 'i') : null;
 
   // 优先级1：歌名完全匹配 + 歌手匹配
   if (sf) {
     const exact = songs.find((s) => {
       const nameOk = s.name?.toLowerCase() === nl;
-      const artistOk = (s.artists || []).some((a) => a.name?.toLowerCase().includes(sf));
+      const artistOk = (s.artists || []).some((a) => {
+        const an = a.name?.toLowerCase() || '';
+        return an.includes(sf) || (sfRegex ? sfRegex.test(an) : false);
+      });
       return nameOk && artistOk;
     });
     if (exact) return exact;
@@ -169,6 +173,7 @@ export async function searchLyricsCandidates(name, singer = '') {
   if (nameClean !== name) addQ(nameClean);
 
   // 并行发起所有搜索
+  console.log(`[lyrics:candidates] "${name}" / "${singerFirst}" — queries: [${queries.join(' | ')}]`);
   const results = await Promise.allSettled(queries.map((q) => neSearchSongs(q)));
 
   const idSeen = new Set();
@@ -183,32 +188,55 @@ export async function searchLyricsCandidates(name, singer = '') {
 
       const artistText = (s.artists || []).map((a) => a.name).join(' / ');
       const exactName = s.name?.toLowerCase() === name.toLowerCase();
-      const hasSinger = singerFirst && (s.artists || []).some((a) => a.name?.toLowerCase().includes(singerFirst.toLowerCase()));
+      // 歌手匹配改为「歌手名至少 2 字符且在 artist 名中以完整词形式出现」
+      const hasSinger = singerFirst && singerFirst.length >= 2 &&
+        (s.artists || []).some((a) => {
+          const an = a.name?.toLowerCase() || '';
+          const sf = singerFirst.toLowerCase();
+          // 直接包含或作为词边界匹配（前后是空格/分隔符/边界）
+          return an.includes(sf) || new RegExp(`(^|[^\\w])${sf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\w])`, 'i').test(an);
+        });
 
       let quality = 0;
-      if (exactName) quality += 3;
-      if (hasSinger) quality += 2;
+      if (exactName) quality += 4;
+      if (hasSinger) quality += 3;
       if (s.name?.toLowerCase().includes(name.toLowerCase())) quality += 1;
 
       candidates.push({ id: s.id, name: s.name, artist: artistText, quality });
     }
   }
 
+  console.log(`[lyrics:candidates] raw candidates: ${candidates.length}, quality≥4:${candidates.filter(c=>c.quality>=4).length}, ≥3:${candidates.filter(c=>c.quality>=3).length}, ≥2:${candidates.filter(c=>c.quality>=2).length}, ≥1:${candidates.filter(c=>c.quality>=1).length}`);
+
   candidates.sort((a, b) => b.quality - a.quality);
 
-  // 取 top 20 候选，并行拉取歌词正文，过滤掉"暂无歌词"的源
-  const topCandidates = candidates.slice(0, 20);
+  // 动态阈值：优先取质量高的，但至少保留 8 个候选（即使质量低），避免冷门歌曲零候选
+  let topCandidates = candidates.filter((c) => c.quality >= 2);
+  const tier1 = topCandidates.length;
+  if (topCandidates.length < 8) {
+    const supplement = candidates.filter((c) => c.quality >= 1 && !topCandidates.includes(c));
+    topCandidates = topCandidates.concat(supplement).slice(0, 8);
+  }
+  if (topCandidates.length < 5) {
+    const fallback = candidates.filter((c) => c.quality < 1 && !topCandidates.includes(c));
+    topCandidates = topCandidates.concat(fallback).slice(0, Math.min(8, candidates.length));
+  }
+  console.log(`[lyrics:candidates] after tier filter: tier1:${tier1} → top:${topCandidates.length} (${topCandidates.length > 12 ? 'capped 12' : String(topCandidates.length)})`);
+  // 限制最多取 20 个候选，避免过多无效请求
+  topCandidates = topCandidates.slice(0, 20);
+
   const lyricResults = await Promise.allSettled(topCandidates.map((c) => neFetchLyric(c.id)));
   const verified = [];
+  let emptyCount = 0;
   for (let i = 0; i < topCandidates.length; i++) {
     const c = topCandidates[i];
     const lr = lyricResults[i];
     if (lr.status !== 'fulfilled') continue;
     const raw = lr.value;
-    if (!raw.trim()) continue; // 过滤掉空歌词
+    if (!raw.trim()) { emptyCount++; continue; }
     verified.push({ ...c, raw });
   }
-  // 裁剪到 12 个（全是验证过的有效源），只返回前端需要的字段
+  console.log(`[lyrics:candidates] verified: ${verified.length} valid, ${emptyCount} empty, failed:${lyricResults.filter(r=>r.status==='rejected').length}`);
   return verified.slice(0, 12).map((c) => ({ id: c.id, name: c.name, artist: c.artist, quality: c.quality }));
 }
 
