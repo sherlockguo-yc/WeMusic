@@ -20,8 +20,9 @@ else
   cd WeMusic
 fi
 
-# 安装依赖 + 构建前端
+# 安装依赖 + 构建前端（使用淘宝镜像加速）
 echo ">> 安装依赖（这一步需要几分钟）..."
+npm config set registry https://registry.npmmirror.com
 npm install
 npm run build
 

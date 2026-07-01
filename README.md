@@ -162,7 +162,15 @@ docker run -d -p 5174:5174 -v ~/wemusic-data:/app/data --name wemusic sherlockgu
 
 **① 安装 Termux**
 
-从 [F-Droid](https://f-droid.org/packages/com.termux/) 下载安装（**不用 Google Play 版，已停更**）。
+用手机浏览器打开 [GitHub Releases](https://github.com/termux/termux-app/releases/latest)，下拉找到 **Assets**，只下载这一个：
+
+```
+termux-app_v0.118.3+github-debug_universal.apk  ← 下这个就对了
+```
+
+（选 `universal`，所有安卓手机通用，不用管 CPU 型号）
+
+> 不要用 Google Play 版本，已停更。
 
 **② 复制粘贴下面这一行**（打开 Termux 后长按粘贴，回车）：
 
