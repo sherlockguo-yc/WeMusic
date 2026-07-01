@@ -91,6 +91,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_play_logs_name   ON play_logs(user_id, name, singer);
   CREATE INDEX IF NOT EXISTS idx_play_logs_singer ON play_logs(user_id, singer);
   CREATE INDEX IF NOT EXISTS idx_likes_user      ON likes(user_id, liked_at);
+
+  /* 锁定的视频源 / 歌词源黑名单：用户可以为每首歌屏蔽不想要的候选 */
+  CREATE TABLE IF NOT EXISTS blocked_sources (
+    user_id     INTEGER NOT NULL,
+    song_key    TEXT NOT NULL,           -- name__singer（唯一标识一首歌，与 play_logs 一致）
+    source_type TEXT NOT NULL,           -- 'video' | 'lyrics'
+    source_id   TEXT NOT NULL,           -- bvid（视频）| 网易云 songId 字符串（歌词）
+    blocked_at  INTEGER NOT NULL,
+    PRIMARY KEY (user_id, song_key, source_type, source_id)
+  );
+
+  /* 收藏的专辑 */
+  CREATE TABLE IF NOT EXISTS saved_albums (
+    user_id     INTEGER NOT NULL,
+    album_mid   TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    singer      TEXT,
+    desc        TEXT DEFAULT '',
+    company     TEXT DEFAULT '',
+    genre       TEXT DEFAULT '',
+    lan         TEXT DEFAULT '',
+    aDate       TEXT DEFAULT '',
+    saved_at    INTEGER NOT NULL,
+    PRIMARY KEY (user_id, album_mid)
+  );
 `);
 
 // ---- 迁移：为旧库补充字段 ----
@@ -103,6 +128,9 @@ if (!songCols.includes('sort_order')) {
 const plCols = db.prepare('PRAGMA table_info(playlists)').all().map((c) => c.name);
 if (!plCols.includes('sort_order')) {
   db.exec('ALTER TABLE playlists ADD COLUMN sort_order INTEGER DEFAULT 0');
+}
+if (!plCols.includes('desc')) {
+  db.exec("ALTER TABLE playlists ADD COLUMN desc TEXT DEFAULT ''");
 }
 
 const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);

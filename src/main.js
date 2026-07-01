@@ -80,8 +80,9 @@ async function restoreView(view, data) {
   if (view === 'discover')    openDiscover();
   else if (view === 'search'  && data?.kw) { document.getElementById('searchInput').value = data.kw; import('./search.js').then(({ doSearch }) => doSearch()); }
   else if (view === 'artist'  && data?.mid) import('./search.js').then(({ openArtist }) => openArtist(data.mid, data.name));
-  else if (view === 'album'   && data?.mid) import('./search.js').then(({ openAlbum }) => openAlbum(data.mid, data.name));
-  else if (view === 'stats')   import('./stats.js').then(({ openStats }) => openStats());
+  else if (view === 'album'       && data?.mid) import('./search.js').then(({ openAlbum }) => openAlbum(data.mid, data.name));
+  else if (view === 'stats')       import('./stats.js').then(({ openStats }) => openStats());
+  else if (view === 'savedAlbums') import('./stats.js').then(({ openSavedAlbums }) => openSavedAlbums());
   else if (view === 'likes')   import('./stats.js').then(({ openLikesPage }) => openLikesPage());
 }
 
@@ -126,7 +127,7 @@ async function init() {
 async function loadLikes() {
   const { likes } = await api('/stats/likes');
   state.likedMids = new Set(likes.map((l) => l.song_mid).filter(Boolean));
-  import('./ui.js').then(({ updateLikesCount }) => updateLikesCount());
+  import('./ui.js').then(({ updateLikesCount, updateAlbumCount }) => { updateLikesCount(); updateAlbumCount(); });
 }
 
 init().catch((e) => console.error(e));

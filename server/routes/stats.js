@@ -665,7 +665,15 @@ router.get('/lyrics', async (req, res) => {
     // 2. 检查缓存（同名同歌手 24h 内复用）
     const cacheKey = `${name}__${singer || ''}`;
     const cached = getLyricCache(cacheKey);
-    if (cached) return res.json(cached);
+    if (cached) {
+      const resp = { ...cached };
+      // 过滤掉被拉黑的歌词源
+      const blockedIds = db.prepare(
+        'SELECT source_id FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=?'
+      ).all(req.user.id, cacheKey, 'lyrics').map((r) => String(r.source_id));
+      if (resp.candidates) resp.candidates = resp.candidates.filter((c) => !blockedIds.includes(String(c.id)));
+      return res.json(resp);
+    }
 
     // 3. 拉取主结果 + 候选列表
     const [main, candidates] = await Promise.all([
@@ -673,14 +681,86 @@ router.get('/lyrics', async (req, res) => {
       searchLyricsCandidates(name, singer || ''),
     ]);
 
+    // 过滤掉被拉黑的歌词源
+    const blockedIds = db.prepare(
+      'SELECT source_id FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=?'
+    ).all(req.user.id, cacheKey, 'lyrics').map((r) => String(r.source_id));
+    const cleanCandidates = candidates.filter((c) => !blockedIds.includes(String(c.id)));
+
     const result = main
-      ? { ...main, candidates }
-      : { lines: [], candidates, error: '未找到匹配歌词' };
+      ? { ...main, candidates: cleanCandidates }
+      : { lines: [], candidates: cleanCandidates, error: '未找到匹配歌词' };
     setLyricCache(cacheKey, result);
     res.json(result);
   } catch (e) {
     res.status(404).json({ error: e.message, candidates: [] });
   }
+});
+
+// ============================================================
+// 专辑收藏（保存 / 取消 / 列出）
+// ============================================================
+router.get('/albums', (req, res) => {
+  const rows = db.prepare(
+    'SELECT * FROM saved_albums WHERE user_id=? ORDER BY saved_at DESC'
+  ).all(req.user.id);
+  res.json({ albums: rows });
+});
+
+router.get('/albums/:albumMid/check', (req, res) => {
+  const row = db.prepare(
+    'SELECT 1 FROM saved_albums WHERE user_id=? AND album_mid=?'
+  ).get(req.user.id, req.params.albumMid);
+  res.json({ saved: !!row });
+});
+
+router.post('/albums/:albumMid', (req, res) => {
+  const { name, singer, desc, company, genre, lan, aDate } = req.body || {};
+  db.prepare(`
+    INSERT OR REPLACE INTO saved_albums (user_id, album_mid, name, singer, desc, company, genre, lan, aDate, saved_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(req.user.id, req.params.albumMid, name || '', singer || '', desc || '', company || '', genre || '', lan || '', aDate || '', Date.now());
+  res.json({ ok: true });
+});
+
+router.delete('/albums/:albumMid', (req, res) => {
+  db.prepare('DELETE FROM saved_albums WHERE user_id=? AND album_mid=?').run(req.user.id, req.params.albumMid);
+  res.json({ ok: true });
+});
+
+// ============================================================
+// 歌词源 / 视频源黑名单（用户可手动屏蔽不想要的候选）
+// ============================================================
+// 获取某首歌的黑名单
+router.get('/blocked', (req, res) => {
+  const { song, type } = req.query; // type='video'|'lyrics'
+  if (!song) return res.json({ blocked: [] });
+  const rows = db.prepare(`
+    SELECT source_id FROM blocked_sources
+    WHERE user_id=? AND song_key=? AND source_type=?
+  `).all(req.user.id, song, type || 'video');
+  res.json({ blocked: rows.map((r) => r.source_id) });
+});
+
+// 新增黑名单
+router.post('/blocked', (req, res) => {
+  const { song, type, sourceId } = req.body || {};
+  if (!song || !sourceId) return res.status(400).json({ error: '缺少参数' });
+  db.prepare(`
+    INSERT OR IGNORE INTO blocked_sources (user_id, song_key, source_type, source_id, blocked_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(req.user.id, song, type || 'video', String(sourceId), Date.now());
+  res.json({ ok: true });
+});
+
+// 移除黑名单
+router.delete('/blocked', (req, res) => {
+  const { song, type, sourceId } = req.body || {};
+  if (!song || !sourceId) return res.status(400).json({ error: '缺少参数' });
+  db.prepare(`
+    DELETE FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=? AND source_id=?
+  `).run(req.user.id, song, type || 'video', String(sourceId));
+  res.json({ ok: true });
 });
 
 // ============================================================

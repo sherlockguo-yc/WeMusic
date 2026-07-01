@@ -2,8 +2,19 @@ import express from 'express';
 import { Readable } from 'node:stream';
 import { authRequired } from '../middleware/auth.js';
 import { searchVideos, getAudioStream, fetchAudio } from '../services/bilibili.js';
+import db from '../db.js';
 
 const router = express.Router();
+
+// 查询某首歌 + 类型被拉黑的源 ID 集合
+function getBlockedSet(userId, songKey, type) {
+  const rows = db.prepare(`
+    SELECT source_id FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=?
+  `).all(userId, songKey, type);
+  return new Set(rows.map((r) => r.source_id));
+}
+// songKey = name__singer，与 play_logs 和 blocked_sources 保持一致
+function songKey(name, singer) { return `${name || ''}__${singer || ''}`; }
 
 // 现场版关键字（直接排除，满足「非现场版」要求）
 const LIVE_KW = [
@@ -17,8 +28,10 @@ const HQ_KW = [
   '无损', '無損', 'flac', 'hi-res', 'hires', 'hi res', '母带', '高音质',
   '高品质', 'lossless', 'hifi', 'hi-fi', '24bit', 'dolby', '杜比', 'sq', '臻品',
 ];
-// 一般优质词（权重中）
-const GOOD_KW = ['官方', 'mv', '完整版', 'audio', '原版', '正式版', '官方音频'];
+// 一般优质词（权重中上）— MV/官版需要高优先级
+const GOOD_KW = [
+  '官方', 'mv', '完整版', 'audio', '原版', '正式版', '官方音频',
+];
 // 其它降权词（翻唱/二创等）
 const BAD_KW = [
   '翻唱', 'cover', '教学', '钢琴版', '吉他教学', '鬼畜', '剪辑',
@@ -57,17 +70,23 @@ function scoreVideo(v, name, singer, expectDur) {
   const t = title.toLowerCase();
   let score = 0;
 
+  // — 歌名匹配 —
   if (name && title.includes(name)) score += 50;
   else if (name) {
     const hit = [...name].filter((c) => title.includes(c)).length;
     score += Math.round((hit / Math.max(1, name.length)) * 30);
   }
 
+  // — 歌手匹配：标题或 UP 主名包含歌手名 —
   if (singer) {
     const s = singer.split(/[\/、,&]/)[0].trim();
-    if (s && (title.includes(s) || (v.author || '').includes(s))) score += 30;
+    if (s) {
+      if (title.includes(s)) score += 30;
+      else if ((v.author || '').includes(s)) score += 20;
+    }
   }
 
+  // — 时长匹配 —
   if (expectDur > 0 && v.duration > 0) {
     const diff = Math.abs(v.duration - expectDur);
     if (diff <= 10) score += 40;
@@ -76,12 +95,32 @@ function scoreVideo(v, name, singer, expectDur) {
     else score -= 25;
   }
 
-  // 播放量加权（加大权重，让高播放量更靠前）
-  score += Math.min(60, Math.log10((v.play || 0) + 1) * 11);
+  // — 播放量加权（对数尺度，播放越多权重越大，分支更清晰） —
+  const pl = v.play || 1;
+  if (pl >= 1e7) score += 55;
+  else if (pl >= 1e6) score += 40;
+  else if (pl >= 1e5) score += 25;
+  else if (pl >= 1e4) score += 12;
+  else score += Math.min(6, Math.log10(pl) * 2.5);
 
-  // 高音质词大幅加分
+  // — 品质信号 —
+  // 高音质关键词：大幅加分（无损/母带等）
   if (HQ_KW.some((k) => t.includes(k))) score += 30;
-  if (GOOD_KW.some((k) => t.includes(k))) score += 10;
+  // 官方 MV 是最高优先级信号（单独判断，比通用 GOOD_KW 更重）
+  const isOfficial = t.includes('官方');
+  const isMV = t.includes('mv');
+  if (isOfficial && isMV) score += 42;  // 官方 MV 最高
+  else if (isOfficial) score += 28;       // 官方（非 MV）
+  else if (isMV) score += 20;             // MV（非官方标注）
+  // 其它优质信号
+  for (const k of GOOD_KW) {
+    if (k === '官方' || k === 'mv') continue; // 已单独处理
+    if (t.includes(k)) score += 10;
+  }
+  // UP 主名完全匹配歌手名 → 可能是官方频道
+  if (singer && v.author && v.author.toLowerCase() === singer.toLowerCase()) score += 18;
+
+  // — 降权 —
   for (const k of BAD_KW) if (t.includes(k)) score -= 14;
 
   return Math.round(score);
@@ -90,7 +129,13 @@ function scoreVideo(v, name, singer, expectDur) {
 function rank(videos, name, singer, expectDur) {
   const parts = singerParts(singer);
   let scored = videos
-    .filter((v) => !isExcluded(v.title)) // 过滤掉「伴奏」「纯音乐」等
+    .filter((v) => !isExcluded(v.title))
+    // 歌名最低相关度：≥2 字符且零重合的直接剔除（避免完全无关的视频出现在候选里）
+    .filter((v) => {
+      if (!name || name.length < 2) return true;
+      const t = (v.title || '').toLowerCase();
+      return [...name.toLowerCase()].some((c) => t.includes(c));
+    })
     .map((v) => ({
       ...v,
       live: isLive(v.title),
@@ -121,39 +166,60 @@ router.post('/resolve', authRequired, async (req, res) => {
   const { name, singer = '', duration = 0 } = req.body || {};
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
   try {
-    // 多组查询提升命中率
+    const singerFirst = singer.split(/[\/、,&]/)[0].trim();
+    // 分层并行查询：Wave 1 — 全部 query 首页并行打出；Wave 2 — 不够时再补第二页
     const queries = [];
-    if (singer) queries.push(`${name} ${singer.split(/[\/、,&]/)[0].trim()}`);
+    if (singerFirst) {
+      queries.push(`${name} ${singerFirst}`);
+      queries.push(`${name} ${singerFirst} MV`);
+      queries.push(`${name} ${singerFirst} 官方`);
+    }
     queries.push(name);
-    if (singer) queries.push(`${singer.split(/[\/、,&]/)[0].trim()} ${name}`);
+    if (singerFirst) queries.push(`${singerFirst} ${name}`);
 
     const seen = new Set();
     let all = [];
-    let lastErr = null;
-    for (const q of queries) {
-      try {
-        const vids = await searchVideos(q, 1, 20);
-        for (const v of vids) {
+
+    // Wave 1：所有 query × page 1 并行请求
+    const w1 = await Promise.allSettled(queries.map((q) => searchVideos(q, 1, 20)));
+    for (const r of w1) {
+      if (r.status !== 'fulfilled') continue;
+      for (const v of r.value) {
+        if (seen.has(v.bvid)) continue;
+        seen.add(v.bvid);
+        all.push(v);
+      }
+    }
+
+    // Wave 2：如果还不够 50 条，所有 query × page 2 并行请求
+    if (all.length < 50) {
+      const w2 = await Promise.allSettled(queries.map((q) => searchVideos(q, 2, 20)));
+      for (const r of w2) {
+        if (r.status !== 'fulfilled') continue;
+        for (const v of r.value) {
           if (seen.has(v.bvid)) continue;
           seen.add(v.bvid);
           all.push(v);
         }
-      } catch (e) {
-        lastErr = e; // 记录错误（多为风控）
       }
-      if (all.length >= 25) break;
     }
 
     if (all.length === 0) {
-      if (lastErr) {
-        return res.status(502).json({ error: 'Bilibili 暂时被风控，请稍后重试（点播放或换源重试）' });
-      }
+      const allFailed = w1.every((r) => r.status === 'rejected');
+      if (allFailed) return res.status(502).json({ error: 'Bilibili 暂时被风控，请稍后重试（点播放或换源重试）' });
       return res.status(404).json({ error: '未在 Bilibili 找到该歌曲的视频' });
     }
 
     const ranked = rank(all, name, singer, duration);
-    const best = ranked.find((v) => !v.live) || ranked[0];
-    res.json({ best, candidates: ranked.slice(0, 10) });
+    // 过滤掉用户已拉黑的视频源
+    const blocked = getBlockedSet(req.user.id, songKey(name, singer), 'video');
+    const clean = ranked.filter((v) => !blocked.has(v.bvid));
+    if (clean.length === 0) {
+      return res.status(404).json({ error: '所有候选视频均已被屏蔽，如需解除请刷新页面后重新搜索' });
+    }
+    // best 也应该从干净列表里选，避免自动播放到已拉黑的源
+    const best = clean.find((v) => !v.live) || clean[0];
+    res.json({ best, candidates: clean.slice(0, 18) });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
@@ -166,9 +232,26 @@ router.get('/search', authRequired, async (req, res) => {
   const { keyword } = req.query;
   if (!keyword) return res.status(400).json({ error: '请输入关键字' });
   try {
-    const vids = await searchVideos(keyword, 1, 20);
-    const ranked = rank(vids, keyword, '', 0);
-    res.json({ candidates: ranked });
+    // 搜索 2 页并行（共 40 条），增加候选丰富度
+    const [r1, r2] = await Promise.allSettled([
+      searchVideos(keyword, 1, 20),
+      searchVideos(keyword, 2, 20),
+    ]);
+    const seen = new Set();
+    const all = [];
+    for (const r of [r1, r2]) {
+      if (r.status !== 'fulfilled') continue;
+      for (const v of r.value) {
+        if (seen.has(v.bvid)) continue;
+        seen.add(v.bvid);
+        all.push(v);
+      }
+    }
+    const ranked = rank(all, keyword, '', 0);
+    // 过滤被拉黑的视频源（手动搜索没有固定 songKey，用 keyword 作为 key）
+    const blocked = getBlockedSet(req.user.id, songKey(keyword, ''), 'video');
+    const clean = ranked.filter((v) => !blocked.has(v.bvid));
+    res.json({ candidates: clean });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

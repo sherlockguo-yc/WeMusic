@@ -13,9 +13,9 @@ export function applyTheme(theme) {
   });
 }
 mq.addEventListener('change', () => {
-  if ((localStorage.getItem('wemusic_theme') || 'dark') === 'system') applyTheme('system');
+  if ((localStorage.getItem('wemusic_theme') || 'light') === 'system') applyTheme('system');
 });
-applyTheme(localStorage.getItem('wemusic_theme') || 'dark');
+applyTheme(localStorage.getItem('wemusic_theme') || 'light');
 
 // ---- Sleep Timer ----
 export let sleepTimeout = null;
@@ -136,7 +136,7 @@ export function openSettings() {
     avatarPreview.onclick = () => avatarFileInput.click();
     avatarFileInput.onchange = (e) => { uploadAvatar(e.target.files[0]); avatarFileInput.value = ''; };
   }
-  const curTheme = localStorage.getItem('wemusic_theme') || 'dark';
+  const curTheme = localStorage.getItem('wemusic_theme') || 'light';
   document.querySelectorAll('.theme-opt').forEach((b) => {
     b.classList.toggle('active', b.dataset.theme === curTheme);
     b.onclick = () => {

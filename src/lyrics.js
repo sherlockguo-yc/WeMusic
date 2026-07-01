@@ -212,6 +212,7 @@ async function openLyricsSwitchModal(song) {
   // 复用换源弹层 → 改标题
   modal.querySelector('h3').textContent = '选择歌词版本（网易云音乐）';
 
+  const songKey = `${song.name}__${song.singer || ''}`;
   list.innerHTML = lyricsCandidates.map((c, i) => {
     const isCurrent = c.id === lyricsCurrentSourceId;
     return `<div class="cand-row ${isCurrent ? 'live' : ''}" data-i="${i}">
@@ -221,6 +222,7 @@ async function openLyricsSwitchModal(song) {
         <div class="meta">歌手：${esc(c.artist || '未知')} ${isCurrent ? '（当前）' : ''}</div>
       </div>
       <span class="tag ${isCurrent ? 'live' : ''}">${isCurrent ? '当前' : '选择'}</span>
+      <button class="cand-block-btn" title="屏蔽此歌词源，以后不再出现">✕</button>
     </div>`;
   }).join('');
 
@@ -242,6 +244,17 @@ async function openLyricsSwitchModal(song) {
         toast('该歌词源暂无内容，请换一个试试');
       }
     };
+    // 屏蔽按钮
+    row.querySelector('.cand-block-btn')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const c = lyricsCandidates[Number(row.dataset.i)];
+      try {
+        await api('/stats/blocked', { method: 'POST', body: { song: songKey, type: 'lyrics', sourceId: String(c.id) } });
+        lyricsCandidates = lyricsCandidates.filter((_, j) => j !== Number(row.dataset.i));
+        row.remove();
+        toast('已屏蔽，刷新后不再出现');
+      } catch (err) { toast('屏蔽失败：' + err.message); }
+    });
   });
 
   // 点叉关闭时恢复标题（openCandModal 总会再设回 Bilibili 标题）

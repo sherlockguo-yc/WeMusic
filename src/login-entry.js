@@ -40,7 +40,7 @@ function updateStrength(pwd) {
   if (/[0-9]/.test(pwd)) score++;
   if (/[^A-Za-z0-9]/.test(pwd)) score++;
   strengthBar.style.width = ['0', '30%', '55%', '75%', '100%'][score];
-  strengthBar.style.background = ['', '#e0556a', '#e08050', '#d4a017', '#1db954'][score];
+  strengthBar.style.background = ['', '#e0556a', '#e08050', '#d4a017', '#2ab758'][score];
 }
 passwordEl.addEventListener('input', () => { if (mode === 'register') updateStrength(passwordEl.value); });
 

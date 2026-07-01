@@ -104,6 +104,44 @@ export function uiPrompt(title, defaultVal = '') {
   });
 }
 
+/** 双输入弹窗：一个弹窗里同时编辑两个字段（如歌单名 + 简介） */
+export function uiPromptDual(label1 = '', val1 = '', label2 = '', val2 = '') {
+  return new Promise((resolve) => {
+    const mask = $('promptModal');
+    const input1 = $('promptInput');
+    const input2 = $('promptInput2');
+    $('promptTitle').textContent = label1 || '';
+    input1.placeholder = label1;
+    input1.value = val1;
+    input1.style.display = '';
+    input2.placeholder = label2;
+    input2.value = val2;
+    input2.style.display = '';
+    mask.classList.add('show');
+    setTimeout(() => { input1.focus(); input1.select(); }, 30);
+    const done = (cancel) => {
+      mask.classList.remove('show');
+      $('promptOk').onclick = null;
+      $('promptCancel').onclick = null;
+      input1.onkeydown = null;
+      input2.onkeydown = null;
+      mask.onclick = null;
+      input2.style.display = 'none';
+      if (cancel) return resolve(null);
+      resolve({ val1: input1.value.trim() || null, val2: input2.value.trim() || null });
+    };
+    $('promptOk').onclick = () => done(false);
+    $('promptCancel').onclick = () => done(true);
+    mask.onclick = (e) => { if (e.target === mask) done(true); };
+    const onKey = (e) => {
+      if (e.key === 'Enter') { if (e.target === input1) input2.focus(); else done(false); }
+      else if (e.key === 'Escape') done(true);
+    };
+    input1.onkeydown = onKey;
+    input2.onkeydown = onKey;
+  });
+}
+
 export function uiConfirm(message) {
   return new Promise((resolve) => {
     const mask = $('promptModal');

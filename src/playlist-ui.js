@@ -1,5 +1,5 @@
 // ---------------- 歌单侧边栏 + 歌曲列表渲染 + 导入导出 ----------------
-import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiConfirm, albumCover, playlistCoverHtml } from './utils.js';
+import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 
@@ -91,8 +91,11 @@ export function renderSidebar() {
   const box = $('playlistList');
   box.innerHTML = state.playlists.map((p) => `
     <div class="playlist-item ${p.id === state.targetPlaylistId ? 'active' : ''}" data-id="${p.id}" draggable="true">
-      <span class="pl-name">${esc(p.name)}</span>
-      <span><span class="count">${p.count}</span> <span class="del" data-del="${p.id}">✕</span></span>
+      <div class="pl-main">
+        <span class="pl-name">${esc(p.name)}</span>
+        ${p.desc ? `<span class="pl-desc">${esc(p.desc)}</span>` : ''}
+      </div>
+      <span class="pl-ops"><span class="count">${p.count}</span> <span class="edit" data-edit="${p.id}" title="编辑歌单"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span> <span class="del" data-del="${p.id}">✕</span></span>
     </div>`).join('');
 
   // 拖拽排序
@@ -121,38 +124,52 @@ export function renderSidebar() {
 
   box.querySelectorAll('.playlist-item').forEach((el) => {
     const id = Number(el.dataset.id);
-    el.onclick = (e) => {
-      if (e.target.dataset.del) return;
-      state.targetPlaylistId = id; renderSidebar(); openPlaylist(id);
+    el.onclick = () => { state.targetPlaylistId = id; renderSidebar(); openPlaylist(id); };
+    // 右键菜单替代 hover 编辑/删除，避免误触
+    el.oncontextmenu = (e) => {
+      e.preventDefault();
+      const pl = state.playlists.find((x) => x.id === id); if (!pl) return;
+      const menu = document.getElementById('ctxMenu');
+      if (!menu) return;
+      menu.innerHTML = `
+        <div class="ctx-item" data-act="edit">✎ 编辑歌单</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item danger" data-act="del">✕ 删除歌单</div>`;
+      menu.querySelectorAll('.ctx-item').forEach((it) => {
+        it.onclick = async (ev) => {
+          ev.stopPropagation();
+          menu.classList.remove('show');
+          if (it.dataset.act === 'edit') {
+            const r = await uiPromptDual('编辑歌单名称', pl.name, '编辑歌单简介（可选）', pl.desc || '');
+            if (!r) return;
+            await api(`/playlists/${id}`, { method: 'PUT', body: { name: r.val1, desc: r.val2 || '' } });
+            await loadPlaylists();
+            if (state.view === 'playlist' && state.targetPlaylistId === id) openPlaylist(id);
+          } else if (it.dataset.act === 'del') {
+            deletePlaylist(id);
+          }
+        };
+      });
+      menu.classList.add('show');
+      const mw = menu.offsetWidth || 140, mh = menu.offsetHeight || 80;
+      let x = e.clientX, y = e.clientY;
+      if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+      if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+      menu.style.left = x + 'px'; menu.style.top = y + 'px';
     };
-    const nameEl = el.querySelector('.pl-name');
-    if (nameEl) {
-      nameEl.title = '双击可重命名';
-      nameEl.ondblclick = async (e) => {
-        e.stopPropagation();
-        const p = state.playlists.find((x) => x.id === id);
-        const name = await uiPrompt('重命名歌单', p ? p.name : '');
-        if (!name) return;
-        await api(`/playlists/${id}`, { method: 'PUT', body: { name } });
-        await loadPlaylists();
-        if (state.view === 'playlist' && state.targetPlaylistId === id) openPlaylist(id);
-      };
-    }
   });
-  box.querySelectorAll('.del').forEach((el) => {
-    el.onclick = async (e) => {
-      e.stopPropagation();
-      const id = Number(el.dataset.del);
-      const pl = state.playlists.find((x) => x.id === id);
-      const cnt = pl ? pl.count : 0;
-      if (!(await uiConfirm(`确定删除歌单「${pl ? pl.name : ''}」？${cnt ? `（含 ${cnt} 首歌曲）` : ''}此操作不可恢复`))) return;
-      await api(`/playlists/${id}`, { method: 'DELETE' });
-      const wasActive = state.targetPlaylistId === id;
-      if (wasActive) state.targetPlaylistId = null;
-      await loadPlaylists();
-      if (wasActive || state.view === 'playlist') renderHome();
-    };
-  });
+
+  // 删除歌单独立函数（右键菜单复用）
+  async function deletePlaylist(id) {
+    const pl = state.playlists.find((x) => x.id === id);
+    const cnt = pl ? pl.count : 0;
+    if (!(await uiConfirm(`确定删除歌单「${pl ? pl.name : ''}」？${cnt ? `（含 ${cnt} 首歌曲）` : ''}此操作不可恢复`))) return;
+    await api(`/playlists/${id}`, { method: 'DELETE' });
+    const wasActive = state.targetPlaylistId === id;
+    if (wasActive) state.targetPlaylistId = null;
+    await loadPlaylists();
+    if (wasActive || state.view === 'playlist') renderHome();
+  }
 }
 
 // ---- 列表渲染 ----
@@ -208,8 +225,11 @@ export function renderSongList(container, songs, opts = {}) {
       ? `<span class="in-pl-mark" data-tip="已在 ${inPls.size} 个歌单中">🔖</span>`
       : '<span class="in-pl-placeholder"></span>';
     const isLiked = s.song_mid ? (state.likedMids && state.likedMids.has(s.song_mid)) : false;
-    const likeBtn = s.song_mid
-      ? `<button class="like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" data-act="like">${isLiked ? '❤' : '🤍'}</button>`
+    const heartSVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+    const brokenHeartSVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><line x1="3" y1="3" x2="21" y2="21"/></svg>`;
+    const likeBtns = s.song_mid
+      ? `<button class="np-act-btn song-like-btn${isLiked ? ' liked-active' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" data-act="like">${heartSVG}</button>
+         <button class="np-act-btn" title="不喜欢" data-act="dislike">${brokenHeartSVG}</button>`
       : '';
     return `
     <div class="song-row" data-i="${i}">
@@ -220,7 +240,7 @@ export function renderSongList(container, songs, opts = {}) {
       ${bookmark}
       <span class="dur">${fmtDur(s.duration)}</span>
       <span class="ops">
-        ${likeBtn}
+        ${likeBtns}
         <button class="icon-btn play" title="播放" data-act="play">▶</button>
         ${showAdd ? '<button class="icon-btn" title="添加到歌单" data-act="add">＋</button>' : ''}
         ${showDelete ? '<button class="icon-btn" title="从歌单移除" data-act="del">✕</button>' : ''}
@@ -332,7 +352,7 @@ export async function deleteSong(playlistId, songId, row) {
       if (container) {
         const remaining = container._songs || [];
         const totalSec = remaining.reduce((acc, s) => acc + (Number(s.duration) || 0), 0);
-        sub.textContent = `${remaining.length} 首 · 总时长 ${fmtTotal(totalSec)} · 点击播放自动从 Bilibili 匹配`;
+        sub.textContent = `${remaining.length} 首 · 总时长 ${fmtTotal(totalSec)}`;
       }
     }
   } catch (e) { toast('删除失败：' + e.message); }
@@ -352,9 +372,9 @@ export async function openPlaylist(id) {
         <div class="pl-cover-wrap">${playlistCoverHtml(coverMids)}</div>
         <div class="pl-meta">
           <div class="view-title" id="plTitle">${esc(data.playlist.name)}
-            <button class="pl-rename-btn" id="plRenameBtn" title="重命名歌单">✏️</button>
+            <button class="pl-rename-btn" id="plRenameBtn" title="编辑歌单"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
           </div>
-          <div class="view-sub">${data.songs.length} 首 · 总时长 ${fmtTotal(totalSec)} · 点击播放自动从 Bilibili 匹配</div>
+          <div class="view-sub">${data.songs.length} 首 · 总时长 ${fmtTotal(totalSec)}</div>
           <div class="section-head" style="margin:12px 0 0">
             <button class="btn sm" id="exportPlBtn">⤓ 导出歌单</button>
           </div>
@@ -364,9 +384,9 @@ export async function openPlaylist(id) {
       <div class="song-list" id="plSongs"></div>`;
     $('exportPlBtn').onclick = () => exportPlaylist(id, data.playlist.name);
     $('plRenameBtn').onclick = async () => {
-      const name = await uiPrompt('重命名歌单', data.playlist.name);
-      if (!name || name === data.playlist.name) return;
-      await api(`/playlists/${id}`, { method: 'PUT', body: { name } });
+      const r = await uiPromptDual('编辑歌单名称', data.playlist.name, '编辑歌单简介（可选）', data.playlist.desc || '');
+      if (!r) return;
+      await api(`/playlists/${id}`, { method: 'PUT', body: { name: r.val1, desc: r.val2 || '' } });
       await loadPlaylists();
       openPlaylist(id);
     };

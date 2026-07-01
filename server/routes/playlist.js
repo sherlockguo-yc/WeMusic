@@ -70,17 +70,23 @@ router.put('/reorder', (req, res) => {
 
 // ---- 新建歌单 ----
 router.post('/', (req, res) => {
-  const { name } = req.body || {};
+  const { name, desc } = req.body || {};
   if (!name) return res.status(400).json({ error: '歌单名不能为空' });
-  const info = db.prepare('INSERT INTO playlists (user_id, name, created_at) VALUES (?, ?, ?)').run(req.user.id, name, Date.now());
+  const info = db.prepare('INSERT INTO playlists (user_id, name, desc, created_at) VALUES (?, ?, ?, ?)').run(req.user.id, name, desc || '', Date.now());
   res.json({ id: info.lastInsertRowid, name });
 });
 
-// ---- 重命名 / 删除 ----
+// ---- 编辑（名称/简介） / 删除 ----
 router.put('/:id', (req, res) => {
-  const { name } = req.body || {};
-  if (!name) return res.status(400).json({ error: '歌单名不能为空' });
-  db.prepare('UPDATE playlists SET name = ? WHERE id = ?').run(name, req.playlist.id);
+  const { name, desc } = req.body || {};
+  if (name !== undefined && !name.trim()) return res.status(400).json({ error: '歌单名不能为空' });
+  const updates = [];
+  const params = [];
+  if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+  if (desc !== undefined) { updates.push('desc = ?'); params.push(desc); }
+  if (!updates.length) return res.status(400).json({ error: '请提供 name 或 desc' });
+  params.push(req.playlist.id);
+  db.prepare(`UPDATE playlists SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   res.json({ ok: true });
 });
 

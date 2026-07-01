@@ -78,6 +78,7 @@ export async function openCandModal() {
       candidates = r.candidates; state.current._candidates = candidates;
     } catch (e) { list.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   }
+  const songKey = `${state.current.name}__${state.current.singer || ''}`;
   list.innerHTML = candidates.map((c, i) => `
     <div class="cand-row ${c.live ? 'live' : ''}" data-i="${i}">
       <span class="cand-rank">${i + 1}</span>
@@ -86,6 +87,7 @@ export async function openCandModal() {
         <div class="meta">UP：${esc(c.author)} · ${fmtPlay(c.play)} 播放 · ${fmtDur(c.duration)}</div>
       </div>
       <span class="tag ${c.live ? 'live' : ''}">${c.live ? '现场' : '推荐'}</span>
+      <button class="cand-block-btn" title="屏蔽此视频源，以后不再出现">✕</button>
     </div>`).join('');
   list.querySelectorAll('.cand-row').forEach((row) => {
     row.onclick = () => {
@@ -98,6 +100,19 @@ export async function openCandModal() {
         startVideo(c.bvid, c.title, state.current._biliDur);
       });
       modal.classList.remove('show');
+    };
+    // 屏蔽按钮
+    row.querySelector('.cand-block-btn').onclick = async (e) => {
+      e.stopPropagation();
+      const c = candidates[Number(row.dataset.i)];
+      try {
+        await api('/stats/blocked', { method: 'POST', body: { song: songKey, type: 'video', sourceId: c.bvid } });
+        // 从列表移除
+        candidates = candidates.filter((_, j) => j !== Number(row.dataset.i));
+        state.current._candidates = candidates;
+        row.remove();
+        toast('已屏蔽，刷新后不再出现');
+      } catch (err) { toast('屏蔽失败：' + err.message); }
     };
   });
 }
@@ -112,11 +127,17 @@ export async function toggleLike(song, btn) {
     });
     if (r.liked) {
       state.likedMids.add(song.song_mid);
-      if (btn) { btn.textContent = '❤'; btn.classList.add('liked'); }
+      if (btn) {
+        btn.classList.add('liked-active');
+        const svg = btn.querySelector('svg'); if (svg) svg.setAttribute('fill', 'currentColor');
+      }
       toast('已添加到喜欢');
     } else {
       state.likedMids.delete(song.song_mid);
-      if (btn) { btn.textContent = '🤍'; btn.classList.remove('liked'); }
+      if (btn) {
+        btn.classList.remove('liked-active');
+        const svg = btn.querySelector('svg'); if (svg) svg.setAttribute('fill', 'none');
+      }
       toast('已取消喜欢');
     }
     // 更新侧边栏计数
@@ -142,6 +163,15 @@ export function updateLikesCount() {
     const n = state.likedMids.size;
     el.innerHTML = `❤ 我喜欢的${n ? `<span class="side-count">${n}</span>` : ''}`;
   }
+}
+
+export async function updateAlbumCount() {
+  const el = document.getElementById('navSavedAlbums');
+  if (!el) return;
+  try {
+    const { albums } = await api('/stats/albums');
+    el.innerHTML = `📀 我的专辑${albums.length ? `<span class="side-count">${albums.length}</span>` : ''}`;
+  } catch { /* ignore */ }
 }
 
 export function initUI() {

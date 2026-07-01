@@ -400,7 +400,7 @@ export async function openStats() {
       const opacity = cnt ? 0.15 + (cnt / maxH) * 0.85 : 0;
       _hourTips[i] = `${i}:00 ~ ${i + 1}:00<br><b>${cnt} 次</b>`;
       return `<div class="hour-cell${cnt > 0 ? ' active' : ''}" data-idx="${i}"
-        style="${cnt > 0 ? `background:rgba(29,185,84,${opacity.toFixed(2)});color:#fff` : ''}">${i}</div>`;
+        style="${cnt > 0 ? `background:rgba(42,183,88,${opacity.toFixed(2)});color:#fff` : ''}">${i}</div>`;
     }).join('');
 
     // 歌手条形图（次数 + 时长双行）
@@ -754,8 +754,74 @@ function bindLikesToggle(main, songs) {
   });
 }
 
+// ============================================================
+// 收藏的专辑页
+// ============================================================
+export async function openSavedAlbums() {
+  state.view = 'savedAlbums';
+  setActiveNav('navSavedAlbums');
+  import('./main.js').then(({ navPush }) => navPush('savedAlbums'));
+  import('./ui.js').then(({ updateAlbumCount }) => updateAlbumCount());
+  const main = $('main');
+  main.innerHTML = '<div class="loading">加载收藏的专辑…</div>';
+  try {
+    const { albums } = await api('/stats/albums');
+    if (!albums.length) {
+      main.innerHTML = `<div class="view-title">📀 我的专辑</div><div class="empty">还没有收藏专辑<br><br>试试搜一个歌手，点击专辑进入详情页，然后点「＋ 收藏专辑」</div>`;
+      return;
+    }
+    const grid = albums.map((a) => {
+      const cover = albumCover(a.album_mid, 500);
+      const metaTags = [a.genre, a.lan, a.company, a.aDate].filter(Boolean).map((t) => `<span class="album-meta-tag">${esc(t)}</span>`).join('');
+      return `<div class="album-card" data-mid="${esc(a.album_mid)}" data-name="${esc(a.name)}">
+        <div class="cover">${cover ? `<img src="${cover}" loading="lazy" onerror="this.style.visibility='hidden'" />` : '<div class="ph">💿</div>'}</div>
+        <div class="a-name">${esc(a.name)}</div>
+        <div class="a-singer">${esc(a.singer || '')}</div>
+        <div class="a-tags">${metaTags || ''}</div>
+        <button class="btn sm green a-play-all" data-mid="${esc(a.album_mid)}">▶ 播放</button>
+        <button class="btn sm a-del-album" data-mid="${esc(a.album_mid)}">移除</button>
+      </div>`;
+    }).join('');
+    main.innerHTML = `<div class="view-title">📀 我的专辑（${albums.length}）</div><div class="album-grid" id="savedAlbumGrid">${grid}</div>`;
+
+    // 点击卡片跳转专辑详情
+    $('savedAlbumGrid').querySelectorAll('.album-card').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return; // 不拦截按钮点击
+        import('./search.js').then(({ openAlbum }) => openAlbum(el.dataset.mid, el.dataset.name));
+      });
+      el.style.cursor = 'pointer';
+    });
+    // 播放整张
+    $('savedAlbumGrid').querySelectorAll('.a-play-all').forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const mid = btn.dataset.mid;
+        btn.textContent = '加载中…'; btn.disabled = true;
+        try {
+          const data = await api(`/music/album?mid=${encodeURIComponent(mid)}`);
+          if (!data.songs?.length) { toast('这张专辑暂无歌曲'); return; }
+          import('./player.js').then(({ playFromList }) => playFromList(data.songs, 0, 'album', null));
+        } catch (err) { toast('加载失败：' + err.message); }
+        finally { btn.textContent = '▶ 播放'; btn.disabled = false; }
+      };
+    });
+    // 取消收藏
+    $('savedAlbumGrid').querySelectorAll('.a-del-album').forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const mid = btn.dataset.mid;
+        await api(`/stats/albums/${encodeURIComponent(mid)}`, { method: 'DELETE' });
+        btn.closest('.album-card').remove();
+        toast('已取消收藏');
+      };
+    });
+  } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+}
+
 export function initStats() {
   $('navStats').onclick = openStats;
   $('navLikes').onclick = openLikesPage;
   $('navDiscover').onclick = openDiscover;
+  $('navSavedAlbums')?.addEventListener('click', openSavedAlbums);
 }

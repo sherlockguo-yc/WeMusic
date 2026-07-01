@@ -231,32 +231,50 @@ export async function openAlbum(mid, name) {
   main.innerHTML = `<div class="loading">加载专辑「${esc(name)}」...</div>`;
   try {
     const data = await api(`/music/album?mid=${encodeURIComponent(mid)}`);
-    const metaHtml = data.desc || data.company || data.genre
+    const metaHtml = ((data.genre || data.lan || data.company || data.aDate)
       ? `<div class="album-meta">
         ${data.genre ? `<span class="album-meta-tag">${esc(data.genre)}</span>` : ''}
         ${data.lan ? `<span class="album-meta-tag">${esc(data.lan)}</span>` : ''}
         ${data.company ? `<span class="album-meta-tag">${esc(data.company)}</span>` : ''}
         ${data.aDate ? `<span class="album-meta-tag">${esc(data.aDate)}</span>` : ''}
-        ${data.cur_song_num ? `<span class="album-meta-tag">${data.cur_song_num} 首</span>` : data.songs.length + ' 首'}
       </div>`
-      : '';
+      : '');
+    // 检查是否已收藏
+    const singer = data.songs[0]?.singer || '';
+    let isSaved = false;
+    try { const chk = await api(`/stats/albums/${encodeURIComponent(mid)}/check`); isSaved = chk.saved; } catch { /* ignore */ }
+
+    const saveBtnHtml = isSaved
+      ? `<button class="btn sm" id="albumSaveBtn">❤️ 已收藏</button>`
+      : `<button class="btn sm" id="albumSaveBtn">＋ 收藏专辑</button>`;
+
+    const coverUrl = albumCover(mid, 500);
+    const coverHtml = `<img class="album-detail-cover" src="${coverUrl}" alt="" ${coverUrl ? 'onerror="this.style.display=\'none\'"' : ''} />`;
     const descText = data.desc ? data.desc.split(/\n\n+/).filter((p, i, arr) => i === 0 || arr[i-1].trim().slice(0,30) !== p.trim().slice(0,30)).join('\n\n') : '';
-    const descHtml = descText
-      ? `<div class="album-desc-wrap">
-          <div class="album-desc clamp" id="albumDesc">${esc(descText).replace(/\n/g, '<br>')}</div>
-          <button class="album-desc-more" id="albumDescMore">展开全文</button>
-        </div>`
-      : '';
+
     main.innerHTML = `
-      <div class="view-title">${esc(data.name || name)}</div>
-      ${metaHtml}
-      ${descHtml}
+      <div class="album-detail-header">
+        ${coverHtml}
+        <div class="album-detail-info">
+          <div class="view-title" style="margin-bottom:6px">${esc(data.name || name)}</div>
+          ${metaHtml}
+          ${descText ? `
+            <div class="album-desc-wrap" style="margin-top:6px">
+              <div class="album-desc clamp" id="albumDesc">${esc(descText).replace(/\n/g, '<br>')}</div>
+              <button class="album-desc-more" id="albumDescMore">展开全文</button>
+            </div>` : ''}
+        </div>
+      </div>
       <div class="section-head"><h2>曲目</h2>
-        <button class="btn green sm" id="addAlbumAll">整张添加</button>
+        <div class="album-actions">
+          <button class="btn green sm" id="addAlbumAllSave">＋ 整张添加到歌单</button>
+          ${saveBtnHtml}
+        </div>
       </div>
       ${data.songs.length ? listToolsHtml() : ''}
       ${songColHeader}
       <div class="song-list" id="albumSongs"></div>`;
+
     if (data.desc) {
       $('albumDescMore').onclick = () => {
         const el = $('albumDesc');
@@ -268,7 +286,24 @@ export async function openAlbum(mid, name) {
     const albContainer = $('albumSongs');
     renderSongList(albContainer, data.songs, { showAdd: true });
     bindListTools(main, data.songs, albContainer, null, null);
-    $('addAlbumAll').onclick = () => addSongs(data.songs);
+    // 整张添加到歌单
+    $('addAlbumAllSave').onclick = () => addSongs(data.songs);
+    // 收藏/取消收藏
+    $('albumSaveBtn').onclick = async () => {
+      const btn = $('albumSaveBtn');
+      if (isSaved) {
+        try { await api(`/stats/albums/${encodeURIComponent(mid)}`, { method: 'DELETE' }); } catch { /* ignore */ }
+        btn.textContent = '＋ 收藏专辑'; isSaved = false;
+        toast('已取消收藏');
+      } else {
+        await api(`/stats/albums/${encodeURIComponent(mid)}`, {
+          method: 'POST',
+          body: { name: data.name, singer, desc: data.desc || '', company: data.company || '', genre: data.genre || '', lan: data.lan || '', aDate: data.aDate || '' },
+        });
+        btn.textContent = '❤️ 已收藏'; isSaved = true;
+        toast('专辑已收藏 📀');
+      }
+    };
   } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
 
