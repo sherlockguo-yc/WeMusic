@@ -133,7 +133,7 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
   const topAlbums = db.prepare(`
     SELECT album, album_mid, singer, COUNT(*) AS play_count
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND album != ''
-    GROUP BY album ORDER BY play_count DESC LIMIT 4
+    GROUP BY album ORDER BY play_count DESC LIMIT 2
   `).all(uid, since, until);
 
   // —— 歌手多样性 ——

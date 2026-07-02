@@ -198,7 +198,7 @@ function buildReportHtml(data, periodType) {
         </div>
         <div class="wr-card albums">
           <div class="wr-card-hd"><span class="wr-card-icon i-album"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span>最爱专辑</div>
-          <div class="wr-album-grid">${data.topAlbums.length ? data.topAlbums.map((a, i) => `<div class="wr-album-item"><img src="${albumCover(a.album_mid, 200)}" onerror="this.style.display='none'" /><div class="wr-album-info"><div class="wr-album-name">${esc(a.album)}</div><div class="wr-album-singer">${esc(a.singer || '')}</div><span>${a.play_count}次</span></div></div>`).join('') : '<div class="wr-empty">暂无数据</div>'}</div>
+          <div class="wr-album-grid">${data.topAlbums.length ? data.topAlbums.map((a, i) => `<div class="wr-album-item"><img src="${albumCover(a.album_mid, 300)}" onerror="this.style.display='none'" /><div class="wr-album-info"><div class="wr-album-name">${esc(a.album)}</div><div class="wr-album-singer">${esc(a.singer || '')}</div><span>${a.play_count}次</span></div></div>`).join('') : '<div class="wr-empty">暂无数据</div>'}</div>
         </div>
         <div class="wr-card habit">
           <div class="wr-card-hd"><span class="wr-card-icon i-habit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${esc(persona.label)}</span></div>

@@ -1140,15 +1140,15 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .wr-top-songs li:nth-child(5) .wr-song-cover { filter: hue-rotate(-60deg); }
 
 /* 最爱专辑网格 */
-.wr-album-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.wr-album-item { display: flex; align-items: center; gap: 8px; }
+.wr-album-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.wr-album-item { display: flex; flex-direction: column; gap: 6px; }
 .wr-album-item img {
-  width: 40px; height: 40px; border-radius: 6px; object-fit: cover;
-  background: var(--bg-soft); flex-shrink: 0;
+  width: 100%; aspect-ratio: 1; border-radius: 8px; object-fit: cover;
+  background: var(--bg-soft); box-shadow: 0 2px 8px rgba(0,0,0,.15);
 }
 .wr-album-info { min-width: 0; }
-.wr-album-name { font-size: 12px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wr-album-singer { font-size: 10px; color: var(--text-dim); }
+.wr-album-name { font-size: 12px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+.wr-album-singer { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
 .wr-album-info span { font-size: 10px; color: var(--text-dim); }
 
 .wr-habit { display: flex; flex-direction: column; gap: 11px; }
