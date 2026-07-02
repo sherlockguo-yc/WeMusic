@@ -491,8 +491,8 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .player {
   grid-area: player; border-top: 1px solid var(--border); background: var(--bg-soft);
   display: grid;
-  grid-template-columns: 46px minmax(80px, 200px) auto 1fr auto auto;
-  grid-template-areas: "cover np controls . status right";
+  grid-template-columns: 46px minmax(60px, 180px) auto 1fr auto;
+  grid-template-areas: "cover np controls . right";
   align-items: center; gap: 0 6px;
   padding: 10px 14px calc(10px + var(--safe-bottom)) 18px;
   position: relative; z-index: 10;
@@ -509,15 +509,27 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .player .np .np-title-line.marquee:hover { animation-play-state: paused; }
 .player .player-status {
   color: var(--text-dim); font-size: 12px; white-space: nowrap;
-  text-overflow: ellipsis; overflow: hidden; max-width: 220px;
-  flex-shrink: 1; min-width: 0;
+  overflow: hidden; /* text-overflow: ellipsis 会截断 inner span 内容为 "..."，必须移除 */
+  min-width: 0; max-width: 100%;
+  /* 绝对定位：贴在进度条（380px 居中）右侧 */
+  position: absolute;
+  left: calc(50% + 202px);  /* 190(进度条半宽) + 12(间隙) */
+  top: 50%;
+  transform: translateY(-50%);
+  width: 220px;
+  max-width: calc(50% - 412px); /* 防止超出右按钮 (200px 按钮 + 12 间隙) */
+  z-index: 1;
 }
-.player .player-status.marquee {
-  overflow: visible; text-overflow: clip;
+/* 视频标题内层 span：自然宽度时 scrollWidth 可被父级裁剪检出溢出 */
+.status-inner {
+  white-space: nowrap;
+  display: inline-block; /* 不用 min-width: max-content，否则 scrollWidth == clientWidth 永远不溢出 */
+}
+.status-inner.marquee {
   animation: marquee 8s ease-in-out infinite both;
   --marquee-offset: -200px;
 }
-.player .player-status.marquee:hover { animation-play-state: paused; }
+.status-inner.marquee:hover { animation-play-state: paused; }
 .player .player-status .badge { color: var(--accent); }
 .player-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
 
@@ -1926,6 +1938,8 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   .player .controls .icon-btn.play { width: 44px; height: 44px; font-size: 18px; }
   /* 移动端进度条：取消绝对定位，回到正常流 */
   .player .progress-center { position: static; transform: none; width: 100%; max-width: none; pointer-events: auto; }
+  /* 移动端视频标题：取消绝对定位 */
+  .player .player-status { position: static; transform: none; width: auto; max-width: 100%; left: auto; top: auto; }
   /* 进度条独占一行 */
   .progress-wrap {
     order: 10;

@@ -72,14 +72,16 @@ export function stopTimer() {
   if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
 }
 
-// 检测文本溢出，加 marquee 滚动动画
+// 检测文本溢出：比较 inner.scrollWidth（文本宽度）vs 父级.clientWidth（可见宽度）
 function checkMarquee(el) {
   if (!el) return;
+  const parent = el.parentElement;
+  if (!parent) return;
   el.classList.remove('marquee');
   el.style.removeProperty('--marquee-offset');
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      const extra = el.scrollWidth - el.clientWidth;
+      const extra = el.scrollWidth - parent.clientWidth;
       if (extra > 4) {
         el.style.setProperty('--marquee-offset', `-${extra + 8}px`);
         el.classList.add('marquee');
@@ -620,8 +622,9 @@ export function startVideo(bvid, title, dur) {
     setTimeout(() => _bgPreload(bvid), 500);
   }
   applyPaneVisibility();
-  $('playStatus').innerHTML = `<span class="badge">▶ Bilibili</span> ${esc(title || '')}`;
-  checkMarquee($('playStatus'));
+  $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">▶ Bilibili</span> ${esc(title || '')}</span>`;
+  const inner = $('playStatus').querySelector('.status-inner');
+  if (inner) checkMarquee(inner);
   startTimer(dur);
   saveSession();
   import('./queue.js').then(({ pushPlayHistory, renderActiveTab }) => {
