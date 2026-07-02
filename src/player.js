@@ -72,6 +72,22 @@ export function stopTimer() {
   if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
 }
 
+// 检测文本溢出，加 marquee 滚动动画
+function checkMarquee(el) {
+  if (!el) return;
+  el.classList.remove('marquee');
+  el.style.removeProperty('--marquee-offset');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const extra = el.scrollWidth - el.clientWidth;
+      if (extra > 4) {
+        el.style.setProperty('--marquee-offset', `-${extra + 8}px`);
+        el.classList.add('marquee');
+      }
+    });
+  });
+}
+
 function autoAdvance() {
   const from = document.hidden ? 'bg-ended/sync' : 'timer';
   console.log(`[bg:advance] autoAdvance (from=${from}, elapsed=${elapsed}s, dur=${totalDur}s, hidden=${document.hidden})`);
@@ -94,13 +110,16 @@ export function setStatus(html) { $('playStatus').innerHTML = html; }
 // ---- 视频面板 ----
 export function setVpTitle(title) {
   const el = $('vpTitle');
-  el.textContent = title || 'Bilibili 播放';
-  el.classList.remove('scrolling');
+  const text = title || 'Bilibili 播放';
+  // 包裹 inner span，父级 overflow hidden 裁剪，span 在内部滚动
+  el.innerHTML = `<span class="vp-title-inner">${text}</span>`;
+  const inner = el.querySelector('.vp-title-inner');
+  inner.classList.remove('scrolling');
   requestAnimationFrame(() => {
-    if (el.scrollWidth > el.clientWidth + 4) {
-      const dist = -(el.scrollWidth - el.clientWidth + 20);
-      el.style.setProperty('--scroll-dist', dist + 'px');
-      el.classList.add('scrolling');
+    if (inner.scrollWidth > el.clientWidth + 4) {
+      const dist = -(inner.scrollWidth - el.clientWidth + 24);
+      inner.style.setProperty('--scroll-dist', dist + 'px');
+      inner.classList.add('scrolling');
     }
   });
 }
@@ -210,6 +229,7 @@ export function restoreSession() {
     state.current = state.queue[state.queueIndex];
     if (state.current) {
       $('npTitle').textContent = state.current.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : state.current.name;
+      checkMarquee($('npTitle'));
       updateNpCover(state.current);
       $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
       setStatus('上次播放 · 点 ▶ 继续');
@@ -369,6 +389,7 @@ export async function playCurrent() {
   state.current = song;
   highlightPlaying();
   $('npTitle').textContent = song.singer ? `${song.name} - ${song.singer.split('/')[0]}` : song.name;
+  checkMarquee($('npTitle'));
   document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
   updateNpCover(song);
   updateMediaSession(song);
@@ -599,7 +620,8 @@ export function startVideo(bvid, title, dur) {
     setTimeout(() => _bgPreload(bvid), 500);
   }
   applyPaneVisibility();
-  setStatus(`<span class="badge">▶ Bilibili</span> ${esc((title || '').slice(0, 26))}`);
+  $('playStatus').innerHTML = `<span class="badge">▶ Bilibili</span> ${esc(title || '')}`;
+  checkMarquee($('playStatus'));
   startTimer(dur);
   saveSession();
   import('./queue.js').then(({ pushPlayHistory, renderActiveTab }) => {

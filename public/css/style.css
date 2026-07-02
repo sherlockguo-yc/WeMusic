@@ -490,56 +490,78 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 /* ---------- 播放器 ---------- */
 .player {
   grid-area: player; border-top: 1px solid var(--border); background: var(--bg-soft);
-  display: flex; align-items: center; gap: 16px;
-  padding: 10px 18px calc(10px + var(--safe-bottom)) 18px;
+  display: grid;
+  grid-template-columns: 46px minmax(80px, 200px) auto 1fr auto auto;
+  grid-template-areas: "cover np controls . status right";
+  align-items: center; gap: 0 6px;
+  padding: 10px 14px calc(10px + var(--safe-bottom)) 18px;
   position: relative; z-index: 10;
   min-height: 72px;
 }
-.player .np-cover {
-  width: 46px; height: 46px; border-radius: 8px; flex: 0 0 auto;
-  background: linear-gradient(135deg, #2a3340, #1a1d26) center/cover no-repeat;
-  display: none; position: relative; cursor: pointer;
+.player .np-cover { grid-area: cover; }
+.player .np { grid-area: np; min-width: 0; overflow: hidden; }
+.player .np .np-title-line { font-size: 14px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.player .np .np-title-line.marquee {
+  overflow: visible; text-overflow: clip;
+  animation: marquee 8s ease-in-out infinite both;
+  --marquee-offset: -200px;
 }
-.player .np-cover.show { display: block; }
-/* hover 显示半透明遮罩 */
-.player .np-cover::after {
-  content: ''; position: absolute; inset: 0; z-index: 2;
-  background: rgba(0,0,0,.6); border-radius: 8px;
-  opacity: 0; transition: opacity .15s;
+.player .np .np-title-line.marquee:hover { animation-play-state: paused; }
+.player .player-status {
+  color: var(--text-dim); font-size: 12px; white-space: nowrap;
+  text-overflow: ellipsis; overflow: hidden; max-width: 220px;
+  flex-shrink: 1; min-width: 0;
 }
-/* 右上角 ┐ */
-.np-cover-br {
-  position: absolute; top: 2px; right: 5px; z-index: 3;
-  font-size: 14px; color: #fff; opacity: 0; transition: opacity .15s;
-  line-height: 1; pointer-events: none;
+.player .player-status.marquee {
+  overflow: visible; text-overflow: clip;
+  animation: marquee 8s ease-in-out infinite both;
+  --marquee-offset: -200px;
 }
-/* 左下角 └ */
-.np-cover-bl {
-  position: absolute; bottom: 2px; left: 5px; z-index: 3;
-  font-size: 14px; color: #fff; opacity: 0; transition: opacity .15s;
-  line-height: 1; pointer-events: none;
+.player .player-status.marquee:hover { animation-play-state: paused; }
+.player .player-status .badge { color: var(--accent); }
+.player-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
+
+@keyframes marquee {
+  0%, 12%   { transform: translateX(0); }
+  40%, 60%  { transform: translateX(var(--marquee-offset)); }
+  88%, 100% { transform: translateX(0); }
 }
-/* 居中 词 */
-.np-cover-txt {
-  position: absolute; inset: 0; z-index: 3;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; color: #fff; opacity: 0; transition: opacity .15s;
-  pointer-events: none;
-}
-.player .np-cover:hover::after,
-.player .np-cover:hover .np-cover-br,
-.player .np-cover:hover .np-cover-bl,
-.player .np-cover:hover .np-cover-txt { opacity: 1; }
-.player .np { min-width: 160px; max-width: 300px; }
-.player .np .np-title-line { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.np-actions { display: flex; gap: 8px; margin-top: 1px; }
+.np-actions { grid-area: unset; display: flex; gap: 8px; margin-top: 1px; }
 .np-act-btn {
   background: none; border: none; color: var(--text-dim); font-size: 15px;
   cursor: pointer; padding: 1px 5px; border-radius: 4px; transition: color .15s; line-height: 1;
 }
 .np-act-btn:hover { color: var(--text); }
 #npLikeBtn.liked { color: var(--accent); }
-.player .controls { display: flex; align-items: center; gap: 10px; }
+.player .controls { grid-area: controls; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.player .progress-center {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 380px; max-width: calc(100vw - 600px);
+  pointer-events: none; /* 让点击穿透到下层 */
+  z-index: 1;
+}
+.player .progress-center * { pointer-events: auto; } /* 恢复进度条交互 */
+.player .player-right { grid-area: right; }
+.player .player-status { grid-area: status; }
+/* 封面 hover 效果保持不变 */
+.player .np-cover {
+  width: 46px; height: 46px; border-radius: 8px;
+  background: linear-gradient(135deg, #2a3340, #1a1d26) center/cover no-repeat;
+  display: none; position: relative; cursor: pointer;
+}
+.player .np-cover.show { display: block; }
+.player .np-cover::after {
+  content: ''; position: absolute; inset: 0; z-index: 2;
+  background: rgba(0,0,0,.6); border-radius: 8px;
+  opacity: 0; transition: opacity .15s;
+}
+.np-cover-br { position: absolute; top: 2px; right: 5px; z-index: 3; font-size: 14px; color: #fff; opacity: 0; transition: opacity .15s; line-height: 1; pointer-events: none; }
+.np-cover-bl { position: absolute; bottom: 2px; left: 5px; z-index: 3; font-size: 14px; color: #fff; opacity: 0; transition: opacity .15s; line-height: 1; pointer-events: none; }
+.np-cover-txt { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.player .np-cover:hover::after,
+.player .np-cover:hover .np-cover-br,
+.player .np-cover:hover .np-cover-bl,
+.player .np-cover:hover .np-cover-txt { opacity: 1; }
 .player .controls .icon-btn { width: 38px; height: 38px; font-size: 15px; }
 
 /* 播放模式按钮 */
@@ -553,13 +575,12 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 #modeBtn:hover { color: var(--text); border-color: transparent; }
 
 
-.player-right { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.player .player-status { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
-.player .player-status .badge { color: var(--accent-2); }
+.player-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
+
 
 /* 进度条 */
-.progress-center { flex: 1; display: flex; justify-content: center; }
-.progress-wrap { max-width: 400px; width: 100%; display: flex; align-items: center; gap: 10px; min-width: 120px; }
+.progress-center { display: flex; justify-content: center; min-width: 0; }
+.progress-wrap { max-width: 400px; width: 100%; display: flex; align-items: center; gap: 6px; min-width: 120px; }
 .progress-wrap .time { color: var(--text-dim); font-size: 12px; min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* 音量 */
@@ -1562,6 +1583,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 }
 .video-pane.show { display: flex; }
 .video-pane .vp-head {
+  position: relative; z-index: 10; /* 浮在 iframe 视频标题之上 */
   display: flex; align-items: center;
   padding: 7px 12px; background: var(--bg-card); font-size: 13px;
   cursor: move; flex: 0 0 auto; user-select: none; gap: 8px; overflow: hidden;
@@ -1570,15 +1592,20 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 #vpTitle {
   flex: 1; min-width: 0;
   overflow: hidden; white-space: nowrap;
-  mask-image: linear-gradient(to right, black 80%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, black 80%, transparent 100%);
+  text-overflow: ellipsis;
 }
-#vpTitle.scrolling { animation: vp-scroll 12s linear infinite; }
+/* 标题文字包裹层：支持无限滚动 */
+.vp-title-inner {
+  display: inline-block; min-width: max-content; white-space: nowrap;
+}
+.vp-title-inner.scrolling {
+  animation: vp-scroll 10s ease-in-out infinite;
+  --scroll-dist: 0;
+}
 @keyframes vp-scroll {
-  0%   { transform: translateX(0); }
-  40%  { transform: translateX(0); }
-  90%  { transform: translateX(var(--scroll-dist, -60%)); }
-  100% { transform: translateX(var(--scroll-dist, -60%)); }
+  0%, 8%   { transform: translateX(0); }
+  45%, 75% { transform: translateX(var(--scroll-dist)); }
+  92%, 100% { transform: translateX(0); }
 }
 .video-pane .vp-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .video-pane .vp-btn { color: var(--text-dim); cursor: pointer; white-space: nowrap; }
@@ -1883,33 +1910,22 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 
   /* ---- 底栏播放器：两行布局 ---- */
   .player {
-    flex-wrap: wrap;
+    display: flex; flex-wrap: wrap;
+    grid-template-columns: none; grid-template-areas: none;
     gap: 8px;
     padding: 8px 12px calc(8px + var(--safe-bottom));
     min-height: auto;
     align-items: center;
   }
-  .player .np-cover {
-    width: 44px; height: 44px;
-    flex: 0 0 auto;
-  }
-  .player .np {
-    flex: 1;
-    min-width: 0;
-    max-width: none;
-  }
+  .player .np-cover { width: 44px; height: 44px; flex: 0 0 auto; }
+  .player .np { flex: 1; min-width: 0; max-width: none; }
   .player .np .t { font-size: 13px; }
   .player .np .s { font-size: 11px; }
-  /* 播放控制区占满第二行，居中显示 */
-  .controls {
-    order: 3;
-    flex: 0 0 auto;
-    width: 100%;
-    justify-content: center;
-    gap: 6px;
-  }
+  .controls { order: 3; flex: 0 0 auto; width: 100%; justify-content: center; gap: 6px; }
   .player .controls .icon-btn { width: 36px; height: 36px; font-size: 14px; }
   .player .controls .icon-btn.play { width: 44px; height: 44px; font-size: 18px; }
+  /* 移动端进度条：取消绝对定位，回到正常流 */
+  .player .progress-center { position: static; transform: none; width: 100%; max-width: none; pointer-events: auto; }
   /* 进度条独占一行 */
   .progress-wrap {
     order: 10;
