@@ -185,14 +185,14 @@ a { color: inherit; text-decoration: none; }
   transition: color .2s, background .2s;
 }
 .user-menu button:hover { color: var(--text); background: var(--bg-card); }
-/* 问号按钮：与齿轮保持同一风格，纯图标 */
-.topbar-btn {
+/* 顶栏图标按钮：与齿轮保持同一风格 */
+button.topbar-btn {
   background: none; border: none; color: var(--text-dim);
   cursor: pointer; padding: 4px; display: flex; align-items: center;
+  justify-content: center; line-height: 0;
   transition: color .15s;
 }
 .topbar-btn:hover { color: var(--text); }
-#helpBtn { font-size: 17px !important; }
 
 .sidebar {
   grid-area: sidebar;
