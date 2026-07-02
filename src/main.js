@@ -7,7 +7,7 @@ import { initQueue } from './queue.js';
 import { initSearch } from './search.js';
 import { initLyrics } from './lyrics.js';
 import { initUI } from './ui.js';
-import { initSettings, loadAvatar } from './settings.js';
+import { initSettings, loadAvatar, loadPrefsFromServer } from './settings.js';
 import { initStats, openDiscover } from './stats.js';
 
 // 登录拦截
@@ -133,7 +133,18 @@ async function init() {
   // loadPlaylists 与不依赖歌单数据的操作并行执行
   const plPromise = loadPlaylists();
   restoreSession();
-  Promise.allSettled([loadLikes(), loadAvatar()]);
+  // 加载头像 -> 同时设置 state.isAdmin / state.user；加载服务端偏好同步
+  loadAvatar().then(() => {
+    if (state.isAdmin) {
+      $('navAdmin').style.display = '';
+      $('navAdmin').onclick = async () => {
+        const { openAdmin } = await import('./admin.js');
+        openAdmin();
+      };
+    }
+  });
+  loadPrefsFromServer();
+  loadLikes();
   // 等待歌单加载完成后渲染视图（openDiscover 依赖 songIndex）
   await plPromise;
   const params = new URL(location.href).searchParams;

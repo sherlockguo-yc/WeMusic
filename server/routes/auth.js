@@ -69,7 +69,8 @@ router.post('/login', (req, res) => {
 // 当前用户
 router.get('/me', authRequired, (req, res) => {
   const u = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(req.user.id);
-  res.json({ user: { ...req.user, avatar: u?.avatar || null }, allowRegister: config.allowRegister });
+  const isAdmin = config.adminUsers.length > 0 && config.adminUsers.includes(u?.username || '');
+  res.json({ user: { ...req.user, avatar: u?.avatar || null }, allowRegister: config.allowRegister, isAdmin });
 });
 
 // 更新头像（base64 DataURL，限 300KB）
@@ -84,6 +85,74 @@ router.put('/avatar', authRequired, (req, res) => {
   if (b64.length > 400 * 1024) return res.status(413).json({ error: '图片过大，请压缩后上传（≤300KB）' });
   db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, req.user.id);
   res.json({ ok: true, avatar });
+});
+
+// ---- 用户偏好（服务端持久化，跨设备同步） ----
+router.get('/preferences', authRequired, (req, res) => {
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  res.json({ data: row ? JSON.parse(row.data) : {} });
+});
+
+router.put('/preferences', authRequired, (req, res) => {
+  const { data } = req.body || {};
+  if (!data || typeof data !== 'object') return res.status(400).json({ error: '无效数据' });
+  db.prepare('INSERT OR REPLACE INTO user_preferences (user_id, data, updated_at) VALUES (?, ?, ?)')
+    .run(req.user.id, JSON.stringify(data), Date.now());
+  res.json({ ok: true });
+});
+
+// ---- 管理员端点 ----
+function adminOnly(req, res, next) {
+  if (!config.adminUsers.includes(req.user.username)) {
+    return res.status(403).json({ error: '需要管理员权限' });
+  }
+  next();
+}
+
+// 管理员-反馈列表
+router.get('/admin/feedback', authRequired, adminOnly, (req, res) => {
+  const rows = db.prepare(`
+    SELECT f.*, u.username FROM feedback f
+    JOIN users u ON u.id = f.user_id
+    ORDER BY f.created_at DESC LIMIT 100
+  `).all();
+  res.json({ feedback: rows });
+});
+
+// 管理员-删除单条反馈
+router.delete('/admin/feedback/:id', authRequired, adminOnly, (req, res) => {
+  db.prepare('DELETE FROM feedback WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// 管理员-全局屏蔽列表
+router.get('/admin/blocked', authRequired, adminOnly, (req, res) => {
+  const rows = db.prepare(`
+    SELECT b.*, u.username FROM blocked_sources b
+    JOIN users u ON u.id = b.user_id
+    ORDER BY b.blocked_at DESC LIMIT 200
+  `).all();
+  res.json({ blocked: rows });
+});
+
+// 管理员-取消某条屏蔽（按 user_id + song_key + source_type + source_id）
+router.delete('/admin/blocked', authRequired, adminOnly, (req, res) => {
+  const { userId, song, type, sourceId } = req.body || {};
+  if (!userId || !song || !sourceId) return res.status(400).json({ error: '缺少参数' });
+  const r = db.prepare(`
+    DELETE FROM blocked_sources
+    WHERE user_id=? AND song_key=? AND source_type=? AND source_id=?
+  `).run(userId, song, type || 'video', String(sourceId));
+  res.json({ ok: true, removed: r.changes });
+});
+
+// 管理员-系统概况
+router.get('/admin/stats', authRequired, adminOnly, (req, res) => {
+  const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
+  const songCount = db.prepare('SELECT COUNT(*) AS cnt FROM songs').get().cnt;
+  const playlistCount = db.prepare('SELECT COUNT(*) AS cnt FROM playlists').get().cnt;
+  const feedbackCount = db.prepare('SELECT COUNT(*) AS cnt FROM feedback').get().cnt;
+  res.json({ userCount, songCount, playlistCount, feedbackCount });
 });
 
 export default router;

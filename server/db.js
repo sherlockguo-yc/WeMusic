@@ -102,6 +102,13 @@ db.exec(`
     PRIMARY KEY (user_id, song_key, source_type, source_id)
   );
 
+  /* 用户偏好（主题/字体/字号/色板等，服务端持久化，跨设备同步） */
+  CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INTEGER PRIMARY KEY,
+    data    TEXT NOT NULL DEFAULT '{}',  -- JSON 对象
+    updated_at INTEGER NOT NULL
+  );
+
   /* 用户反馈 */
   CREATE TABLE IF NOT EXISTS feedback (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

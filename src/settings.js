@@ -1,7 +1,47 @@
 // ---------------- 主题、设置面板、Sleep Timer、侧边栏拖拽 ----------------
-import { $, toast } from './utils.js';
+import { $, toast, debounce } from './utils.js';
 import { Auth, api } from './api.js';
 import { state } from './state.js';
+
+// ---- 偏好同步（localStorage + 服务端） ----
+// 收集所有需要同步的偏好 -> 上传服务端
+export function syncPrefsToServer() {
+  const prefs = {
+    theme: localStorage.getItem('wemusic_theme') || 'light',
+    font: localStorage.getItem('wemusic_font') || 'default',
+    fontSize: localStorage.getItem('wemusic_font_size') || '14',
+    palette: localStorage.getItem('wemusic_palette') || 'green',
+    vol: localStorage.getItem('wemusic_vol') || '0.8',
+  };
+  api('/auth/preferences', { method: 'PUT', body: { data: prefs } }).catch(() => {});
+}
+
+// 从服务端加载偏好并应用
+export async function loadPrefsFromServer() {
+  try {
+    const { data } = await api('/auth/preferences');
+    const serverEmpty = !data || Object.keys(data).length === 0;
+    if (serverEmpty) {
+      // 服务端没数据：清理本地所有偏好键（防止之前的脏数据），用默认重置
+      ['wemusic_theme', 'wemusic_font', 'wemusic_font_size', 'wemusic_palette', 'wemusic_vol']
+        .forEach(k => localStorage.removeItem(k));
+      // 重新应用默认值（applyTheme 等会回退到默认）
+      applyTheme('light');
+      applyFont('default');
+      applyFontSize('14');
+      applyPalette('green');
+      // 把当前（默认）状态推上去建立基线
+      syncPrefsToServer();
+      return;
+    }
+    if (data.theme) { localStorage.setItem('wemusic_theme', data.theme); applyTheme(data.theme); }
+    if (data.font) { localStorage.setItem('wemusic_font', data.font); applyFont(data.font); }
+    if (data.fontSize) { localStorage.setItem('wemusic_font_size', data.fontSize); applyFontSize(data.fontSize); }
+    if (data.palette) { localStorage.setItem('wemusic_palette', data.palette); applyPalette(data.palette); }
+  } catch {}
+}
+// 延迟同步（200ms 防抖）
+const _dbSyncPrefs = debounce(syncPrefsToServer, 200);
 
 // ---- 主题 ----
 const mq = window.matchMedia('(prefers-color-scheme: light)');
@@ -136,9 +176,14 @@ export function renderAvatar(dataUrl) {
 
 export async function loadAvatar() {
   try {
-    const { user } = await api('/auth/me');
+    const resp = await api('/auth/me');
+    const user = resp.user;
     renderAvatar(user.avatar || null);
     if (Auth.user) Auth.user.avatar = user.avatar || null;
+    // 设置全局管理员标记 + 用户名
+    const { state } = await import('./state.js');
+    state.isAdmin = resp.isAdmin || false;
+    state.user = { id: user.id, username: user.username, avatar: user.avatar };
   } catch { renderAvatar(null); }
 }
 
@@ -194,22 +239,23 @@ export function openSettings() {
     b.onclick = () => {
       localStorage.setItem('wemusic_theme', b.dataset.theme);
       applyTheme(b.dataset.theme);
+      _dbSyncPrefs();
     };
   });
   const curFont = localStorage.getItem('wemusic_font') || 'default';
   document.querySelectorAll('.font-opt').forEach((b) => {
     b.classList.toggle('active', b.dataset.font === curFont);
-    b.onclick = () => { localStorage.setItem('wemusic_font', b.dataset.font); applyFont(b.dataset.font); };
+    b.onclick = () => { localStorage.setItem('wemusic_font', b.dataset.font); applyFont(b.dataset.font); _dbSyncPrefs(); };
   });
   const curFontSize = localStorage.getItem('wemusic_font_size') || '14';
   document.querySelectorAll('.size-opt').forEach((b) => {
     b.classList.toggle('active', b.dataset.size === curFontSize);
-    b.onclick = () => { localStorage.setItem('wemusic_font_size', b.dataset.size); applyFontSize(b.dataset.size); };
+    b.onclick = () => { localStorage.setItem('wemusic_font_size', b.dataset.size); applyFontSize(b.dataset.size); _dbSyncPrefs(); };
   });
   const curPalette = localStorage.getItem('wemusic_palette') || 'green';
   document.querySelectorAll('.palette-opt').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === curPalette);
-    b.onclick = () => { localStorage.setItem('wemusic_palette', b.dataset.palette); applyPalette(b.dataset.palette); };
+    b.onclick = () => { localStorage.setItem('wemusic_palette', b.dataset.palette); applyPalette(b.dataset.palette); _dbSyncPrefs(); };
   });
   updateSleepHint();
 

@@ -765,6 +765,18 @@ router.get('/blocked', (req, res) => {
   res.json({ blocked: rows.map((r) => r.source_id) });
 });
 
+// 获取某首歌的完整屏蔽记录（含 metadata 便于展示）
+router.get('/blocked/full', (req, res) => {
+  const { song, type } = req.query;
+  if (!song) return res.json({ list: [] });
+  const rows = db.prepare(`
+    SELECT source_id, source_type, blocked_at FROM blocked_sources
+    WHERE user_id=? AND song_key=? AND source_type=?
+    ORDER BY blocked_at DESC
+  `).all(req.user.id, song, type || 'video');
+  res.json({ list: rows });
+});
+
 // 新增黑名单
 router.post('/blocked', (req, res) => {
   const { song, type, sourceId } = req.body || {};

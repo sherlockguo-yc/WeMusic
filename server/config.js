@@ -14,5 +14,6 @@ export const config = {
   port: Number(process.env.PORT) || 5174,
   jwtSecret: process.env.JWT_SECRET || 'wemusic-dev-secret-change-me',
   allowRegister: String(process.env.ALLOW_REGISTER ?? 'true') === 'true',
+  adminUsers: (process.env.ADMIN_USERNAME || '').split(',').map(s => s.trim()).filter(Boolean),
   dbPath: path.join(DATA_DIR, 'wemusic.sqlite'),
 };

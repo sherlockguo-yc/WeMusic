@@ -80,6 +80,13 @@ export async function openCandModal() {
   }
   const songKey = `${state.current.name}__${state.current.singer || ''}`;
   const currentBvid = state.current.bvid || '';
+
+  // 拉取用户已屏蔽的源（含 metadata）
+  let blockedList = [];
+  try {
+    const r = await api(`/stats/blocked/full?song=${encodeURIComponent(songKey)}&type=video`);
+    blockedList = r.list || [];
+  } catch {}
   list.innerHTML = candidates.map((c, i) => {
     const isCurrent = c.bvid && c.bvid === currentBvid;
     return `
@@ -92,7 +99,24 @@ export async function openCandModal() {
       <span class="tag ${c.live ? 'live' : ''}${isCurrent ? ' current' : ''}">${isCurrent ? '当前' : (c.live ? '现场' : '推荐')}</span>
       <button class="cand-block-btn" title="屏蔽此视频源，以后不再出现"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>`;
-  }).join('');
+  }).join('') + (blockedList.length ? `
+    <div class="cand-blocked-section">
+      <button class="cand-blocked-toggle" id="candBlockedToggle">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        已屏蔽的源（${blockedList.length}）
+      </button>
+      <div class="cand-blocked-list" id="candBlockedList" style="display:none">
+        ${blockedList.map(b => `
+          <div class="cand-blocked-row" data-bvid="${esc(b.source_id)}">
+            <span class="cand-blocked-id">${esc(b.source_id)}</span>
+            <span class="cand-blocked-time">${new Date(b.blocked_at).toLocaleDateString()}</span>
+            <button class="cand-unblock-btn" title="取消屏蔽"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 9 8 9"/></svg> 恢复</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '');
+
   list.querySelectorAll('.cand-row').forEach((row) => {
     row.onclick = () => {
       const c = candidates[Number(row.dataset.i)];
@@ -117,6 +141,31 @@ export async function openCandModal() {
         row.remove();
         toast('已屏蔽，刷新后不再出现');
       } catch (err) { toast('屏蔽失败：' + err.message); }
+    };
+  });
+
+  // 已屏蔽列表 - 折叠切换
+  const toggle = $('candBlockedToggle');
+  if (toggle) {
+    toggle.onclick = () => {
+      const bl = $('candBlockedList');
+      const show = bl.style.display === 'none';
+      bl.style.display = show ? '' : 'none';
+    };
+  }
+  // 已屏蔽列表 - 恢复按钮
+  list.querySelectorAll('.cand-unblock-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const row = btn.closest('.cand-blocked-row');
+      const bvid = row.dataset.bvid;
+      try {
+        await api('/stats/blocked', { method: 'DELETE', body: { song: songKey, type: 'video', sourceId: bvid } });
+        row.remove();
+        // 标记 candidates 缓存失效，下次打开弹窗会重新拉取
+        state.current._candidates = null;
+        toast('已取消屏蔽，下次换源时会重新出现');
+      } catch (err) { toast('恢复失败：' + err.message); }
     };
   });
 }

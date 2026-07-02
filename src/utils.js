@@ -40,6 +40,11 @@ export function esc(str) {
   );
 }
 
+export function debounce(fn, delay) {
+  let t;
+  return function (...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), delay); };
+}
+
 let toastTimer;
 export function toast(msg) {
   const t = $('toast');
