@@ -354,8 +354,25 @@ export function posterHTMLPro(data, themeKey) {
   } = data || {};
 
   const isMint = themeKey === 'mint';
-  // 尺寸用 300（与全站 albumCover() 默认尺寸一致，命中率更稳定；400 在部分老专辑上会 404）
-  const covers = topSongs.map((s) => (s.albumMid ? coverUrl(s.albumMid, 300) : '')).filter(Boolean);
+  // 拼贴墙：优先用 topAlbums（不同专辑），不够 4 张时用 topSongs 补充（去重）
+  const topAlbums = data.topAlbums || [];
+  const seen = new Set();
+  const covers = [];
+  // 先放 topAlbums 的封面（数量已 ≥ 4 时直接够用）
+  for (const a of topAlbums) {
+    if (a.albumMid && !seen.has(a.albumMid)) {
+      seen.add(a.albumMid);
+      covers.push(coverUrl(a.albumMid, 300));
+    }
+  }
+  // 不足 4 张时，从 topSongs 补足
+  for (const s of topSongs) {
+    if (covers.length >= 4) break;
+    if (s.albumMid && !seen.has(s.albumMid)) {
+      seen.add(s.albumMid);
+      covers.push(coverUrl(s.albumMid, 300));
+    }
+  }
   // 浅色主题不用模糊背景作为底图（避免白底看不清）；深色主题用 Top1 封面做模糊沉浸
   const bgCover = isMint ? '' : (covers[0] || '');
   const collageCovers = covers.slice(0, 4);

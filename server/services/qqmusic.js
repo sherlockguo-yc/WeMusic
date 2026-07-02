@@ -267,6 +267,27 @@ export async function findSingerMid(name) {
 }
 
 /**
+ * 推荐专用轻量搜索：仅通过歌名匹配歌手 → 直接拉取该歌手歌曲。
+ * 跳过 fullSearch/smartbox 的冗余联想，比 searchSongs 快 2-3 倍。
+ */
+export async function searchSongsForRecommend(name) {
+  const data = await musicu('music.search.SearchCgiService', 'DoSearchForQQMusicDesktop', {
+    query: name, num: 5,
+  });
+  const body = data?.body || data?.req || data;
+
+  const singer = (body?.singer?.list || []).find(
+    (s) => s.name && s.name.toLowerCase() === name.toLowerCase()
+  ) || (body?.singer?.list || [])[0];
+
+  if (singer && singer.mid) {
+    const res = await getSingerSongs(singer.mid, 100, 0);
+    return { songs: res.songs || [], total: res.total || 0, singer };
+  }
+  return { songs: [], total: 0, singer: null };
+}
+
+/**
  * 获取歌手全部歌曲（支持分页）
  */
 export async function getSingerSongs(singerMid, num = 100, begin = 0) {

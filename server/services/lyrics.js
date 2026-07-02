@@ -229,8 +229,8 @@ export async function searchLyricsCandidates(name, singer = '') {
     topCandidates = topCandidates.concat(fallback).slice(0, Math.min(8, candidates.length));
   }
   console.log(`[lyrics:candidates] after tier filter: tier1:${tier1} → top:${topCandidates.length} (${topCandidates.length > 12 ? 'capped 12' : String(topCandidates.length)})`);
-  // 限制最多取 20 个候选，避免过多无效请求
-  topCandidates = topCandidates.slice(0, 20);
+  // 只验证 top 10 候选（最终返回 12 个，留裕量），大幅减少 HTTP 请求
+  topCandidates = topCandidates.slice(0, 10);
 
   const lyricResults = await Promise.allSettled(topCandidates.map((c) => neFetchLyric(c.id)));
   const verified = [];

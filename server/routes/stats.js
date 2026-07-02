@@ -5,7 +5,7 @@ import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
 import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache } from '../services/lyrics.js';
-import { getTopList, searchSongs } from '../services/qqmusic.js';
+import { getTopList, searchSongs, searchSongsForRecommend } from '../services/qqmusic.js';
 import { renderPosterPNG } from '../services/poster.js';
 import { POSTER_THEMES } from '../../shared/poster-template.js';
 
@@ -91,7 +91,7 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
 
   // —— Top 歌曲 / 歌手 ——
   const topSongs = db.prepare(`
-    SELECT name, singer, MAX(album_mid) AS album_mid, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
+    SELECT name, singer, MAX(album) AS album, MAX(album_mid) AS album_mid, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
     GROUP BY name, singer ORDER BY play_count DESC LIMIT 10
   `).all(uid, since, until);
@@ -129,10 +129,32 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
     GROUP BY hour ORDER BY cnt DESC LIMIT 1
   `).get(uid, since, until);
 
+  // —— 最爱专辑（按播放次数排序，取封面缩略图）——
+  const topAlbums = db.prepare(`
+    SELECT album, album_mid, singer, COUNT(*) AS play_count
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND album != ''
+    GROUP BY album ORDER BY play_count DESC LIMIT 4
+  `).all(uid, since, until);
+
   // —— 歌手多样性 ——
   const uniqueArtists = db.prepare(`
     SELECT COUNT(DISTINCT singer) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
   `).get(uid, since, until).cnt;
+
+  // —— 重复播放率：播放超过 1 次的歌曲占不重复歌曲的比例 ——
+  const repeatRow = db.prepare(`
+    SELECT COUNT(*) AS cnt FROM (
+      SELECT name, singer FROM play_logs
+      WHERE user_id=? AND played_at>=? AND played_at<?
+      GROUP BY name, singer HAVING COUNT(*) > 1
+    )
+  `).get(uid, since, until);
+  const uniqueSongs = periodT.unique_songs || 1;
+  const repeatRate = Math.round((repeatRow?.cnt || 0) / uniqueSongs * 100);
+
+  // —— 时段文字标签 ——
+  const hourLabels = ['凌晨','凌晨','凌晨','凌晨','凌晨','清晨','清晨','上午','上午','上午','午间','午间','午后','午后','午后','午后','傍晚','傍晚','晚间','晚间','深夜','深夜','深夜','深夜'];
+  const peakLabel = peakHourRow ? hourLabels[peakHourRow.hour] : null;
 
   return {
     period: {
@@ -147,10 +169,13 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
     },
     topSongs,
     topArtists,
+    topAlbums,
     skip: { total: skipRow?.total || 0, skipped: skipRow?.skipped || 0 },
     newSongs: newSongs?.cnt || 0,
     completion: { low: comp0, mid: comp20, high: comp80, noDur: compNone },
     peakHour: peakHourRow ? peakHourRow.hour : null,
+    peakLabel: peakLabel,
+    repeatRate,
     uniqueArtists: uniqueArtists || 0,
     label,
   };
@@ -509,7 +534,7 @@ router.get('/recommend', async (req, res) => {
   const tasks = [];
 
   for (const artist of topArtists) {
-    tasks.push({ type: 'artist', label: artist, promise: searchSongs(artist) });
+    tasks.push({ type: 'artist', label: artist, promise: searchSongsForRecommend(artist) });
   }
   for (const song of styleSeeds) {
     // 风格扩散：歌名 + "翻唱" 关键词，提高命中风格相似曲目的概率

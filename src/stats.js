@@ -91,17 +91,17 @@ function computeInsight(peakHour, topArtistName, periodWord) {
   if (peak && topArtistName) {
     return {
       html: `${peak.icon} ${periodWord}你最常在<b>${peak.label}</b>（${peakHour}:00 左右）听歌，最爱的旋律来自 <b>${esc(topArtistName)}</b>`,
-      plain: `${peak.icon} ${periodWord}你最常在${peak.label}（${peakHour}:00 左右）听歌，最爱的旋律来自 ${topArtistName}`,
+      plain: `${periodWord}你最常在${peak.label}时段听歌，最爱的旋律来自 ${topArtistName}`,
     };
   }
   if (peak) {
     return {
       html: `${peak.icon} ${periodWord}你最常在<b>${peak.label}</b>（${peakHour}:00 左右）听歌`,
-      plain: `${peak.icon} ${periodWord}你最常在${peak.label}（${peakHour}:00 左右）听歌`,
+      plain: `${periodWord}你最常在${peak.label}时段听歌`,
     };
   }
   if (topArtistName) {
-    return { html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3v5Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3v5Z"/></svg> ${periodWord}你最爱的旋律来自 <b>${esc(topArtistName)}</b>`, plain: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3v5Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3v5Z"/></svg> ${periodWord}你最爱的旋律来自 ${topArtistName}` };
+    return { html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3v5Z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3v5Z"/></svg> ${periodWord}你最爱的旋律来自 <b>${esc(topArtistName)}</b>`, plain: `${periodWord}你最爱的旋律来自 ${topArtistName}` };
   }
   return { html: '', plain: '' };
 }
@@ -115,20 +115,6 @@ function buildTrendHtml(trend) {
       <div class="tr-label">${esc(w.label)}</div>
     </div>
   `).join('');
-}
-
-function buildPeakHtml(peakHour) {
-  if (peakHour == null) return '<div class="wr-empty">暂无数据</div>';
-  const label = ['凌晨','凌晨','凌晨','凌晨','凌晨','清晨','清晨','上午','上午','上午','午间','午间','午后','午后','午后','午后','傍晚','傍晚','晚间','晚间','深夜','深夜','深夜','深夜'][peakHour];
-  let dots = '';
-  for (let h = 0; h < 24; h++) {
-    const isPeak = h === peakHour;
-    dots += `<span class="pk-dot${isPeak ? ' active' : ''}" title="${h}:00">${isPeak ? h : ''}</span>`;
-  }
-  return `<div class="pk-clock">
-    <div class="pk-dots">${dots}</div>
-    <div class="pk-label"><span class="pk-hour">${peakHour}:00</span> ${label}</div>
-  </div>`;
 }
 
 const rankBadge = (i) => `<span class="wr-rank r${i + 1 <= 3 ? i + 1 : 0}">${i + 1}</span>`;
@@ -155,7 +141,6 @@ function buildReportHtml(data, periodType) {
   const topArtistName = data.topArtists[0]?.singer;
   const insight = computeInsight(data.peakHour, topArtistName, periodWord);
   const trendHtml = buildTrendHtml(data.trend);
-  const peakHtml = buildPeakHtml(data.peakHour);
 
   const html = `
     <div class="weekly-report">
@@ -194,19 +179,36 @@ function buildReportHtml(data, periodType) {
       <div class="wr-grid">
         <div class="wr-card songs">
           <div class="wr-card-hd"><span class="wr-card-icon i-song"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>Top 歌曲</div>
-          <ol class="wr-list">${data.topSongs.slice(0, 5).map((s, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(s.name)}</div><div class="wr-li-sub">${esc(s.singer)}</div></div><span>${s.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
+          <ol class="wr-list wr-top-songs">${data.topSongs.slice(0, 5).map((s, i) => {
+            const coverUrl = s.album_mid ? albumCover(s.album_mid, 80) : '';
+            return `<li>
+              ${coverUrl ? `<img class="wr-song-cover" src="${coverUrl}" loading="lazy" onerror="this.style.display='none'" />` : ''}
+              ${rankBadge(i)}
+              <div class="wr-li-info">
+                <div class="wr-li-name">${esc(s.name)}</div>
+                <div class="wr-li-sub">${esc(s.singer)}${s.album ? ` · ${esc(s.album)}` : ''}</div>
+              </div>
+              <span>${s.play_count}次</span>
+            </li>`;
+          }).join('') || '<li class="wr-empty">暂无</li>'}</ol>
         </div>
         <div class="wr-card artists">
           <div class="wr-card-hd"><span class="wr-card-icon i-artist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span>Top 歌手</div>
           <ol class="wr-list">${data.topArtists.map((a, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(a.singer)}</div><div class="wr-li-sub">${fmtMin(a.total_sec || 0)}</div></div><span>${a.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
         </div>
+        <div class="wr-card albums">
+          <div class="wr-card-hd"><span class="wr-card-icon i-album"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span>最爱专辑</div>
+          <div class="wr-album-grid">${data.topAlbums.length ? data.topAlbums.map((a, i) => `<div class="wr-album-item"><img src="${albumCover(a.album_mid, 200)}" onerror="this.style.display='none'" /><div class="wr-album-info"><div class="wr-album-name">${esc(a.album)}</div><div class="wr-album-singer">${esc(a.singer || '')}</div><span>${a.play_count}次</span></div></div>`).join('') : '<div class="wr-empty">暂无数据</div>'}</div>
+        </div>
         <div class="wr-card habit">
           <div class="wr-card-hd"><span class="wr-card-icon i-habit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${esc(persona.label)}</span></div>
           <div class="wr-habit">
             <div class="wr-h-row"><span>跳过率</span><span><b>${skipPct}%</b><small>&lt;30s / ${data.skip.total}次</small></span></div>
+            <div class="wr-h-row"><span>重复播放率</span><span><b>${data.repeatRate}%</b><small>（同一首歌反复听的比例）</small></span></div>
             <div class="wr-h-row"><span>新歌发现</span><span><b>${data.newSongs}</b> 首</span></div>
             <div class="wr-h-row"><span>歌手多样性</span><span><b>${data.uniqueArtists}</b> 位</span></div>
             <div class="wr-h-row"><span>场均时长</span><span><b>${fmtSec(avgSec)}</b></span></div>
+            <div class="wr-h-row"><span>最爱时段</span><span><b>${data.peakLabel || '无数据'}</b></span></div>
           </div>
         </div>
         <div class="wr-card comp">
@@ -226,12 +228,8 @@ function buildReportHtml(data, periodType) {
           <div class="wr-card-hd"><span class="wr-card-icon i-trend"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>${trendTitle}</div>
           <div class="wr-trend-chart">${trendHtml}</div>
         </div>
-        <div class="wr-card peak">
-          <div class="wr-card-hd"><span class="wr-card-icon i-peak"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>活跃时段</div>
-          ${peakHtml}
-          <div class="wr-persona-desc">${persona.icon} ${esc(persona.desc)}</div>
-        </div>
       </div>
+      <div class="wr-persona-desc" style="margin-top:10px;padding:8px 12px;border-radius:8px;background:var(--bg-soft);font-size:13px;color:var(--text-dim);text-align:center">${persona.icon} ${esc(persona.desc)}</div>
     </div>`;
 
   const posterData = {
@@ -245,6 +243,7 @@ function buildReportHtml(data, periodType) {
     insightText: insight.plain,
     topSongs: data.topSongs.slice(0, 5).map((s) => ({ name: s.name, singer: s.singer, albumMid: s.album_mid || '' })),
     topArtists: data.topArtists.slice(0, 6).map((a) => ({ name: a.singer })),
+    topAlbums: (data.topAlbums || []).map((a) => ({ name: a.album, singer: a.singer || '', albumMid: a.album_mid || '' })),
     generatedAt: new Date().toLocaleDateString('zh-CN'),
   };
 

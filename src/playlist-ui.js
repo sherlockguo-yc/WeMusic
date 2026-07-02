@@ -51,7 +51,7 @@ export function refreshAllBookmarks() {
         const dur = row.querySelector('.dur');
         if (showBadge && !existing) {
           const mark = document.createElement('span');
-          mark.className = 'in-pl-mark'; mark.dataset.tip = `已在 ${inPls.size} 个歌单中`; mark.textContent = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>';
+          mark.className = 'in-pl-mark'; mark.dataset.tip = `已在 ${inPls.size} 个歌单中`; mark.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>';
           if (placeholder) placeholder.replaceWith(mark);
           else if (dur) dur.before(mark);
         } else if (!showBadge && existing) {
