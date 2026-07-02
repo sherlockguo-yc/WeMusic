@@ -12,6 +12,7 @@
     "build:watch": "vite build --watch",
     "dev:full": "concurrently \"node --watch server/index.js\" \"vite build --watch\"",
     "deploy": "node scripts/build-restart.js",
+    "mobile": "node scripts/mobile-open.js",
     "webhook": "node server/webhook.js"
   },
   "keywords": [

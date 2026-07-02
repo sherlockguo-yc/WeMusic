@@ -781,6 +781,8 @@ input[type='range']::-moz-range-thumb {
 
 /* 侧边栏导航快捷入口 */
 .side-nav { padding: 4px 8px 8px; }
+
+
 .side-nav-item {
   padding: 8px 10px; border-radius: 8px; font-size: 13px; color: var(--text-dim);
   cursor: pointer; display: flex; align-items: center; gap: 6px;
@@ -1576,6 +1578,26 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px;
 }
 .modal h3 { margin-bottom: 12px; }
+/* 滚动提示遮罩：模态内容溢出时底部渐变提示"下面还有" */
+.modal-scroll-hint {
+  position: sticky; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: flex-end; justify-content: center;
+  height: 48px; margin-top: -48px; /* 用负 margin 叠在内容末尾 */
+  padding-bottom: 8px;
+  background: linear-gradient(to bottom, transparent 0%, var(--bg-card) 75%);
+  border-radius: 0 0 14px 14px;
+  pointer-events: none;
+  transition: opacity .3s;
+  z-index: 1;
+}
+.modal-scroll-hint svg {
+  opacity: .5; animation: scrollHintBounce 2s ease-in-out infinite;
+}
+.modal-scroll-hint.hidden { opacity: 0; }
+@keyframes scrollHintBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
 .cand-row {
   display: flex; gap: 10px; padding: 10px; border-radius: 10px; cursor: pointer;
   border: 1px solid transparent;
@@ -1706,7 +1728,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   }
   .search-box input { font-size: 14px; padding: 9px 12px; }
   /* 顶栏：只保留搜索和设置，其余折叠 */
-  #helpBtn, #userName, #donateBtn, #feedbackTopBtn { display: none; }
+  #helpBtn, #userName, #donateBtn, #feedbackTopBtn, #adminTopBtn { display: none; }
   #logoutBtn { display: none; }
   .user-menu { gap: 6px; }
 
@@ -1726,22 +1748,32 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   .sidebar-resizer { display: none; }
   .logo { display: none; }
 
-  /* 侧边导航：横排 Tab */
+  /* 侧边导航：横排 Tab，文字竖排修复 */
   .side-nav {
     padding: 0;
     display: flex;
     flex-direction: row;
     border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
   }
+  .side-nav::-webkit-scrollbar { display: none; }
   .side-nav-item {
-    flex: 1;
+    flex: 1 0 auto;
+    min-width: 0;
     text-align: center;
-    padding: 10px 4px;
+    padding: 10px 6px;
     font-size: 11px;
     border-radius: 0;
     gap: 4px;
     justify-content: center;
+    flex-direction: column;   /* 图标 + 文字上下排 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  .side-nav-item .nav-icon { width: 18px; height: 18px; }
+  .side-nav-item .side-count { font-size: 10px; }
 
   /* 歌单列表区：横向滚动缩略展示 */
   .side-section {
@@ -1825,12 +1857,13 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   /* ---- 底栏播放器：两行布局 ---- */
   .player {
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     padding: 8px 12px calc(8px + var(--safe-bottom));
     min-height: auto;
+    align-items: center;
   }
   .player .np-cover {
-    width: 40px; height: 40px;
+    width: 44px; height: 44px;
     flex: 0 0 auto;
   }
   .player .np {
@@ -1840,11 +1873,16 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   }
   .player .np .t { font-size: 13px; }
   .player .np .s { font-size: 11px; }
-  /* 播放控制区占满第二行 */
+  /* 播放控制区占满第二行，居中显示 */
   .controls {
     order: 3;
     flex: 0 0 auto;
+    width: 100%;
+    justify-content: center;
+    gap: 6px;
   }
+  .player .controls .icon-btn { width: 36px; height: 36px; font-size: 14px; }
+  .player .controls .icon-btn.play { width: 44px; height: 44px; font-size: 18px; }
   /* 进度条独占一行 */
   .progress-wrap {
     order: 10;
@@ -1854,20 +1892,29 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   .player .player-status { display: none; }
   .volume-wrap { display: none; }
 
-  /* 底栏文字按钮：精简 */
-  #queueBtn, #videoBtn, #switchSrcBtn {
-    padding: 0 8px;
-    font-size: 12px;
-    height: 30px;
-    order: 4;
+  /* 移动端隐藏次要按钮（看视频、换源、队列），只留核心：歌词 + 上下首 + 播放/暂停 */
+  #videoBtn, #switchSrcBtn { display: none; }
+  #queueBtn {
+    font-size: 0;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
-  /* 移动端隐藏换源（视频面板里有），保留喜欢和三点 */
-  #switchSrcBtn { display: none; }
-  #queueBtn::before { content: '☰'; }
-  #queueBtn { font-size: 0; }
-  #queueBtn::before { font-size: 16px; }
-
-  #videoBtn { font-size: 11px; padding: 0 8px; }
+  #queueBtn::before {
+    content: '☰';
+    font-size: 18px;
+  }
+  #lyricsBtn {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
+    font-size: 12px;
+  }
 
   /* ---- 弹层适配 ---- */
   .modal { max-height: 85dvh; }
@@ -1973,3 +2020,38 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .admin-b-song { color: var(--text); }
 .admin-b-sid { color: var(--text-dim); margin-left: 8px; font-size: calc(var(--font-size) * 0.86); font-family: monospace; }
 .admin-b-user { color: var(--text-dim); margin-left: auto; }
+
+/* 管理员面板 - 用户列表 */
+.admin-section-label {
+  font-size: calc(var(--font-size) * 0.93);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.admin-user-row {
+  padding: 12px 14px; border-radius: 10px; margin-bottom: 6px;
+  border: 1px solid var(--border); background: var(--bg-card);
+  transition: border-color .15s;
+}
+.admin-user-row:hover { border-color: var(--accent); }
+.admin-user-hd { display: flex; align-items: center; gap: 12px; }
+.admin-user-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 15px; flex-shrink: 0;
+}
+.admin-user-name {
+  font-weight: 600; font-size: calc(var(--font-size) * 1.0);
+  color: var(--text);
+}
+.admin-user-meta {
+  font-size: 11px; color: var(--text-dim); margin-top: 2px;
+}
+.admin-user-stats {
+  display: flex; gap: 10px; flex-shrink: 0;
+  font-size: 11px; color: var(--text-dim); font-family: monospace;
+}
+.admin-user-stats span { white-space: nowrap; }
+.admin-user-sub {
+  margin-top: 6px; font-size: 11px; color: var(--text-dim); padding-left: 48px;
+}

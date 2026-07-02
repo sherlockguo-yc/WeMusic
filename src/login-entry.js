@@ -49,7 +49,7 @@ async function submit() {
   const password = passwordEl.value;
   if (!username || !password) { show('请输入用户名和密码', 'error'); return; }
   if (mode === 'register') {
-    if (password.length < 4) { show('密码至少 4 位', 'error'); return; }
+    if (password.length < 8) { show('密码至少 8 位', 'error'); return; }
     if (confirmEl.value && confirmEl.value !== password) {
       show('两次输入的密码不一致', 'error'); confirmEl.value = ''; confirmEl.focus(); return;
     }

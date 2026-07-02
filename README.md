@@ -10,10 +10,12 @@
 ## 功能特性
 
 ### 用户系统
-- 注册 / 登录，JWT + bcrypt（cost=12）鉴权。
+- 注册 / 登录，JWT + bcrypt（cost=12）鉴权，密码最少 8 位。
 - 登录页浅色风格，卡片式布局 + 专辑 Logo。
 - 注册完成后可在 `.env` 设置 `ALLOW_REGISTER=false` 关闭注册入口。
 - 用户头像：点击头像即可上传（自动压缩到 300px，base64 存储），顶栏实时显示。
+- **管理员面板**：配置 `ADMIN_USERNAME` 后可查看系统概况（用户数/歌曲数/歌单数/反馈数）、管理反馈（查看/删除）、管理屏蔽源（跨用户取消屏蔽）。
+- 偏好跨设备同步：主题/字体/字号/色板偏好保存到服务端，换设备登录自动恢复。
 
 ### 歌单管理
 - 粘贴 QQ 音乐歌单链接，自动解析并批量导入歌曲。
@@ -55,6 +57,7 @@
 - **自动过滤**：伴奏 / 纯音乐 / 消音 + 现场 / 演唱会 / Live 版本。
 - 候选列表标记「当前」正在播放的视频源（绿色高亮）。
 - 支持**屏蔽视频源 / 歌词源**（✕ 按钮 → 持久化黑名单 `blocked_sources` 表，以后不再出现）。
+- 支持**取消屏蔽**（换源弹窗底部「已屏蔽的源」折叠区 → 恢复按钮；管理面板跨用户恢复）。
 - 支持手动**换源**（底部播放器 + 视频面板均可触发）。
 - bvid 全局缓存：匹配结果缓存到数据库，下次播放秒开。
 - 风控自动重试：遇到 Bilibili 偶发风控，自动刷新 buvid 身份重试 3 次。
@@ -117,6 +120,8 @@
 - 反馈 & 打赏入口：顶栏图标按钮。
 - SQLite 持久化存储反馈内容。
 - 响应式设计 + PWA。
+- **手机扫码访问**：设置面板 →「移动端访问」→ 扫码即可在手机浏览器打开（需同一 Wi-Fi / 局域网）。桌面浏览器访问 `/qr` 也可获取二维码。
+- **adb 一键打开**：手机 USB 连接电脑后运行 `npm run mobile`，自动检测设备并在手机浏览器中打开。
 
 ### 键盘快捷键
 
@@ -127,7 +132,7 @@
 | `←` | 上一首 |
 | `/` | 聚焦搜索框 |
 | `?` | 显示快捷键帮助 |
-| `Esc` | 关闭弹层 / 收起视频 |
+| `Esc` | 按层级关闭：模态弹窗 → 歌词详情页 → 右键菜单 → 搜索建议 → 队列抽屉 |
 
 ---
 
@@ -156,79 +161,6 @@ docker run -d -p 5174:5174 -v ~/wemusic-data:/app/data --name wemusic sherlockgu
 
 访问 `http://localhost:5174`，数据持久化在 `~/wemusic-data`。
 
-### 手机部署（Android + Termux · 一键脚本）
-
-> 手机自己跑服务，自己访问自己。不依赖电脑、不上传数据。
-
-**① 安装 Termux**
-
-用手机浏览器打开 [GitHub Releases](https://github.com/termux/termux-app/releases/latest)，下拉找到 **Assets**，只下载这一个：
-
-```
-termux-app_v0.118.3+github-debug_universal.apk  ← 下这个就对了
-```
-
-（选 `universal`，所有安卓手机通用，不用管 CPU 型号）
-
-> 不要用 Google Play 版本，已停更。
-
-**② 首次必须选镜像源**（仅第一次需要）：
-
-```bash
-termux-change-repo
-```
-
-弹出菜单选「Main repository (Grimler repo) 镜像」→ 选 `Aliyun` 或 `TUNA`（国内最稳）。选完会自动更新。
-
-**③ 复制粘贴下面这一行**：
-
-```bash
-pkg install wget git nodejs -y && wget -qO- https://raw.githubusercontent.com/sherlockguo/WeMusic/master/setup.sh | bash
-```
-
-等待几分钟（首次安装依赖），看到 `✅ 安装完成！` 即可。
-
-如果网络太慢跑不通，用**手动分步**版：
-
-```bash
-pkg install nodejs git -y
-git clone https://github.com/sherlockguo/WeMusic.git
-cd WeMusic
-npm config set registry https://registry.npmmirror.com
-npm install
-npm run build
-```
-
-> 若 `git clone` 超时（国内网慢常见），去浏览器下载 zip：
-> 1. 手机浏览器打开 `https://github.com/sherlockguo/WeMusic/archive/refs/heads/master.zip`
-> 2. 下载完后在 Termux 里执行：
-> ```bash
-> cd ~/storage/downloads
-> unzip WeMusic-master.zip
-> mv WeMusic-master ~/WeMusic
-> cd ~/WeMusic
-> npm config set registry https://registry.npmmirror.com
-> npm install && npm run build
-> ```
-
-**④ 启动 + 安装到桌面**
-
-```bash
-cd ~/WeMusic && nohup npm start &
-```
-
-手机浏览器打开 `http://localhost:5174` → Chrome 菜单 → **「添加到主屏幕」**。
-
-以后桌面点 WeMusic 图标就能用（Termux 需要在后台保持运行）。
-
-**常见问题**：
-
-- `cd ~/WeMusic` 报「No such file or directory」→ `git clone` 没成功或目录不存在，检查 `ls` 是否有 `WeMusic` 文件夹
-- `git clone` 超时 → 用上面 zip 方式代替
-- 启动后浏览器 502 / 连接不上 → Termux 被休眠，**关掉电池优化**：设置 → 应用 → Termux → 电池 → 不优化
-- `nohup npm start &` 后无输出 → `jobs` 检查是否运行；`tail -f nohup.out` 看日志
-- 想关掉服务 → `pkill -f "node server/index.js"`
-
 ### 源码运行（电脑）
 
 ```bash
@@ -246,7 +178,22 @@ npm run build:watch    # 终端 1：前端自动构建
 npm run dev            # 终端 2：服务端热重载（node --watch）
 ```
 
+代码修改后一键部署：
+```bash
+npm run deploy         # vite build → 停止旧进程 → 启动新进程 → 健康检查
+```
+
 启动后访问 `http://localhost:5174`，首次使用点「立即注册」。
+
+### 手机访问
+
+**方式 1：扫码（推荐）** — 桌面浏览器打开 `http://localhost:5174/qr`，手机相机扫描二维码。或打开设置面板 →「移动端访问」。
+
+**方式 2：USB 自动** — 手机 USB 连接电脑并开启 USB 调试，运行 `npm run mobile`，自动在手机浏览器中打开。
+
+**方式 3：手动输入** — 手机浏览器输入 `http://<电脑局域网IP>:5174`（例如 `http://192.168.31.94:5174`），确保手机和电脑在同一 Wi-Fi。
+
+> 添加到主屏幕（PWA）：iOS Safari 点分享 →「添加到主屏幕」；Android Chrome 点菜单 →「添加到主屏幕」。启动后无浏览器工具栏，体验类似原生 App。
 
 ---
 
@@ -266,43 +213,47 @@ npm run dev            # 终端 2：服务端热重载（node --watch）
 
 ```
 WeMusic/
-├── src/                        # 前端源码（ES Modules，Vite 打包）
+,├── src/                        # 前端源码（ES Modules，Vite 打包）
 │   ├── main.js                 # 主应用入口 + 路由（history API + navPush/popstate）
 │   ├── login-entry.js          # 登录页入口
 │   ├── api.js                  # API 封装 + Auth
 │   ├── state.js                # 全局状态
-│   ├── utils.js                # 工具函数 + uiPromptDual 双输入弹窗
+│   ├── utils.js                # 工具函数（uiPrompt / uiPromptDual / uiConfirm）
 │   ├── settings.js             # 主题 / 头像 / 设置 / 侧边栏拖拽 / Sleep
 │   ├── player.js               # 播放核心（进度 / 模式 / bvid 缓存 / 后台 bgAudio 切换）
 │   ├── queue.js                # 播放队列 + 历史抽屉
-│   ├── lyrics.js               # 歌词全屏页（含换源 + 黑名单 + 缩放动画）
+│   ├── lyrics.js               # 歌词全屏页（含换源 + 黑名单 + 缩放动画 / 定时器）
 │   ├── playlist-ui.js          # 歌单 / 列表渲染 / 右键菜单 / 编辑弹窗
-│   ├── search.js               # 搜索 / 歌手页 / 专辑页（封面 + 收藏）/ 搜索历史
-│   ├── ui.js                   # 右键菜单 / 视频换源（黑名单+当前标记）/ 喜欢
-│   └── stats.js                # 统计页 / 周报月报 / 海报分享 / 我的专辑
+│   ├── search.js               # 搜索 / 歌手页 / 专辑页 / 搜索历史
+│   ├── ui.js                   # 右键菜单 / 换源弹窗（含取消屏蔽）
+│   ├── stats.js                # 统计页 / 周报月报 / 海报分享 / 我的专辑
+│   └── admin.js                # 管理员面板（反馈管理 / 屏蔽源管理）
 ├── shared/
 │   └── poster-template.js      # 海报模板（简约版 + 精工版 Pro，前后端共用）
 ├── public/
 │   ├── index.html / login.html # HTML
 │   ├── manifest.json / sw.js   # PWA
-│   ├── css/style.css           # 样式（深/浅色 / 移动端 / 动画）
+│   ├── css/style.css           # 样式（深/浅色 / 移动端响应式 / 动画）
 │   └── dist/                   # Vite 构建产物（不提交 git）
 ├── server/
-│   ├── index.js                # Express 入口（安全头 + 限流）
-│   ├── db.js                   # SQLite（含 blocked_sources / saved_albums 等表）
+│   ├── index.js                # Express 入口（安全头 + 限流 + /qr / /api/lan-url）
+│   ├── db.js                   # SQLite（含 blocked_sources / user_preferences 等表）
 │   ├── config.js               # 环境变量配置
 │   ├── middleware/auth.js      # JWT 签发与鉴权
 │   ├── routes/
-│   │   ├── auth.js             # 注册 / 登录 / 头像
+│   │   ├── auth.js             # 注册 / 登录 / 头像 / 偏好 / 管理员端点
 │   │   ├── music.js            # 搜索 / 歌手 / 专辑 / 歌单解析 / 歌曲背景
-│   │   ├── playlist.js         # 歌单 CRUD（含 desc 简介）/ 导出导入 / 排序
-│   │   ├── play.js             # Bilibili 匹配（并行 + 片段过滤 + 官版优先）/ 换源 / 音频流
-│   │   └── stats.js            # 统计 / 周报月报 / 专辑收藏 / 海报 / 黑名单 / 红心
+│   │   ├── playlist.js         # 歌单 CRUD / 导出导入 / 排序
+│   │   ├── play.js             # Bilibili 匹配 / 换源 / 音频流（token 认证）
+│   │   └── stats.js            # 统计 / 周报月报（公共 buildReport）/ 推荐 / 海报
 │   └── services/
 │       ├── qqmusic.js          # QQ 音乐数据（搜索 / 歌手 / 专辑 / 榜单 + 去重）
 │       ├── bilibili.js         # Bilibili WBI 签名 + buvid 激活 + html5 降级
 │       ├── lyrics.js           # 网易云歌词（多策略 + LRC 解析 + 候选预过滤）
 │       └── poster.js           # Puppeteer 海报渲染（精工版 Pro）
+├── scripts/
+│   ├── build-restart.js        # 一键构建 + 重启（npm run deploy）
+│   └── mobile-open.js          # adb 检测 + 手机浏览器自动打开（npm run mobile）
 ├── vite.config.js
 ├── data/                       # SQLite 数据库（运行后生成）
 └── package.json
@@ -345,10 +296,25 @@ WeMusic/
 | 点击劫持 & MIME 嗅探 & XSS | 响应头防护 |
 | 全局 API 限流 | 120 次/分钟/IP |
 | 登录限流 | 10 次/15 分钟/IP（防暴力破解） |
-| JWT + bcrypt cost=12 | 鉴权与密码哈希 |
+| JWT + bcrypt cost=12 | 鉴权与密码哈希（最少 8 位） |
 | Payload 限制 | 256KB |
 | 注册开关 | `ALLOW_REGISTER=false` |
 | 错误脱敏 | 500 不暴露堆栈 |
+| 音频流认证 | `/api/play/stream` 支持 `?token=` 参数认证 |
+| Webhook 签名 | `WEBHOOK_SECRET` 环境变量（非硬编码） |
+| 播放日志校验 | duration∈[0,86400]s / played_sec≤duration |
+| 管理员权限隔离 | 普通用户访问 admin 端点返回 403 |
+
+### 环境变量（`.env`）
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | `5174` | 服务端口 |
+| `JWT_SECRET` | - | JWT 签名密钥（`openssl rand -hex 32` 生成） |
+| `ALLOW_REGISTER` | `true` | 是否允许注册（首次后建议关闭） |
+| `ADMIN_USERNAME` | - | 管理员用户名，逗号分隔多人 |
+| `WEBHOOK_SECRET` | - | GitHub Webhook HMAC 签名密钥 |
+| `WEBHOOK_PORT` | `9001` | Webhook 监听端口 |
 
 ---
 

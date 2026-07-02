@@ -1,6 +1,7 @@
 // WeMusic 主应用入口
 import { Auth, api } from './api.js';
 import { state } from './state.js';
+import { $ } from './utils.js';
 import { loadPlaylists, setActiveNav, initPlaylistUI } from './playlist-ui.js';
 import { initPlayer, restoreSession, renderMode } from './player.js';
 import { initQueue } from './queue.js';
@@ -76,10 +77,7 @@ export function navPush(view, data) {
   } else {
     history.pushState({ view, data }, '', location.href);
   }
-  // 如果是从 popstate 恢复的（wasPop），额外标记避免恢复时再次 push
-  if (wasPop) {
-    console.log('[nav] replaceState (popstate restore)');
-  }
+  updateNavArrows();
 }
 
 async function restoreView(view, data) {
@@ -108,26 +106,18 @@ async function restoreView(view, data) {
 function updateNavArrows() {
   // 后退：history.length > 1（有历史可退）
   document.getElementById('navBack').disabled = history.length <= 1;
-  // 前进：始终可用，让浏览器自行判断（history.forward 无前进条目时静默无效）
   document.getElementById('navFwd').disabled = false;
 }
 document.getElementById('navBack').onclick = () => history.back();
 document.getElementById('navFwd').onclick = () => history.forward();
-// 初始状态及每次 pushState 后更新
-const _origPush = history.pushState.bind(history);
-history.pushState = function(state, title, url) {
-  console.log('[nav] pushState:', state?.view, history.length);
-  _origPush(state, title, url);
-  updateNavArrows();
-};
-// 监控 popstate
+
+// 导航箭头由 navPush / popstate 分别更新，不再猴子补丁 history.pushState
 window.addEventListener('popstate', (e) => {
   console.log('[nav] popstate:', e.state?.view, 'length:', history.length, 'current:', history.state?.view);
   if (!e.state?.view) return;
   restoreView(e.state.view, e.state.data);
   updateNavArrows();
 });
-// 移除旧的 popstate 监听器（上面已注册）— 但下面还有一个重复的，需要合并
 updateNavArrows();
 
 // 应用初始化
@@ -138,8 +128,8 @@ async function init() {
   // 加载头像 -> 同时设置 state.isAdmin / state.user；加载服务端偏好同步
   loadAvatar().then(() => {
     if (state.isAdmin) {
-      $('navAdmin').style.display = '';
-      $('navAdmin').onclick = async () => {
+      $('adminTopBtn').style.display = '';
+      $('adminTopBtn').onclick = async () => {
         const { openAdmin } = await import('./admin.js');
         openAdmin();
       };

@@ -379,14 +379,6 @@ export async function getAlbumDetail(albumMid) {
 }
 
 /**
- * @deprecated 使用 getAlbumDetail 代替
- */
-export async function getAlbumSongs(albumMid) {
-  const detail = await getAlbumDetail(albumMid);
-  return { album: detail.name, songs: detail.songs };
-}
-
-/**
  * 通过歌曲的 album_mid 获取专辑简介（用于播放时展示歌曲背景）
  * 如果歌曲没有 album_mid，尝试用歌名+歌手搜索匹配
  */

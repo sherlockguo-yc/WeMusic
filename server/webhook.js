@@ -1,10 +1,16 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { exec } from 'node:child_process';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const PORT = 9001;
-const SECRET = '032c150f7b257ae2d153e73b5bdd4d1d1b0d7511a7e3df51d97e3cd70ac12ef2';
+const PORT = Number(process.env.WEBHOOK_PORT) || 9001;
+const SECRET = process.env.WEBHOOK_SECRET || '';
 const ROOT_DIR = new URL('..', import.meta.url).pathname;
+
+if (!SECRET) {
+  console.error('[webhook] 未配置 WEBHOOK_SECRET 环境变量，webhook 服务将拒绝所有请求');
+}
 
 /**
  * 验证 GitHub Webhook 签名 (HMAC-SHA256)

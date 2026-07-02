@@ -1,6 +1,6 @@
 // ---------------- 播放核心 ----------------
 import { $, fmtDur, esc, biliEmbed, albumCover, toast } from './utils.js';
-import { api } from './api.js';
+import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { clearSleep, sleepAfterSong } from './settings.js';
 
@@ -461,7 +461,7 @@ function _bgPreload(bvid) {
   console.log(`[bg:state] preload bvid=${bvid} (was ${_bgBvid || 'none'})`);
   _bgBvid = bvid;
   _bgPlaying = false;
-  bgAudio.src = `/api/play/stream?bvid=${bvid}`;
+  bgAudio.src = `/api/play/stream?bvid=${bvid}&token=${encodeURIComponent(Auth.token)}`;
   bgAudio.muted = true;
   bgAudio.volume = _bgVolume;
   bgAudio.load();

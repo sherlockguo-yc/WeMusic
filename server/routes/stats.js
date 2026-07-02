@@ -43,12 +43,14 @@ router.put('/bvid/:songMid', (req, res) => {
 router.post('/log', (req, res) => {
   const { song_mid, name, singer, album, album_mid, duration, played_sec, bvid } = req.body || {};
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
+  const dur = Math.min(Math.max(Number(duration) || 0, 0), 86400);   // 0~24h
+  const sec = Math.min(Math.max(Number(played_sec) || 0, 0), dur);  // 不超过歌曲时长
   db.prepare(`
     INSERT INTO play_logs (user_id, song_mid, name, singer, album, album_mid, duration, played_sec, bvid, played_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.user.id, song_mid || '', name, singer || '', album || '', album_mid || '',
-    duration || 0, played_sec || 0, bvid || '', Date.now()
+    dur, sec, bvid || '', Date.now()
   );
   res.json({ ok: true });
 });
@@ -70,65 +72,41 @@ router.get('/overview', (req, res) => {
 // 本周 / 本月听歌报告（含跳过率、新歌数、完播率分布、听歌趋势）
 // 统一响应结构：period / lastPeriod / trend / label，供周报月报共用前端渲染逻辑
 // ============================================================
-router.get('/weekly', (req, res) => {
-  const uid = req.user.id;
-  const now = new Date();
-  const offset = Math.max(0, parseInt(req.query.weekOffset) || 0); // 0=本周, 1=上周, ...
 
-  // 本周一 00:00:00（自然周：周一 ~ 周日）
-  const dayOfWeek = now.getDay();
-  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const thisMonday = new Date(now); thisMonday.setDate(now.getDate() - daysSinceMonday); thisMonday.setHours(0,0,0,0);
-
-  // 目标周周一
-  const targetMonday = new Date(thisMonday); targetMonday.setDate(thisMonday.getDate() - offset * 7);
-  const targetStart = targetMonday.getTime();
-  const targetEnd = offset === 0 ? now.getTime() : new Date(targetMonday.getFullYear(), targetMonday.getMonth(), targetMonday.getDate() + 7).getTime();
-  const actualEnd = Math.min(now.getTime(), targetEnd);
-
-  // 上一周（对比基准）
-  const lastMonday = new Date(targetMonday); lastMonday.setDate(targetMonday.getDate() - 7);
-  const lastSince = lastMonday.getTime();
-  const lastUntil = targetStart;
-
-  const fmtDate = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
-  const targetSunday = new Date(targetMonday); targetSunday.setDate(targetMonday.getDate() + 6);
-  const label = offset === 0
-    ? `${fmtDate(targetMonday)} — ${fmtDate(now)}`
-    : `${fmtDate(targetMonday)} — ${fmtDate(targetSunday)}`;
-
+// 公共函数：构建听歌报告数据
+function buildReport(uid, since, until, compareSince, compareUntil, label) {
   // —— 概览 ——
   const periodT = db.prepare(`
     SELECT COUNT(*) AS plays, SUM(played_sec) AS sec,
            COUNT(DISTINCT name||singer) AS unique_songs,
            COUNT(DISTINCT date(played_at/1000,'unixepoch','localtime')) AS days
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-  `).get(uid, targetStart, actualEnd);
+  `).get(uid, since, until);
 
-  // —— 上周概览（对比） ——
+  // —— 对比周期概览 ——
   const lastPeriodT = db.prepare(`
     SELECT COUNT(*) AS plays, SUM(played_sec) AS sec
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-  `).get(uid, lastSince, lastUntil);
+  `).get(uid, compareSince, compareUntil);
 
   // —— Top 歌曲 / 歌手 ——
   const topSongs = db.prepare(`
     SELECT name, singer, MAX(album_mid) AS album_mid, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
     GROUP BY name, singer ORDER BY play_count DESC LIMIT 10
-  `).all(uid, targetStart, actualEnd);
+  `).all(uid, since, until);
 
   const topArtists = db.prepare(`
     SELECT singer, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
     GROUP BY singer ORDER BY play_count DESC LIMIT 5
-  `).all(uid, targetStart, actualEnd);
+  `).all(uid, since, until);
 
   // —— 跳过率 ——
   const skipRow = db.prepare(`
     SELECT COUNT(*) AS total, SUM(CASE WHEN played_sec < 30 THEN 1 ELSE 0 END) AS skipped
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-  `).get(uid, targetStart, actualEnd);
+  `).get(uid, since, until);
 
   // —— 新歌发现数 ——
   const newSongs = db.prepare(`
@@ -136,13 +114,70 @@ router.get('/weekly', (req, res) => {
     AND (name||'__'||COALESCE(singer,'')) NOT IN (
       SELECT name||'__'||COALESCE(singer,'') FROM play_logs WHERE user_id=? AND played_at < ?
     )
-  `).get(uid, targetStart, actualEnd, uid, targetStart);
+  `).get(uid, since, until, uid, since);
 
   // —— 完播率分布 ——
-  const comp0   = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) < 0.2`).get(uid, targetStart, actualEnd).cnt;
-  const comp20  = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) >= 0.2 AND CAST(played_sec AS REAL)/NULLIF(duration,0) < 0.8`).get(uid, targetStart, actualEnd).cnt;
-  const comp80  = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) >= 0.8`).get(uid, targetStart, actualEnd).cnt;
-  const compNone = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND (duration IS NULL OR duration=0)`).get(uid, targetStart, actualEnd).cnt;
+  const comp0    = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) < 0.2`).get(uid, since, until).cnt;
+  const comp20   = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) >= 0.2 AND CAST(played_sec AS REAL)/NULLIF(duration,0) < 0.8`).get(uid, since, until).cnt;
+  const comp80   = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) >= 0.8`).get(uid, since, until).cnt;
+  const compNone = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND (duration IS NULL OR duration=0)`).get(uid, since, until).cnt;
+
+  // —— 峰值时段 ——
+  const peakHourRow = db.prepare(`
+    SELECT CAST(strftime('%H',played_at/1000,'unixepoch','localtime') AS INTEGER) AS hour, COUNT(*) AS cnt
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    GROUP BY hour ORDER BY cnt DESC LIMIT 1
+  `).get(uid, since, until);
+
+  // —— 歌手多样性 ——
+  const uniqueArtists = db.prepare(`
+    SELECT COUNT(DISTINCT singer) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
+  `).get(uid, since, until).cnt;
+
+  return {
+    period: {
+      plays: periodT.plays || 0,
+      sec: periodT.sec || 0,
+      uniqueSongs: periodT.unique_songs || 0,
+      days: periodT.days || 0,
+    },
+    lastPeriod: {
+      plays: lastPeriodT?.plays || 0,
+      sec: lastPeriodT?.sec || 0,
+    },
+    topSongs,
+    topArtists,
+    skip: { total: skipRow?.total || 0, skipped: skipRow?.skipped || 0 },
+    newSongs: newSongs?.cnt || 0,
+    completion: { low: comp0, mid: comp20, high: comp80, noDur: compNone },
+    peakHour: peakHourRow ? peakHourRow.hour : null,
+    uniqueArtists: uniqueArtists || 0,
+    label,
+  };
+}
+
+router.get('/weekly', (req, res) => {
+  const uid = req.user.id;
+  const now = new Date();
+  const offset = Math.max(0, parseInt(req.query.weekOffset) || 0);
+
+  const dayOfWeek = now.getDay();
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const thisMonday = new Date(now); thisMonday.setDate(now.getDate() - daysSinceMonday); thisMonday.setHours(0,0,0,0);
+  const targetMonday = new Date(thisMonday); targetMonday.setDate(thisMonday.getDate() - offset * 7);
+  const targetStart = targetMonday.getTime();
+  const targetEnd = offset === 0 ? now.getTime() : new Date(targetMonday.getFullYear(), targetMonday.getMonth(), targetMonday.getDate() + 7).getTime();
+  const actualEnd = Math.min(now.getTime(), targetEnd);
+  const lastMonday = new Date(targetMonday); lastMonday.setDate(targetMonday.getDate() - 7);
+  const lastSince = lastMonday.getTime();
+  const lastUntil = targetStart;
+
+  const fmtDate = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+  const label = offset === 0
+    ? `${fmtDate(targetMonday)} — ${fmtDate(now)}`
+    : `${fmtDate(targetMonday)} — ${fmtDate(new Date(targetMonday.getFullYear(), targetMonday.getMonth(), targetMonday.getDate() + 6))}`;
+
+  const report = buildReport(uid, targetStart, actualEnd, lastSince, lastUntil, label);
 
   // —— 近 4 周趋势 ——
   const trend = [];
@@ -154,105 +189,26 @@ router.get('/weekly', (req, res) => {
     trend.push({ label: `${fmtDate(mon)}-${fmtDate(sun)}`, plays: row?.plays || 0 });
   }
   trend.reverse();
-
-  // —— 最活跃时段 ——
-  const peakHourRow = db.prepare(`
-    SELECT CAST(strftime('%H',played_at/1000,'unixepoch','localtime') AS INTEGER) AS hour, COUNT(*) AS cnt
-    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-    GROUP BY hour ORDER BY cnt DESC LIMIT 1
-  `).get(uid, targetStart, actualEnd);
-
-  // —— 歌手多样性 ——
-  const uniqueArtists = db.prepare(`
-    SELECT COUNT(DISTINCT singer) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
-  `).get(uid, targetStart, actualEnd).cnt;
-
-  res.json({
-    period: {
-      plays: periodT.plays || 0,
-      sec: periodT.sec || 0,
-      uniqueSongs: periodT.unique_songs || 0,
-      days: periodT.days || 0,
-    },
-    lastPeriod: {
-      plays: lastPeriodT?.plays || 0,
-      sec: lastPeriodT?.sec || 0,
-    },
-    topSongs,
-    topArtists,
-    skip: {
-      total: skipRow?.total || 0,
-      skipped: skipRow?.skipped || 0,
-    },
-    newSongs: newSongs?.cnt || 0,
-    completion: { low: comp0, mid: comp20, high: comp80, noDur: compNone },
-    trend,
-    label,
-    peakHour: peakHourRow ? peakHourRow.hour : null,
-    uniqueArtists: uniqueArtists || 0,
-  });
+  res.json({ ...report, trend });
 });
 
 // —— 本月听歌报告（自然月，支持 monthOffset 查看历史月） ——
 router.get('/monthly', (req, res) => {
   const uid = req.user.id;
   const now = new Date();
-  const offset = Math.max(0, parseInt(req.query.monthOffset) || 0); // 0=本月, 1=上月, ...
+  const offset = Math.max(0, parseInt(req.query.monthOffset) || 0);
 
-  // 目标月起始：当月 1 日向前推 offset 个月
   const targetStart = new Date(now.getFullYear(), now.getMonth() - offset, 1, 0, 0, 0, 0);
   const targetSince = targetStart.getTime();
   const targetEnd = offset === 0
     ? now.getTime()
     : new Date(now.getFullYear(), now.getMonth() - offset + 1, 1, 0, 0, 0, 0).getTime();
-
-  // 上月概览（对比）
   const lastMonthStart = new Date(targetStart.getFullYear(), targetStart.getMonth() - 1, 1, 0, 0, 0, 0);
   const lastSince = lastMonthStart.getTime();
   const lastUntil = targetSince;
-
   const label = `${targetStart.getFullYear()}年${targetStart.getMonth() + 1}月`;
 
-  const periodT = db.prepare(`
-    SELECT COUNT(*) AS plays, SUM(played_sec) AS sec,
-           COUNT(DISTINCT name||singer) AS unique_songs,
-           COUNT(DISTINCT date(played_at/1000,'unixepoch','localtime')) AS days
-    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-  `).get(uid, targetSince, targetEnd);
-
-  const lastPeriodT = db.prepare(`
-    SELECT COUNT(*) AS plays, SUM(played_sec) AS sec
-    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-  `).get(uid, lastSince, lastUntil);
-
-  const topSongs = db.prepare(`
-    SELECT name, singer, MAX(album_mid) AS album_mid, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
-    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-    GROUP BY name, singer ORDER BY play_count DESC LIMIT 10
-  `).all(uid, targetSince, targetEnd);
-
-  const topArtists = db.prepare(`
-    SELECT singer, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
-    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
-    GROUP BY singer ORDER BY play_count DESC LIMIT 5
-  `).all(uid, targetSince, targetEnd);
-
-  const skipRow = db.prepare(`
-    SELECT COUNT(*) AS total, SUM(CASE WHEN played_sec < 30 THEN 1 ELSE 0 END) AS skipped
-    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-  `).get(uid, targetSince, targetEnd);
-
-  const newSongs = db.prepare(`
-    SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-    AND (name||'__'||COALESCE(singer,'')) NOT IN (
-      SELECT name||'__'||COALESCE(singer,'') FROM play_logs WHERE user_id=? AND played_at < ?
-    )
-  `).get(uid, targetSince, targetEnd, uid, targetSince);
-
-  const comp0   = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) < 0.2`).get(uid, targetSince, targetEnd).cnt;
-  const comp20  = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) >= 0.2 AND CAST(played_sec AS REAL)/NULLIF(duration,0) < 0.8`).get(uid, targetSince, targetEnd).cnt;
-  const comp80  = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND CAST(played_sec AS REAL)/NULLIF(duration,0) >= 0.8`).get(uid, targetSince, targetEnd).cnt;
-  const compNone = db.prepare(`SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND (duration IS NULL OR duration=0)`).get(uid, targetSince, targetEnd).cnt;
+  const report = buildReport(uid, targetSince, targetEnd, lastSince, lastUntil, label);
 
   // —— 近 6 个月趋势 ——
   const trend = [];
@@ -263,41 +219,7 @@ router.get('/monthly', (req, res) => {
     trend.push({ label: `${mStart.getMonth() + 1}月`, plays: row?.plays || 0 });
   }
   trend.reverse();
-
-  const peakHourRow = db.prepare(`
-    SELECT CAST(strftime('%H',played_at/1000,'unixepoch','localtime') AS INTEGER) AS hour, COUNT(*) AS cnt
-    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
-    GROUP BY hour ORDER BY cnt DESC LIMIT 1
-  `).get(uid, targetSince, targetEnd);
-
-  const uniqueArtists = db.prepare(`
-    SELECT COUNT(DISTINCT singer) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
-  `).get(uid, targetSince, targetEnd).cnt;
-
-  res.json({
-    period: {
-      plays: periodT.plays || 0,
-      sec: periodT.sec || 0,
-      uniqueSongs: periodT.unique_songs || 0,
-      days: periodT.days || 0,
-    },
-    lastPeriod: {
-      plays: lastPeriodT?.plays || 0,
-      sec: lastPeriodT?.sec || 0,
-    },
-    topSongs,
-    topArtists,
-    skip: {
-      total: skipRow?.total || 0,
-      skipped: skipRow?.skipped || 0,
-    },
-    newSongs: newSongs?.cnt || 0,
-    completion: { low: comp0, mid: comp20, high: comp80, noDur: compNone },
-    trend,
-    label,
-    peakHour: peakHourRow ? peakHourRow.hour : null,
-    uniqueArtists: uniqueArtists || 0,
-  });
+  res.json({ ...report, trend });
 });
 
 // 最常播放歌曲 Top N（默认 20）

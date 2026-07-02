@@ -301,6 +301,10 @@ export function openSettings() {
     customInput.onblur = () => { customWrap.classList.remove('editing'); customInput.value = ''; };
   }
   $('settingsModal').classList.add('show');
+  // 内容溢出时显示底部滚动提示
+  import('./utils.js').then(({ setupScrollHint }) => {
+    setupScrollHint($('settingsModal').querySelector('.modal'));
+  });
 }
 
 export function initSettings() {
@@ -308,6 +312,21 @@ export function initSettings() {
   $('settingsClose').onclick = () => $('settingsModal').classList.remove('show');
   $('settingsModal').onclick = (e) => { if (e.target.id === 'settingsModal') $('settingsModal').classList.remove('show'); };
   $('settingsLogout').onclick = () => { Auth.clear(); location.href = '/login.html'; };
+
+  // 移动端扫码弹窗
+  $('showMobileQRBtn').onclick = async () => {
+    try {
+      const { url } = await api('/lan-url');
+      $('mobileQRUrl').textContent = url;
+      $('mobileQRImg').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+      $('mobileQRLan').textContent = url.replace(/^https?:\/\//, '');
+      $('mobileQRModal').classList.add('show');
+    } catch (e) {
+      toast('获取局域网地址失败：' + e.message);
+    }
+  };
+  $('mobileQRClose').onclick = () => $('mobileQRModal').classList.remove('show');
+  $('mobileQRModal').onclick = (e) => { if (e.target.id === 'mobileQRModal') $('mobileQRModal').classList.remove('show'); };
 
   // 打赏弹窗（使用 base64 嵌入式二维码，防止被轻易替换）
   $('donateBtn').onclick = () => { $('donateModal').classList.add('show'); $('donateQR').src = DONATE_QR_BASE64; };

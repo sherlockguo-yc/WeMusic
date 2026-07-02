@@ -105,7 +105,11 @@ router.get('/:id/songs', (req, res) => {
 router.post('/:id/songs', (req, res) => {
   const list = Array.isArray(req.body?.songs) ? req.body.songs : [];
   if (list.length === 0) return res.status(400).json({ error: '没有要添加的歌曲' });
-  const added = insertSongsBulk(req.playlist.id, list);
+  // 校验每首歌曲至少有歌名
+  const invalid = list.filter(s => !s || !s.name);
+  if (invalid.length === list.length) return res.status(400).json({ error: '所有歌曲缺少歌名' });
+  const valid = list.filter(s => s && s.name);
+  const added = insertSongsBulk(req.playlist.id, valid);
   res.json({ added, skipped: list.length - added });
 });
 

@@ -19,6 +19,15 @@ export function fmtTotal(sec) {
   return `${m} 分`;
 }
 
+export function fmtMin(sec) {
+  sec = Number(sec) || 0;
+  if (sec < 60) return '0m';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h${m}m`;
+  return `${m}m`;
+}
+
 export function fmtSec(sec) {
   sec = Number(sec) || 0;
   const h = Math.floor(sec / 3600);
@@ -169,4 +178,20 @@ export function uiConfirm(message) {
     $('promptCancel').onclick = () => done(false);
     mask.onclick = (e) => { if (e.target === mask) done(false); };
   });
+}
+
+/** 给模态弹窗添加滚动提示遮罩：内容溢出时显示底部渐变箭头，滚到底部自动隐藏 */
+export function setupScrollHint(modal) {
+  const hint = modal.querySelector('.modal-scroll-hint');
+  if (!hint) return;
+
+  function check() {
+    const canScroll = modal.scrollHeight > modal.clientHeight + 5;
+    const atBottom = modal.scrollTop + modal.clientHeight >= modal.scrollHeight - 20;
+    hint.classList.toggle('hidden', !canScroll || atBottom);
+  }
+
+  modal.addEventListener('scroll', check, { passive: true });
+  // 首次打开时检查（给渲染留时间）
+  requestAnimationFrame(() => requestAnimationFrame(check));
 }

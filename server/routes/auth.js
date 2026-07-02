@@ -62,6 +62,8 @@ router.post('/login', (req, res) => {
   if (!valid) {
     return res.status(401).json({ error: '用户名或密码错误' });
   }
+  // 记录登录时间
+  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(Date.now(), user.id);
   const token = signToken({ id: user.id, username: user.username });
   res.json({ token, user: { id: user.id, username: user.username } });
 });
@@ -125,34 +127,42 @@ router.delete('/admin/feedback/:id', authRequired, adminOnly, (req, res) => {
   res.json({ ok: true });
 });
 
-// 管理员-全局屏蔽列表
-router.get('/admin/blocked', authRequired, adminOnly, (req, res) => {
-  const rows = db.prepare(`
-    SELECT b.*, u.username FROM blocked_sources b
-    JOIN users u ON u.id = b.user_id
-    ORDER BY b.blocked_at DESC LIMIT 200
-  `).all();
-  res.json({ blocked: rows });
-});
-
-// 管理员-取消某条屏蔽（按 user_id + song_key + source_type + source_id）
-router.delete('/admin/blocked', authRequired, adminOnly, (req, res) => {
-  const { userId, song, type, sourceId } = req.body || {};
-  if (!userId || !song || !sourceId) return res.status(400).json({ error: '缺少参数' });
-  const r = db.prepare(`
-    DELETE FROM blocked_sources
-    WHERE user_id=? AND song_key=? AND source_type=? AND source_id=?
-  `).run(userId, song, type || 'video', String(sourceId));
-  res.json({ ok: true, removed: r.changes });
-});
-
-// 管理员-系统概况
+// 管理员-用户列表（含统计数据）
 router.get('/admin/stats', authRequired, adminOnly, (req, res) => {
-  const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
-  const songCount = db.prepare('SELECT COUNT(*) AS cnt FROM songs').get().cnt;
-  const playlistCount = db.prepare('SELECT COUNT(*) AS cnt FROM playlists').get().cnt;
+  const now = Date.now();
+  const weekAgo = now - 7 * 86400000;
+  const monthAgo = now - 30 * 86400000;
+
+  const users = db.prepare('SELECT id, username, created_at, last_login_at FROM users ORDER BY created_at DESC').all();
+
+  // 预计算每个用户的统计数据
+  const stmtSongs   = db.prepare('SELECT COUNT(*) AS cnt FROM songs s JOIN playlists pl ON s.playlist_id=pl.id WHERE pl.user_id=?');
+  const stmtPls     = db.prepare('SELECT COUNT(*) AS cnt FROM playlists WHERE user_id=?');
+  const stmtWeek    = db.prepare('SELECT SUM(played_sec) AS sec FROM play_logs WHERE user_id=? AND played_at>=?');
+  const stmtMonth   = db.prepare('SELECT SUM(played_sec) AS sec FROM play_logs WHERE user_id=? AND played_at>=?');
+  const stmtTotal   = db.prepare('SELECT SUM(played_sec) AS sec FROM play_logs WHERE user_id=?');
+
   const feedbackCount = db.prepare('SELECT COUNT(*) AS cnt FROM feedback').get().cnt;
-  res.json({ userCount, songCount, playlistCount, feedbackCount });
+
+  const list = users.map(u => ({
+    username: u.username,
+    createdAt: u.created_at,
+    lastLogin: u.last_login_at || null,
+    songCount: stmtSongs.get(u.id).cnt,
+    playlistCount: stmtPls.get(u.id).cnt,
+    totalSec: stmtTotal.get(u.id).sec || 0,
+    weekSec: stmtWeek.get(u.id, weekAgo).sec || 0,
+    monthSec: stmtMonth.get(u.id, monthAgo).sec || 0,
+  }));
+
+  const totalSec = list.reduce((s, u) => s + u.totalSec, 0);
+
+  res.json({
+    userCount: users.length,
+    feedbackCount,
+    totalSec,
+    users: list,
+  });
 });
 
 export default router;

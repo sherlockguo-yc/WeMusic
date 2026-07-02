@@ -118,7 +118,6 @@ export function updateLyricsPanelMeta(song) {
 
 export function openLyricsPanel() {
   const panel = $('lyricsPanel');
-  // 计算封面元素在视口中的中心坐标，作为 transform-origin（百分比）
   const cover = $('npCover');
   if (cover) {
     const r = cover.getBoundingClientRect();
@@ -136,6 +135,27 @@ export function openLyricsPanel() {
   import('./player.js').then(({ autoTimer, timerPaused }) => {
     if (autoTimer && !timerPaused) panel.classList.add('playing');
   });
+
+  // 启动 UI 同步定时器（仅在面板显示时运行）
+  if (_lyricsUISyncId) clearInterval(_lyricsUISyncId);
+  _lyricsUISyncId = setInterval(() => {
+    $('lpCurTime').textContent = $('curTime').textContent;
+    $('lpDurTime').textContent = $('durTime').textContent;
+    $('lpSeekBar').value = $('seekBar').value;
+    $('lpPlayBtn').textContent = $('playPauseBtn').textContent;
+  }, 500);
+
+  // 启动歌词进度同步定时器
+  if (_lyricsSyncId) clearInterval(_lyricsSyncId);
+  _lyricsSyncId = setInterval(() => {
+    import('./player.js').then(({ autoTimer, timerPaused, elapsed }) => {
+      if (!autoTimer) { panel.classList.remove('playing'); return; }
+      panel.classList.toggle('playing', !timerPaused);
+      if (!timerPaused && lyricsLines.length) {
+        syncLyrics(elapsed);
+      }
+    });
+  }, 1000);
 }
 
 export function closeLyricsPanel() {
@@ -220,6 +240,14 @@ async function openLyricsSwitchModal(song) {
   modal.querySelector('h3').textContent = '选择歌词版本（网易云音乐）';
 
   const songKey = `${song.name}__${song.singer || ''}`;
+
+  // 拉取用户已屏蔽的歌词源
+  let blockedList = [];
+  try {
+    const r = await api(`/stats/blocked/full?song=${encodeURIComponent(songKey)}&type=lyrics`);
+    blockedList = r.list || [];
+  } catch {}
+
   list.innerHTML = lyricsCandidates.map((c, i) => {
     const isCurrent = c.id === lyricsCurrentSourceId;
     return `<div class="cand-row ${isCurrent ? 'current' : ''}" data-i="${i}">
@@ -231,7 +259,23 @@ async function openLyricsSwitchModal(song) {
       <span class="tag ${isCurrent ? 'current' : ''}">${isCurrent ? '当前' : '选择'}</span>
       <button class="cand-block-btn" title="屏蔽此歌词源，以后不再出现"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>`;
-  }).join('');
+  }).join('') + (blockedList.length ? `
+    <div class="cand-blocked-section">
+      <button class="cand-blocked-toggle" id="candLyricsBlockedToggle">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        已屏蔽的歌词源（${blockedList.length}）
+      </button>
+      <div class="cand-blocked-list" id="candLyricsBlockedList" style="display:none">
+        ${blockedList.map(b => `
+          <div class="cand-blocked-row" data-source-id="${esc(b.source_id)}">
+            <span class="cand-blocked-id">${esc(b.source_id)}</span>
+            <span class="cand-blocked-time">${new Date(b.blocked_at).toLocaleDateString()}</span>
+            <button class="cand-unblock-btn" title="取消屏蔽"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 9 8 9"/></svg> 恢复</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '');
 
   modal.classList.add('show');
 
@@ -267,6 +311,30 @@ async function openLyricsSwitchModal(song) {
   // 点叉关闭时恢复标题（openCandModal 总会再设回 Bilibili 标题）
   const origClose = $('candClose').onclick;
   $('candClose').onclick = () => { restoreTitle(); modal.classList.remove('show'); $('candClose').onclick = origClose; };
+
+  // 已屏蔽歌词源 - 折叠切换
+  const lyricsToggle = $('candLyricsBlockedToggle');
+  if (lyricsToggle) {
+    lyricsToggle.onclick = () => {
+      const bl = $('candLyricsBlockedList');
+      const show = bl.style.display === 'none';
+      bl.style.display = show ? '' : 'none';
+    };
+  }
+
+  // 已屏蔽歌词源 - 恢复按钮
+  list.querySelectorAll('.cand-blocked-row .cand-unblock-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const row = btn.closest('.cand-blocked-row');
+      const sourceId = row.dataset.sourceId;
+      try {
+        await api('/stats/blocked', { method: 'DELETE', body: { song: songKey, type: 'lyrics', sourceId } });
+        row.remove();
+        toast('已取消屏蔽');
+      } catch (err) { toast('恢复失败：' + err.message); }
+    };
+  });
 }
 
 export function syncLyrics(sec) {
@@ -311,27 +379,4 @@ export function initLyrics() {
     $('seekBar').value = Number($('lpSeekBar').value);
     $('seekBar').dispatchEvent(new Event('input'));
   });
-
-  // 清理旧定时器，避免重复打开歌词页时累积
-  if (_lyricsUISyncId) clearInterval(_lyricsUISyncId);
-  if (_lyricsSyncId) clearInterval(_lyricsSyncId);
-
-  _lyricsUISyncId = setInterval(() => {
-    if (!$('lyricsPanel').classList.contains('show')) return;
-    $('lpCurTime').textContent = $('curTime').textContent;
-    $('lpDurTime').textContent = $('durTime').textContent;
-    $('lpSeekBar').value = $('seekBar').value;
-    $('lpPlayBtn').textContent = $('playPauseBtn').textContent;
-  }, 500);
-
-  _lyricsSyncId = setInterval(() => {
-    const panel = $('lyricsPanel');
-    import('./player.js').then(({ autoTimer, timerPaused, elapsed }) => {
-      if (!autoTimer) { panel.classList.remove('playing'); return; }
-      panel.classList.toggle('playing', !timerPaused);
-      if (!timerPaused && panel.classList.contains('show') && lyricsLines.length) {
-        syncLyrics(elapsed);
-      }
-    });
-  }, 1000);
 }

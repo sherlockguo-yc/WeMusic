@@ -103,6 +103,69 @@ app.use((err, req, res, _next) => {
 });
 
 // ============================================================
+// 手机扫码打开页面（局域网地址）
+// ============================================================
+
+// 获取当前局域网访问 URL（供前端和 /qr 页面共用）
+async function getLanUrl() {
+  const { networkInterfaces } = await import('node:os');
+  const nets = networkInterfaces();
+  const lan = Object.values(nets).flat().find(
+    (n) => n.family === 'IPv4' && !n.internal
+  );
+  return lan ? `http://${lan.address}:${config.port}` : `http://localhost:${config.port}`;
+}
+
+// 给前端调用的 API，返回当前局域网 URL
+app.get('/api/lan-url', async (req, res) => {
+  const url = await getLanUrl();
+  res.json({ url });
+});
+
+app.get('/qr', async (req, res) => {
+  const url = await getLanUrl();
+  const ipDisplay = url.replace(/^https?:\/\//, '');
+  res.send(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeMusic - 移动端访问</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100dvh; background: linear-gradient(135deg, #0d1b2a 0%, #1b2838 50%, #162447 100%);
+    color: #e0e6ed; padding: 20px; }
+  .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px; padding: 40px 30px; text-align: center; max-width: 400px; width: 100%;
+    backdrop-filter: blur(12px); }
+  h1 { font-size: 28px; margin-bottom: 8px; color: #1db954; letter-spacing: -0.5px; }
+  .sub { font-size: 14px; color: #8899aa; margin-bottom: 28px; }
+  .qr-wrap { display: inline-block; background: #fff; border-radius: 16px;
+    padding: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .qr-wrap img { display: block; width: 200px; height: 200px; }
+  .url { margin-top: 20px; font-size: 16px; background: rgba(0,0,0,0.25);
+    padding: 12px 18px; border-radius: 12px; word-break: break-all;
+    color: #7ec8e3; border: 1px solid rgba(255,255,255,0.08); }
+  .tip { margin-top: 16px; font-size: 13px; color: #667788; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎵 WeMusic</h1>
+    <div class="sub">手机扫一扫，即刻使用</div>
+    <div class="qr-wrap">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" alt="QR Code" />
+    </div>
+    <div class="url">${ipDisplay}</div>
+    <div class="tip">确保手机和电脑连接在同一 Wi-Fi / 局域网</div>
+  </div>
+</body>
+</html>`);
+});
+
+// ============================================================
 // 启动
 // ============================================================
 app.listen(config.port, '0.0.0.0', async () => {

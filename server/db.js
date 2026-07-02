@@ -153,5 +153,8 @@ const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name)
 if (!userCols.includes('avatar')) {
   db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');
 }
+if (!userCols.includes('last_login_at')) {
+  db.exec('ALTER TABLE users ADD COLUMN last_login_at INTEGER');
+}
 
 export default db;

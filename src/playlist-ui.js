@@ -80,7 +80,7 @@ export async function loadPlaylists() {
 }
 
 export function setActiveNav(id) {
-  ['navDiscover', 'navHistory', 'navStats', 'navLikes'].forEach((n) => {
+  ['navDiscover', 'navHistory', 'navStats', 'navLikes', 'navSavedAlbums'].forEach((n) => {
     const el = $(n); if (el) el.classList.toggle('active', n === id);
   });
 }

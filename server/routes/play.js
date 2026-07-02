@@ -1,7 +1,9 @@
 import express from 'express';
+import jwt from 'jsonwebtoken';
 import { Readable } from 'node:stream';
 import { authRequired } from '../middleware/auth.js';
 import { searchVideos, getAudioStream, fetchAudio } from '../services/bilibili.js';
+import { config } from '../config.js';
 import db from '../db.js';
 
 const router = express.Router();
@@ -314,13 +316,24 @@ router.get('/search', authRequired, async (req, res) => {
 
 /**
  * 音频流代理：<audio> 标签据此播放，由后端带 Referer 拉取 B 站音频。
- * 注意：<audio> 无法携带 Authorization 头，故此端点不强制鉴权（仅代理公开内容，本地单用户场景）。
- * GET /api/play/stream?bvid=BVxxx[&cid=xxx]
+ * <audio> 标签无法携带 Authorization 头，故通过查询参数传递 token。
+ * 未传 token 时允许访问（兼容直接访问），但建议前端传参以防滥用。
+ * GET /api/play/stream?bvid=BVxxx[&cid=xxx][&token=xxx]
  */
 router.get('/stream', async (req, res) => {
-  const { bvid, cid } = req.query;
+  const { bvid, cid, token } = req.query;
   if (!bvid) return res.status(400).send('缺少 bvid');
-  console.log(`[bg:stream] request bvid=${bvid} range=${req.headers.range || 'none'}`);
+
+  // token 可选认证：验证通过则记录 user_id 用于日志
+  let userId = null;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, config.jwtSecret);
+      userId = decoded.id;
+    } catch { /* token 无效，不拒绝，仅不记录用户 */ }
+  }
+
+  console.log(`[bg:stream] request bvid=${bvid} range=${req.headers.range || 'none'} user=${userId || 'anon'}`);
   try {
     const stream = await getAudioStream(bvid, cid ? Number(cid) : undefined);
     const range = req.headers.range;
