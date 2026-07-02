@@ -7,6 +7,8 @@ export let lyricsLines = [];
 export let lyricsFor = '';
 export let lyricsCandidates = []; // 当前候选列表
 export let lyricsCurrentSourceId = null; // 当前使用的网易云 songId
+let _lyricsUISyncId = null;  // UI 同步 setInterval ID
+let _lyricsSyncId = null;    // 进度同步 setInterval ID
 export function setLyricsFor(v) { lyricsFor = v; }
 
 // ---- localStorage 缓存：song_mid → netease_song_id ----
@@ -137,6 +139,9 @@ export function openLyricsPanel() {
 }
 
 export function closeLyricsPanel() {
+  // 清除 initLyrics 中启动的两个同步定时器
+  if (_lyricsUISyncId) { clearInterval(_lyricsUISyncId); _lyricsUISyncId = null; }
+  if (_lyricsSyncId) { clearInterval(_lyricsSyncId); _lyricsSyncId = null; }
   const panel = $('lyricsPanel');
   // 关闭时同步更新 origin，让动画缩回当前封面位置
   const cover = $('npCover');
@@ -307,7 +312,11 @@ export function initLyrics() {
     $('seekBar').dispatchEvent(new Event('input'));
   });
 
-  setInterval(() => {
+  // 清理旧定时器，避免重复打开歌词页时累积
+  if (_lyricsUISyncId) clearInterval(_lyricsUISyncId);
+  if (_lyricsSyncId) clearInterval(_lyricsSyncId);
+
+  _lyricsUISyncId = setInterval(() => {
     if (!$('lyricsPanel').classList.contains('show')) return;
     $('lpCurTime').textContent = $('curTime').textContent;
     $('lpDurTime').textContent = $('durTime').textContent;
@@ -315,7 +324,7 @@ export function initLyrics() {
     $('lpPlayBtn').textContent = $('playPauseBtn').textContent;
   }, 500);
 
-  setInterval(() => {
+  _lyricsSyncId = setInterval(() => {
     const panel = $('lyricsPanel');
     import('./player.js').then(({ autoTimer, timerPaused, elapsed }) => {
       if (!autoTimer) { panel.classList.remove('playing'); return; }

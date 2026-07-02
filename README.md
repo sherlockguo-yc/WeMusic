@@ -64,7 +64,7 @@
 - **视频浮窗**：可拖动、全屏、收起 / 关闭；展开 / 收起状态持久记忆。
 - **播放模式**：简约线框 SVG 图标，列表循环 / 单曲循环 / 随机播放，一键切换并记忆。
 - **自动连播**：按歌曲时长定时器驱动，播完自动跳下一首。
-- **后台播放**：切到其他标签后持续播放，计时器切歌后新歌自动接续，无需切回前台。切后台销毁 iframe、用 `<audio>` 代理音频流接管；回前台 iframe 带时间戳重建，交叉过渡无空档。
+- **后台播放**：切到其他标签后持续播放，计时器切歌后新歌自动接续，无需切回前台。切后台销毁 iframe、用 `<audio>` 代理音频流接管；回前台 iframe 带时间戳重建，交叉过渡无空档。三层健壮性防护：play() 最多 10 次递增重试 + 等 `canplay` 再播；播放后 5 秒健康检查自动重启；`_bgSyncTimer` 每 4 秒检测意外暂停并恢复。
 - **换源持久化**：手动换源后缓存到数据库（支持无 `song_mid` 的歌曲，用歌名+歌手作备用 key），下次播放自动使用上次选择。
 - **音量控制**：底部播放栏竖向弹出滑块，控制后台音量。
 - **播放队列 / 历史 合并抽屉**：同框切换，支持跳播、移除、清空，点击抽屉外自动关闭。
@@ -172,15 +172,46 @@ termux-app_v0.118.3+github-debug_universal.apk  ← 下这个就对了
 
 > 不要用 Google Play 版本，已停更。
 
-**② 复制粘贴下面这一行**（打开 Termux 后长按粘贴，回车）：
+**② 首次必须选镜像源**（仅第一次需要）：
 
 ```bash
-pkg install wget -y && wget -qO- https://raw.githubusercontent.com/sherlockguo/WeMusic/master/setup.sh | bash
+termux-change-repo
+```
+
+弹出菜单选「Main repository (Grimler repo) 镜像」→ 选 `Aliyun` 或 `TUNA`（国内最稳）。选完会自动更新。
+
+**③ 复制粘贴下面这一行**：
+
+```bash
+pkg install wget git nodejs -y && wget -qO- https://raw.githubusercontent.com/sherlockguo/WeMusic/master/setup.sh | bash
 ```
 
 等待几分钟（首次安装依赖），看到 `✅ 安装完成！` 即可。
 
-**③ 启动 + 安装到桌面**
+如果网络太慢跑不通，用**手动分步**版：
+
+```bash
+pkg install nodejs git -y
+git clone https://github.com/sherlockguo/WeMusic.git
+cd WeMusic
+npm config set registry https://registry.npmmirror.com
+npm install
+npm run build
+```
+
+> 若 `git clone` 超时（国内网慢常见），去浏览器下载 zip：
+> 1. 手机浏览器打开 `https://github.com/sherlockguo/WeMusic/archive/refs/heads/master.zip`
+> 2. 下载完后在 Termux 里执行：
+> ```bash
+> cd ~/storage/downloads
+> unzip WeMusic-master.zip
+> mv WeMusic-master ~/WeMusic
+> cd ~/WeMusic
+> npm config set registry https://registry.npmmirror.com
+> npm install && npm run build
+> ```
+
+**④ 启动 + 安装到桌面**
 
 ```bash
 cd ~/WeMusic && nohup npm start &
@@ -189,6 +220,14 @@ cd ~/WeMusic && nohup npm start &
 手机浏览器打开 `http://localhost:5174` → Chrome 菜单 → **「添加到主屏幕」**。
 
 以后桌面点 WeMusic 图标就能用（Termux 需要在后台保持运行）。
+
+**常见问题**：
+
+- `cd ~/WeMusic` 报「No such file or directory」→ `git clone` 没成功或目录不存在，检查 `ls` 是否有 `WeMusic` 文件夹
+- `git clone` 超时 → 用上面 zip 方式代替
+- 启动后浏览器 502 / 连接不上 → Termux 被休眠，**关掉电池优化**：设置 → 应用 → Termux → 电池 → 不优化
+- `nohup npm start &` 后无输出 → `jobs` 检查是否运行；`tail -f nohup.out` 看日志
+- 想关掉服务 → `pkill -f "node server/index.js"`
 
 ### 源码运行（电脑）
 

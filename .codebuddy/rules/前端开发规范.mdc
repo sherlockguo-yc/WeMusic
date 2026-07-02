@@ -1,15 +1,20 @@
-# WeMusic 前端开发准则
-
-> 长期有效的开发规范和行为准则。新增功能、修改 UI、调整代码前应参阅本文。
-
+---
+description: WeMusic 前端开发准则（图标/CSS 变量/字号/按钮/表格/hover/表头/候选/搜索/排版）
+alwaysApply: true
+enabled: true
+updatedAt: 2026-07-02T02:57:15.913Z
+provider: 
 ---
 
 ## 一、图标
 
 - **强制使用 [Lucide](https://lucide.dev/) 图标**，禁止 emoji、Unicode 符号、其他图标库。
-- 规格：`viewBox="0 0 24 24"` / `stroke-width="2"` / `stroke-linecap="round" stroke-linejoin="round"` / `stroke="currentColor"` / 默认 `fill="none"`，激活态改为 `fill="currentColor"`。
-- 按钮内图标与文字对齐：按钮需 `display: inline-flex; align-items: center; gap: 5px;`，SVG 加 `flex-shrink: 0`。
-- 详细规范见 `docs/ICON_STYLE.md`。
+- SVG 模板：`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="..."/></svg>`
+- 实心/激活态改为 `fill="currentColor"`。
+- 不要用 `fill="black/white"` 或颜色名，用 `currentColor` 让主题接管。
+- 不要用 `stroke-width="1.5"` 或 `1.8`，统一 `2`（Lucide 标准）。
+- 按钮内图标对齐：按钮 `display: inline-flex; align-items: center; gap: 5px;`，SVG `flex-shrink: 0`。
+- 新增图标流程：打开 [lucide.dev/icons](https://lucide.dev/icons) → 找图标 → 复制 SVG path → 套模板。
 
 ## 二、CSS 变量
 
@@ -29,7 +34,7 @@
 - 基础字号由 `--font-size` CSS 变量控制（默认 14px）。
 - **所有重要 UI 文本**必须使用 `calc(var(--font-size) * 比例)`，不能硬编码 `px`。
 - `html { font-size: var(--font-size); }` 作为基准。
-- 设置中提供 小(13px) / 默认(14px) / 中(15px) / 大(16px) 四档。
+- 设置中提供 小(13px) / 默认(14px) / 大(16px) / 特大(18px) 四档。
 
 ## 四、按钮
 
@@ -81,7 +86,3 @@
 - 标题使用 `.view-title`，副标题使用 `.view-sub`。
 - 按钮文字使用 `font-weight: 600` 或 `700`。
 - 所有 SVG 图标使用 `currentColor` 继承文字颜色。
-
----
-
-> 最后更新：2026-07-02

@@ -73,6 +73,8 @@ export function stopTimer() {
 }
 
 function autoAdvance() {
+  const from = document.hidden ? 'bg-ended/sync' : 'timer';
+  console.log(`[bg:advance] autoAdvance (from=${from}, elapsed=${elapsed}s, dur=${totalDur}s, hidden=${document.hidden})`);
   stopTimer();
   _flushLog(totalDur || elapsed);
   if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
@@ -207,7 +209,6 @@ export function restoreSession() {
     state.currentContext = s.currentContext || null;
     state.current = state.queue[state.queueIndex];
     if (state.current) {
-      $('npTitle').textContent = state.current.name;
       $('npTitle').textContent = state.current.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : state.current.name;
       updateNpCover(state.current);
       $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
@@ -423,17 +424,41 @@ let _bgPlaying = false;     // bgAudio 当前是否在有声播放（非 preload
 // bgAudio ended 事件：后台切歌最可靠的通知（不被 Chrome 节流/冻结影响）
 bgAudio.addEventListener('ended', () => {
   if (_bgPlaying) {
-    console.log('[bgAudio] ended — auto advance');
+    console.log(`[bgAudio] ended at ${bgAudio.currentTime?.toFixed(1)}s — auto advance`);
     _bgPlaying = false;
     autoAdvance();
   }
+});
+// 后台诊断日志：监听 bgAudio 各种状态事件
+bgAudio.addEventListener('error', () => {
+  const err = bgAudio.error;
+  console.warn(`[bgAudio] ERROR code=${err?.code} message="${err?.message}" src=${bgAudio.src?.slice(0,60)}`);
+});
+bgAudio.addEventListener('stalled', () => {
+  console.warn(`[bgAudio] STALLED currentTime=${bgAudio.currentTime?.toFixed(1)}s readyState=${bgAudio.readyState}`);
+});
+bgAudio.addEventListener('waiting', () => {
+  console.log(`[bgAudio] waiting (buffering) currentTime=${bgAudio.currentTime?.toFixed(1)}s`);
+});
+bgAudio.addEventListener('canplay', () => {
+  console.log(`[bgAudio] canplay readyState=${bgAudio.readyState} duration=${bgAudio.duration?.toFixed(1)}s`);
+});
+bgAudio.addEventListener('loadeddata', () => {
+  console.log(`[bgAudio] loadeddata duration=${bgAudio.duration?.toFixed(1)}s`);
+});
+bgAudio.addEventListener('pause', () => {
+  if (_bgPlaying) console.log(`[bgAudio] pause event (unexpected? bgPlaying=${_bgPlaying})`);
+});
+bgAudio.addEventListener('play', () => {
+  console.log(`[bgAudio] play event currentTime=${bgAudio.currentTime?.toFixed(1)}s`);
 });
 let _pendingMount = null;   // { bvid, title }：回前台时需要挂载的 iframe
 let _bgVolume = 0.8;        // WeMusic 自维护音量（0~1），持久化
 
 // 前台静音预缓冲：加载 src 但不 play，切后台时可立即接续
 function _bgPreload(bvid) {
-  if (_bgBvid === bvid) return; // 已加载
+  if (_bgBvid === bvid) return;
+  console.log(`[bg:state] preload bvid=${bvid} (was ${_bgBvid || 'none'})`);
   _bgBvid = bvid;
   _bgPlaying = false;
   bgAudio.src = `/api/play/stream?bvid=${bvid}`;
@@ -444,14 +469,38 @@ function _bgPreload(bvid) {
 
 // 解除静音并从指定进度开始播放（切后台时调用）
 function _bgUnmuteAndPlay(seekSec) {
+  console.log(`[bg:state] unmute+play seekSec=${seekSec}s bvid=${_bgBvid}`);
   bgAudio.muted = false;
   bgAudio.volume = _bgVolume;
   _bgPlaying = true;
 
-  const doPlay = () => bgAudio.play().catch(() => setTimeout(() => bgAudio.play().catch(() => {}), 500));
+  // 重试 play() 直到成功或达到上限（后台 src 刚换完，数据可能还没加载好）
+  let retries = 0;
+  const doPlay = () => {
+    bgAudio.play().then(() => {
+      console.log(`[bg:retry] play() SUCCESS at retry=${retries}, currentTime=${bgAudio.currentTime?.toFixed(1)}s`);
+      // play() 成功后 5 秒做健康检查：如果又停了且没被外部暂停，重试
+      if (_bgHealthCheckId) clearTimeout(_bgHealthCheckId);
+      _bgHealthCheckId = setTimeout(() => {
+        _bgHealthCheckId = null;
+        if (_bgPlaying && bgAudio.paused && !timerPaused) {
+          console.warn(`[bgAudio] health-check FAILED (paused at ${bgAudio.currentTime?.toFixed(1)}s) — retrying`);
+          retries = 0;
+          doPlay();
+        }
+      }, 5000);
+    }).catch((e) => {
+      retries++;
+      if (retries <= 10) {
+        const delay = 500 * Math.min(retries, 6);
+        console.log(`[bg:retry] play() attempt ${retries}/10 failed (${e.name}) — retry in ${delay}ms`);
+        setTimeout(doPlay, delay);
+      } else {
+        console.warn(`[bg:retry] play() FAILED after 10 retries — giving up`);
+      }
+    });
+  };
 
-  // 不等 canplay：直接设 currentTime + play()
-  // 浏览器会自动处理"还没数据时 seek"——会在数据到达后继续 seek，不会报错
   if (seekSec > 2 && Math.abs(bgAudio.currentTime - seekSec) > 1) {
     const onSeeked = () => { bgAudio.removeEventListener('seeked', onSeeked); doPlay(); };
     bgAudio.addEventListener('seeked', onSeeked);
@@ -462,13 +511,22 @@ function _bgUnmuteAndPlay(seekSec) {
       if (bgAudio.paused) doPlay();
     }, 1500);
   } else {
-    doPlay();
+    // 等 canplay 再播，避免数据没加载好就被浏览器拒绝
+    if (bgAudio.readyState >= 2) { // HAVE_CURRENT_DATA 或更高
+      doPlay();
+    } else {
+      const onCan = () => { bgAudio.removeEventListener('canplay', onCan); doPlay(); };
+      bgAudio.addEventListener('canplay', onCan);
+    }
   }
 }
 
+let _bgHealthCheckId = null;
 function _bgStop() {
   _stopBgSync();
+  if (_bgHealthCheckId) { clearTimeout(_bgHealthCheckId); _bgHealthCheckId = null; }
   if (!_bgBvid) return;
+  console.log(`[bg:state] stop bvid=${_bgBvid}`);
   bgAudio.pause();
   bgAudio.muted = true;
   bgAudio.src = '';
@@ -481,13 +539,29 @@ let _bgSyncTimer = null;
 function _startBgSync() {
   _stopBgSync();
   _bgSyncTimer = setInterval(() => {
+    // 恢复检查：后台应该播放但 bgAudio 停了 → 尝试重启
+    if (_bgPlaying && bgAudio.paused && !timerPaused) {
+      const ct = bgAudio.currentTime?.toFixed(1) || '?';
+      console.warn(`[bgSync] bgAudio paused unexpectedly at ${ct}s (elapsed=${elapsed}s, dur=${totalDur}s, readyState=${bgAudio.readyState}) — restarting`);
+      bgAudio.play().then(() => {
+        console.log(`[bgSync] restart succeeded, now at ${bgAudio.currentTime?.toFixed(1)}s`);
+      }).catch((e) => {
+        console.warn(`[bgSync] restart FAILED: ${e.name} — ${e.message?.slice(0,60)}`);
+      });
+      return;
+    }
     if (!_bgPlaying || bgAudio.paused || !bgAudio.currentTime) return;
     const real = Math.round(bgAudio.currentTime);
-    if (Math.abs(real - elapsed) >= 2) { // 偏差 ≥2 秒才校准，避免频繁跳变
+    if (Math.abs(real - elapsed) >= 2) {
+      console.log(`[bgSync] calibrate elapsed ${elapsed}s → ${real}s (bgAudio.currentTime)`);
       elapsed = real;
     }
-    if (totalDur > 0 && elapsed >= totalDur - 1) autoAdvance(); // 兜底切歌
+    if (totalDur > 0 && elapsed >= totalDur - 1) {
+      console.log(`[bgSync] elapsed ${elapsed}s >= dur-1=${totalDur-1}s — autoAdvance`);
+      autoAdvance();
+    }
   }, 4000);
+  console.log('[bgSync] timer started (4s interval)');
 }
 function _stopBgSync() {
   if (_bgSyncTimer) { clearInterval(_bgSyncTimer); _bgSyncTimer = null; }
@@ -506,9 +580,10 @@ function _setIframeVolume(vol) {
 }
 
 export function startVideo(bvid, title, dur) {
-  _iframeStartCalibrated = false; // 每首新歌重置校正状态
+  _iframeStartCalibrated = false;
   if (document.hidden) {
     // 后台切歌：重新 preload 新歌，立即播放
+    console.log(`[bg:state] startVideo (hidden) bvid=${bvid} title="${title?.slice(0,30)}"`);
     _bgBvid = null; // 强制重新 preload
     _bgPreload(bvid);
     _bgUnmuteAndPlay(0); // 新歌从 0 开始
@@ -705,12 +780,13 @@ export function initPlayer() {
   navigator.mediaSession.setActionHandler('nexttrack', () => playNext(false));
 
   document.addEventListener('visibilitychange', () => {
-    // 未播放时切换前后台无任何影响
+    if (!bgAudio) return;
     if (!autoTimer || timerPaused) return;
 
     if (document.hidden) {
       // 切到后台：销毁 iframe，bgAudio 接管
       if (!state.current?.bvid) return;
+      console.log(`[bg:state] visibility HIDDEN — switching to bgAudio (elapsed=${elapsed}s, bvid=${state.current.bvid})`);
       if (_bgBvid !== state.current.bvid) _bgPreload(state.current.bvid);
       $('videoContainer').innerHTML = '';
       _pendingMount = { bvid: state.current.bvid, title: state.current._biliTitle };
@@ -720,6 +796,7 @@ export function initPlayer() {
     } else {
       // 回到前台：停 bgAudio，重建 iframe
       if (!state.current?.bvid) return;
+      console.log(`[bg:state] visibility VISIBLE — switching to iframe (elapsed=${elapsed}s, bgPlaying=${_bgPlaying}, bgPaused=${bgAudio.paused})`);
       _stopBgSync(); // 停止后台校准
 
       // 用 bgAudio.currentTime 校正进度

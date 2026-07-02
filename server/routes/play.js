@@ -320,6 +320,7 @@ router.get('/search', authRequired, async (req, res) => {
 router.get('/stream', async (req, res) => {
   const { bvid, cid } = req.query;
   if (!bvid) return res.status(400).send('缺少 bvid');
+  console.log(`[bg:stream] request bvid=${bvid} range=${req.headers.range || 'none'}`);
   try {
     const stream = await getAudioStream(bvid, cid ? Number(cid) : undefined);
     const range = req.headers.range;
@@ -329,13 +330,17 @@ router.get('/stream', async (req, res) => {
       // 主地址失败则尝试备用地址
       const backup = stream.backup && stream.backup[0];
       if (backup) {
+        console.log(`[bg:stream] primary failed (${upstream.status}), trying backup`);
         const up2 = await fetchAudio(backup, bvid, range);
         return pipeAudio(up2, res, stream.mime);
       }
+      console.warn(`[bg:stream] FAILED bvid=${bvid} status=${upstream.status}`);
       return res.status(502).send('音频拉取失败');
     }
+    console.log(`[bg:stream] piping bvid=${bvid} status=${upstream.status} size=${upstream.headers.get('content-length') || '?'}`);
     pipeAudio(upstream, res, stream.mime);
   } catch (e) {
+    console.warn(`[bg:stream] ERROR bvid=${bvid}: ${e.message}`);
     res.status(502).send(e.message);
   }
 });
