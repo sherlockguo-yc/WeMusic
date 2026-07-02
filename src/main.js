@@ -28,22 +28,24 @@ document.addEventListener('keydown', (e) => {
   const tag = (e.target.tagName || '').toLowerCase();
   const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
   if (e.key === 'Escape') {
-    // 关闭所有浮层
+    // 关闭浮层：优先关最上层的模态弹窗，再关歌词详情页，最后关小浮层
+    // 顺序很重要：candModal 等模态弹窗可能盖在 lyricsPanel 上，必须先关
+    const modals = ['candModal', 'addModal', 'promptModal', 'helpModal', 'settingsModal', 'importModal', 'posterModal', 'donateModal', 'feedbackModal'];
+    for (const id of modals) {
+      const el = document.getElementById(id);
+      if (el?.classList.contains('show')) { el.classList.remove('show'); return; }
+    }
     const lyricsPanel = document.getElementById('lyricsPanel');
     if (lyricsPanel?.classList.contains('show')) {
       import('./lyrics.js').then(({ closeLyricsPanel }) => closeLyricsPanel());
       return;
     }
-    ['candModal', 'addModal', 'promptModal', 'helpModal', 'settingsModal', 'importModal', 'posterModal', 'donateModal', 'feedbackModal'].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el?.classList.contains('show')) el.classList.remove('show');
-    });
     const ctxMenu = document.getElementById('ctxMenu');
-    if (ctxMenu) ctxMenu.classList.remove('show');
+    if (ctxMenu?.classList.contains('show')) { ctxMenu.classList.remove('show'); return; }
     const suggest = document.getElementById('searchSuggest');
-    if (suggest?.classList.contains('show')) suggest.classList.remove('show');
+    if (suggest?.classList.contains('show')) { suggest.classList.remove('show'); return; }
     const queueDrawer = document.getElementById('queueDrawer');
-    if (queueDrawer?.classList.contains('show')) queueDrawer.classList.remove('show');
+    if (queueDrawer?.classList.contains('show')) { queueDrawer.classList.remove('show'); return; }
     return;
   }
   if (e.key === '/' && !typing) { e.preventDefault(); document.getElementById('searchInput').focus(); return; }
