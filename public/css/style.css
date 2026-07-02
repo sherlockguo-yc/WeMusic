@@ -1078,14 +1078,15 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 /* 卡片网格：Top歌曲/Top歌手/播放习惯 一行，完播率+近4周趋势 一行 */
 .wr-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
-  grid-template-areas: "songs artists habit" "comp trend peak";
+  grid-template-areas: "songs artists albums" "habit comp trend";
 }
 .wr-card.songs   { grid-area: songs; }
+.wr-card.albums  { grid-area: albums; }
 .wr-card.artists { grid-area: artists; }
 .wr-card.habit   { grid-area: habit; }
 .wr-card.comp    { grid-area: comp; }
 .wr-card.trend   { grid-area: trend; }
-.wr-card.peak    { grid-area: peak; }
+
 .wr-card.collab  { grid-area: trend; }
 
 .wr-card {
@@ -1597,6 +1598,8 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   display: none; align-items: center; justify-content: center; padding: 20px;
 }
 .modal-mask.show { display: flex; }
+/* 子级弹窗（从设置等面板里触发的弹窗）需要更高层级 */
+#mobileQRModal { z-index: 150; }
 .modal {
   width: 100%; max-width: 560px; max-height: 80vh; overflow-y: auto;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px;
