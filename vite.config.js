@@ -29,7 +29,7 @@ export default defineConfig({
       },
     },
     esbuild: {
-      drop: ['console', 'debugger'],
+      drop: ['console.log'], // 保留 console.error / console.warn 用于线上排查
     },
   },
   server: {

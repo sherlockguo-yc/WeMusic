@@ -418,7 +418,7 @@ export async function openStats() {
       const opacity = cnt ? 0.15 + (cnt / maxH) * 0.85 : 0;
       _hourTips[i] = `${i}:00 ~ ${i + 1}:00<br><b>${cnt} 次</b>`;
       return `<div class="hour-cell${cnt > 0 ? ' active' : ''}" data-idx="${i}"
-        style="${cnt > 0 ? `background:rgba(42,183,88,${opacity.toFixed(2)});color:#fff` : ''}">${i}</div>`;
+        style="${cnt > 0 ? `background:var(--accent);opacity:${opacity.toFixed(2)};color:#fff` : ''}">${i}</div>`;
     }).join('');
 
     // 歌手条形图（次数 + 时长双行）

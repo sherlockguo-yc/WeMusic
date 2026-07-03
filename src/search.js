@@ -3,7 +3,8 @@ import { $, esc, fmtDur, albumCover, toast } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 import { renderSongList, listToolsHtml, bindListTools, addSongs, songInPlaylists } from './playlist-ui.js';
-import { navPush } from './main.js';
+// 动态导入避免与 main.js 的循环依赖
+const _navPush = (view, data) => import('./main.js').then(m => m.navPush(view, data));
 
 // 歌手头像 URL
 const singerAvatar = (mid) => `https://y.gtimg.cn/music/photo_new/T001R300x300M000${mid}.jpg`;
@@ -66,7 +67,7 @@ export async function doSearch() {
   pushSearchHistory(keyword);
   $('searchSuggest').classList.remove('show');
   state.view = 'search';
-  navPush('search', { kw: keyword });
+  _navPush('search', { kw: keyword });
   const main = $('main');
   main.innerHTML = `<div class="loading">搜索中...</div>`;
   try {
@@ -82,9 +83,7 @@ export async function doSearch() {
       </div>`;
     }
     html += `<div class="section-head"><h2>${isSingerResult ? '歌曲' : '单曲'}（${totalNote}）</h2></div>
-             ${data.songs.length ? listToolsHtml() : ''}
-             ${songColHeader}
-             <div class="song-list" id="searchSongs"></div>`;
+             ${data.songs.length ? `${listToolsHtml()}${songColHeader}<div class="song-list" id="searchSongs"></div>` : '<div class="empty">未搜索到结果</div>'}`;
     main.innerHTML = html;
     const sContainer = $('searchSongs');
     const songBuf = [...data.songs];
@@ -156,7 +155,7 @@ let _artistTab = 'songs'; // 记住上次在专辑页点了哪个 tab
 
 export async function openArtist(mid, name) {
   state.view = 'artist';
-  navPush('artist', { mid, name });
+  _navPush('artist', { mid, name });
   const main = $('main');
   main.innerHTML = `<div class="loading">加载歌手「${esc(name)}」...</div>`;
   try {
@@ -226,7 +225,7 @@ export async function openArtist(mid, name) {
 
 export async function openAlbum(mid, name) {
   state.view = 'album';
-  navPush('album', { mid, name });
+  _navPush('album', { mid, name });
   const main = $('main');
   main.innerHTML = `<div class="loading">加载专辑「${esc(name)}」...</div>`;
   try {

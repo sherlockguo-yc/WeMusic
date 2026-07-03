@@ -367,6 +367,7 @@ export async function openPlaylist(id) {
     const data = await api(`/playlists/${id}/songs`);
     const totalSec = data.songs.reduce((acc, s) => acc + (Number(s.duration) || 0), 0);
     const coverMids = [...new Set(data.songs.map((s) => s.album_mid).filter(Boolean))].slice(0, 4);
+    const isEmpty = data.songs.length === 0;
     main.innerHTML = `
       <div class="pl-header">
         <div class="pl-cover-wrap">${playlistCoverHtml(coverMids)}</div>
@@ -381,9 +382,7 @@ export async function openPlaylist(id) {
           </div>
         </div>
       </div>
-      ${data.songs.length ? listToolsHtml() : ''}
-      ${colHeader}
-      <div class="song-list" id="plSongs"></div>`;
+      ${isEmpty ? '<div class="empty">歌单还是空的，去搜索添加歌曲吧</div>' : `${listToolsHtml()}${colHeader}<div class="song-list" id="plSongs"></div>`}`;
     $('exportPlBtn').onclick = () => exportPlaylist(id, data.playlist.name);
     $('plRenameBtn').onclick = async () => {
       const r = await uiPromptDual('编辑歌单名称', data.playlist.name, '编辑歌单简介（可选）', data.playlist.desc || '');
@@ -392,7 +391,7 @@ export async function openPlaylist(id) {
       await loadPlaylists();
       openPlaylist(id);
     };
-    if (data.songs.length === 0) { $('plSongs').innerHTML = '<div class="empty">歌单还是空的，去搜索添加歌曲吧</div>'; return; }
+    if (isEmpty) return;
     const container = $('plSongs');
     renderSongList(container, data.songs, { showDelete: true, playlistId: id, context: 'playlist' });
     bindListTools(main, data.songs, container, 'playlist', id);

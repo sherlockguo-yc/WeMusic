@@ -25,8 +25,13 @@ export function logPlay(song, dur) {
   _logTimer = setTimeout(() => {
     _pendingSong = song;
     _pendingDur = dur || song.duration || 0;
-  }, 5000);
+  }, 3000);
 }
+
+// 页面关闭/刷新时上报最后一次播放日志
+function _logBeforeUnload() { _flushLog(elapsed); }
+window.addEventListener('beforeunload', _logBeforeUnload);
+window.addEventListener('pagehide', _logBeforeUnload);
 
 export function _flushLog(playedSec) {
   if (!_pendingSong) return;
@@ -283,6 +288,7 @@ export async function restoreSession() {
     updateNpCover(state.current);
     $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
     setStatus(`上次播放 · 点 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><polygon points="6 3 20 12 6 21 6 3"/></svg> 继续`);
+    highlightPlaying();
   }
 }
 
@@ -478,7 +484,7 @@ export async function playCurrent() {
       });
       if (seq !== playSeq) return;
       song._candidates = candidates;
-      if (!best) { setStatus('未找到合适资源，可点「换源」'); return; }
+      if (!best) { setStatus('未找到合适资源，可点「换源」'); toast('⚠ 未找到合适资源，可点换源'); return; }
       song.bvid = best.bvid;
       // 优先用 candidates 里同名 bvid 的 title（B 站偶尔返回 best.title 为空时回查）
       const match = best.bvid ? candidates.find(c => c.bvid === best.bvid) : null;

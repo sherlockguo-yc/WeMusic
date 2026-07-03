@@ -71,7 +71,6 @@ export function removeFromQueue(i) {
       state.queueIndex = -1; state.current = null;
       import('./player.js').then(({ destroyVideo, setStatus }) => destroyVideo());
       $('npTitle').textContent = '未在播放';
-      $('npTitle').textContent = '未在播放';
       document.title = 'WeMusic · 个人音乐';
     } else {
       if (state.queueIndex >= state.queue.length) state.queueIndex = 0;

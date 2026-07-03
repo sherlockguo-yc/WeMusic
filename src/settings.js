@@ -38,6 +38,7 @@ export async function loadPrefsFromServer() {
     if (data.font) { localStorage.setItem('wemusic_font', data.font); applyFont(data.font); }
     if (data.fontSize) { localStorage.setItem('wemusic_font_size', data.fontSize); applyFontSize(data.fontSize); }
     if (data.palette) { localStorage.setItem('wemusic_palette', data.palette); applyPalette(data.palette); }
+    if (data.vol) { localStorage.setItem('wemusic_vol', data.vol); }
   } catch {}
 }
 // 延迟同步（200ms 防抖）
