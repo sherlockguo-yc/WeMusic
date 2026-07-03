@@ -1,0 +1,47 @@
+## 一、共享常量
+
+**所有跨模块共享的常量（SVG 图标字符串、配置值、枚举等）必须定义在 `utils.js`。**
+
+`utils.js` 不在 `manualChunks` 拆分列表中，会被打包为稳定的共享 chunk，不会出现 TDZ（Temporal Dead Zone）错误。
+
+```js
+// ✅ 正确：utils.js 中定义，各模块 import
+export const PLAY_ICON = '<svg width="16" ...></svg>';
+
+// ❌ 错误：在 player.js / lyrics.js / stats.js 等被 manualChunks 拆分的模块中定义 export const
+export const PLAY_ICON = '<svg ...>'; // 会被 minifier 重命名为 const v=v → TDZ 崩溃
+```
+
+## 二、manualChunks
+
+`vite.config.js` 的 `manualChunks` 配置会将以下模块拆分为独立 chunk：
+
+| chunk 名 | 源文件 | 加载时机 |
+|----------|--------|----------|
+| player | src/player.js | 首屏 |
+| playlist | src/playlist-ui.js | 首屏 |
+| lyrics | src/lyrics.js | 首屏 |
+| stats | src/stats.js | 懒加载 |
+| search | src/search.js | 首屏 |
+| admin | src/admin.js | 懒加载 |
+
+### 规则
+
+- **不要在这些模块中定义 `export const`**，会被 minifier 重命名导致 TDZ 错误（`const v=v, x=x`）
+- **共享图标/常量一律放 utils.js**
+- 新增 manualChunks 条目时，确认该模块没有需要被其他模块同步 import 的 `export const` 值
+- 新增懒加载页面模块时，确认 `src/main.js` 中没有静态 import 该模块（否则会失去懒加载效果）
+
+## 三、base 路径
+
+`base: '/dist/'` — 所有构建产物的 URL 前缀。HTML 中 `<script src="/dist/app.js">` 与该配置必须一致。
+
+修改 `base` 值时，同步更新 `public/index.html` 和 `public/login.html` 中的 `<script>` src。
+
+## 四、部署后验证
+
+`npm run deploy` 会执行：
+1. `vite build` → 清理旧 dist → 重新构建（hash 会变化）
+2. 停止旧进程 → 启动新进程
+
+由于构建后 chunk hash 会变化，**浏览器需要硬刷新**（Cmd+Shift+R）来清除旧缓存。

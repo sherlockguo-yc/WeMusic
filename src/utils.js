@@ -2,6 +2,10 @@
 
 export const $ = (id) => document.getElementById(id);
 
+// Lucide SVG 图标（放在 utils.js 避免被 manualChunks 拆分到独立 chunk 时出现 TDZ 错误）
+export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
+export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
 export function fmtDur(sec) {
   sec = Number(sec) || 0;
   const h = Math.floor(sec / 3600);

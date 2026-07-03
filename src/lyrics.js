@@ -1,11 +1,11 @@
 // ---------------- 歌词全屏页（含换源支持） ----------------
-import { $, esc, albumCover, toast } from './utils.js';
+import { $, esc, albumCover, toast, PLAY_ICON, PAUSE_ICON } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 
 // 预加载 player 模块（避免在 setInterval 中重复 import，解决循环依赖）
-const _playerP = _playerP;
-const _uiP = _uiP;
+const _playerP = import('./player.js');
+const _uiP = import('./ui.js');
 
 export let lyricsLines = [];
 export let lyricsFor = '';
@@ -379,8 +379,8 @@ export function initLyrics() {
     if (!mounted) { _playerP.then(({ playCurrent }) => playCurrent()); return; }
     _playerP.then((p) => {
       p.timerPaused = !p.timerPaused;
-      $('playPauseBtn').innerHTML = p.timerPaused ? p.PLAY_ICON : p.PAUSE_ICON;
-      $('lpPlayBtn').innerHTML = p.timerPaused ? p.PLAY_ICON : p.PAUSE_ICON;
+      $('playPauseBtn').innerHTML = p.timerPaused ? PLAY_ICON : PAUSE_ICON;
+      $('lpPlayBtn').innerHTML = p.timerPaused ? PLAY_ICON : PAUSE_ICON;
       toast(p.timerPaused ? '已暂停自动连播' : '继续自动连播');
     });
   };

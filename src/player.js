@@ -1,12 +1,10 @@
 // ---------------- 播放核心 ----------------
-import { $, fmtDur, esc, biliEmbed, albumCover, toast } from './utils.js';
+import { $, fmtDur, esc, biliEmbed, albumCover, toast, PLAY_ICON, PAUSE_ICON } from './utils.js';
 import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { clearSleep, sleepAfterSong } from './settings.js';
 
-// Lucide SVG 图标
-export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
-export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+// Lucide SVG 图标从 utils.js 导入（避免被 manualChunks 拆分时产生 TDZ 错误）
 
 export let autoTimer = null;
 export let elapsed = 0;
