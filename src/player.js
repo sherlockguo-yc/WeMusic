@@ -271,7 +271,7 @@ export function restoreSession() {
       checkMarquee($('npTitle'));
       updateNpCover(state.current);
       $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
-      setStatus(`上次播放 · 点 ${PLAY_ICON} 继续`);
+      setStatus(`上次播放 · 点 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><polygon points="6 3 20 12 6 21 6 3"/></svg> 继续`);
     }
   } catch {}
 }
@@ -395,6 +395,11 @@ export async function prefetchNextBvid() {
         song.bvid = cached.bvid;
         song._biliTitle = cached.bili_title;
         song._biliDur = cached.bili_dur || song.duration;
+        // 缓存里 bili_title 可能为空 → 回查 candidates
+        if (!song._biliTitle && song._candidates) {
+          const m = song._candidates.find(c => c.bvid === song.bvid);
+          if (m?.title) song._biliTitle = m.title;
+        }
         return;
       }
     } catch {}
@@ -447,6 +452,11 @@ export async function playCurrent() {
         song._biliDur = cached.bili_dur || song.duration;
       }
     } catch {}
+    // 缓存里 bili_title 可能为空 → 回查 candidates 补全
+    if (song.bvid && !song._biliTitle && song._candidates) {
+      const m = song._candidates.find(c => c.bvid === song.bvid);
+      if (m?.title) song._biliTitle = m.title;
+    }
   }
 
   if (!song.bvid) {
@@ -663,7 +673,8 @@ export function startVideo(bvid, title, dur) {
     setTimeout(() => _bgPreload(bvid), 500);
   }
   applyPaneVisibility();
-  $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">▶ Bilibili</span> ${esc(title || '')}</span>`;
+  const displayTitle = title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : 'Bilibili 播放');
+  $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">▶ Bilibili</span> ${esc(displayTitle)}</span>`;
   const inner = $('playStatus').querySelector('.status-inner');
   if (inner) checkMarquee(inner);
   startTimer(dur);
@@ -878,8 +889,9 @@ export function initPlayer() {
       delete $('videoContainer').dataset.pendingBvid;
       mountVideoAt(target.bvid, target.title, elapsed > 5 ? elapsed : 0);
       applyPaneVisibility();
-      // 更新底部播放器视频标题
-      $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">▶ Bilibili</span> ${esc(target.title || '')}</span>`;
+      // 更新底部播放器视频标题（空值时兜底为歌名）
+      const vt = target.title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : 'Bilibili 播放');
+      $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">▶ Bilibili</span> ${esc(vt)}</span>`;
       const inner = $('playStatus').querySelector('.status-inner');
       if (inner) checkMarquee(inner);
 

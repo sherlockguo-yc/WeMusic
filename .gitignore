@@ -9,3 +9,4 @@ public/dist/
 generated-images/
 .playwright-cli/
 playwright-cli.json
+coverage/

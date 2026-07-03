@@ -16,44 +16,44 @@ function getBlockedSet(userId, songKey, type) {
   return new Set(rows.map((r) => r.source_id));
 }
 // songKey = name__singer，与 play_logs 和 blocked_sources 保持一致
-function songKey(name, singer) { return `${name || ''}__${singer || ''}`; }
+export function songKey(name, singer) { return `${name || ''}__${singer || ''}`; }
 
 // 现场版关键字（直接排除，满足「非现场版」要求）
-const LIVE_KW = [
+export const LIVE_KW = [
   '现场', '演唱会', '音乐节', 'live', 'concert', '开演', '演奏会',
   '巡演', 'tour', '现场版', 'livehouse', '路演', '快闪',
 ];
 // 直接过滤掉的关键词（伴奏等，剔除而非降权）
-const EXCLUDE_KW = ['伴奏', '純音樂', '纯音乐', 'instrumental', 'karaoke', '消音', '人声消除'];
+export const EXCLUDE_KW = ['伴奏', '純音樂', '纯音乐', 'instrumental', 'karaoke', '消音', '人声消除'];
 // 高音质加分词（权重高）
-const HQ_KW = [
+export const HQ_KW = [
   '无损', '無損', 'flac', 'hi-res', 'hires', 'hi res', '母带', '高音质',
   '高品质', 'lossless', 'hifi', 'hi-fi', '24bit', 'dolby', '杜比', 'sq', '臻品',
 ];
 // 一般优质词（权重中上）— MV/官版需要高优先级
-const GOOD_KW = [
+export const GOOD_KW = [
   '官方', 'mv', '完整版', 'audio', '原版', '正式版', '官方音频',
 ];
 // 其它降权词（翻唱/二创等）
-const BAD_KW = [
+export const BAD_KW = [
   '翻唱', 'cover', '教学', '钢琴版', '吉他教学', '鬼畜', '剪辑',
   '合集', 'remix', 'dj', '变速', '加速', '慢速', '八音盒', 'ai',
   '空耳', '玩具', '电子琴',
 ];
 
-function isLive(title = '') {
+export function isLive(title = '') {
   const t = title.toLowerCase();
   return LIVE_KW.some((k) => t.includes(k.toLowerCase()));
 }
 
 // 是否应被直接过滤（含「伴奏」等）
-function isExcluded(title = '') {
+export function isExcluded(title = '') {
   const t = title.toLowerCase();
   return EXCLUDE_KW.some((k) => t.includes(k.toLowerCase()));
 }
 
 // 拆分歌手名为有效片段（用于匹配）
-function singerParts(singer = '') {
+export function singerParts(singer = '') {
   return singer
     .split(/[\/、,&\s]+/)
     .map((s) => s.trim().toLowerCase())
@@ -61,13 +61,13 @@ function singerParts(singer = '') {
 }
 
 // 视频是否属于目标歌手（标题或 UP 名包含歌手名）
-function matchSinger(v, parts) {
+export function matchSinger(v, parts) {
   if (!parts.length) return true; // 未提供歌手则不过滤
   const hay = `${v.title || ''} ${v.author || ''}`.toLowerCase();
   return parts.some((p) => hay.includes(p));
 }
 
-function scoreVideo(v, name, singer, expectDur) {
+export function scoreVideo(v, name, singer, expectDur) {
   const title = v.title || '';
   const t = title.toLowerCase();
   let score = 0;
@@ -130,7 +130,7 @@ function scoreVideo(v, name, singer, expectDur) {
 
 // 从歌名中提取「长度 ≥ 2 的片段」（中文按 2 字切，拉丁按单词）
 // 用于过滤完全不相关的视频候选
-function nameSegments(name) {
+export function nameSegments(name) {
   if (!name) return [];
   // 把字符串切成 中文段（连续汉字）/ 拉丁词（连续字母数字），括号作为分隔符不保留
   const segs = [];
@@ -167,7 +167,7 @@ function nameSegments(name) {
   return out;
 }
 
-function rank(videos, name, singer, expectDur) {
+export function rank(videos, name, singer, expectDur) {
   const parts = singerParts(singer);
   const segs = nameSegments(name);
   let scored = videos

@@ -147,12 +147,12 @@ async function encWbi(params) {
   return `${search}&w_rid=${wRid}`;
 }
 
-function stripHtml(str = '') {
+export function stripHtml(str = '') {
   return str.replace(/<[^>]+>/g, '');
 }
 
 /** "4:13" / "1:02:33" -> 秒 */
-function durationToSeconds(str = '') {
+export function durationToSeconds(str = '') {
   if (typeof str === 'number') return str;
   const parts = String(str).split(':').map((n) => parseInt(n, 10) || 0);
   return parts.reduce((acc, n) => acc * 60 + n, 0);

@@ -17,6 +17,7 @@
     "mobile": "node scripts/mobile-open.js",
     "webhook": "node server/webhook.js",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run tests/unit/",
     "test:api": "vitest run tests/api/",
     "test:e2e": "playwright test",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "@vitest/coverage-v8": "^4.1.9",
     "supertest": "^7.2.2",
     "vite": "^6.4.3",
     "vitest": "^4.1.9"
