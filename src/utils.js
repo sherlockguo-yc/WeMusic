@@ -6,6 +6,17 @@ export const $ = (id) => document.getElementById(id);
 export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
 export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
 
+// 统一歌曲列表列头（避免 search.js / playlist-ui.js 重复定义）
+export const songColHeader = `<div class="song-row-head">
+  <span class="h-idx">#</span>
+  <span class="h-name">歌名</span>
+  <span class="h-singer">歌手</span>
+  <span class="h-album">专辑</span>
+  <span class="h-bookmark"></span>
+  <span class="h-dur">时长</span>
+  <span class="h-ops">操作</span>
+</div>`;
+
 export function fmtDur(sec) {
   sec = Number(sec) || 0;
   const h = Math.floor(sec / 3600);
@@ -32,6 +43,15 @@ export function fmtMin(sec) {
   return `${m}m`;
 }
 
+/** 四舍五入到分钟的中文格式：90 → "2 分钟" */
+export function fmtFullMin(sec) {
+  if (!sec) return '0 分钟';
+  const m = Math.round(Number(sec) / 60);
+  if (m < 60) return `${m} 分钟`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  return `${h} 小时${rm ? ` ${rm} 分钟` : ''}`;
+}
+
 export function fmtSec(sec) {
   sec = Number(sec) || 0;
   const h = Math.floor(sec / 3600);
@@ -52,6 +72,9 @@ export function esc(str) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])
   );
 }
+
+/** 周报/月报排名徽章 HTML */
+export const rankBadge = (i) => `<span class="wr-rank r${i + 1 <= 3 ? i + 1 : 0}">${i + 1}</span>`;
 
 export function debounce(fn, delay) {
   let t;
@@ -92,7 +115,7 @@ export function playlistCoverHtml(mids = []) {
     cells.push(
       mid
         ? `<img src="${albumCover(mid, 150)}" loading="lazy" onerror="this.style.visibility='hidden'" />`
-        : '<div class="ph">♪</div>'
+        : '<div class="ph"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>'
     );
   }
   return `<div class="pl-grid-cover">${cells.join('')}</div>`;
@@ -183,6 +206,89 @@ export function uiConfirm(message) {
     $('promptOk').onclick = () => done(true);
     $('promptCancel').onclick = () => done(false);
     mask.onclick = (e) => { if (e.target === mask) done(false); };
+  });
+}
+
+// ---- 全局 tooltip：统一 stats.js / playlist-ui.js 两套实现 ----
+let _tipEl = null;
+
+/** 初始化全局 tooltip（模块导入后调用一次即可） */
+export function initGlobalTooltip() {
+  if (_tipEl) return;
+  _tipEl = document.createElement('div');
+  _tipEl.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap';
+  document.body.appendChild(_tipEl);
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (!el) return;
+    _tipEl.innerHTML = el.dataset.tip;
+    _tipEl.style.display = 'block';
+    const onMove = (ev) => { _tipEl.style.left = (ev.clientX + 12) + 'px'; _tipEl.style.top = (ev.clientY - 28) + 'px'; };
+    onMove(e); el.addEventListener('mousemove', onMove, { once: true });
+    const hide = () => { _tipEl.style.display = 'none'; el.removeEventListener('mouseleave', hide); };
+    el.addEventListener('mouseleave', hide);
+  });
+}
+
+/** 给元素设置 tooltip 内容（配合 initGlobalTooltip 使用） */
+export function setTooltip(el, html) {
+  el.removeAttribute('title');
+  el.dataset.tip = html;
+}
+
+// ---- 候选弹窗共享逻辑（ui.js / lyrics.js 共用） ----
+
+/** 拉取已屏蔽源列表 */
+export async function fetchBlockedList(api, songKey, type) {
+  try {
+    const r = await api(`/stats/blocked/full?song=${encodeURIComponent(songKey)}&type=${type}`);
+    return r.list || [];
+  } catch { console.warn('获取屏蔽列表失败'); return []; }
+}
+
+/** 已屏蔽源 HTML 片段（typePrefix: 'cand' 或 'candLyrics'） */
+export function blockedSectionHtml(blockedList, typePrefix = 'cand') {
+  if (!blockedList.length) return '';
+  const idKey = typePrefix === 'cand' ? 'bvid' : 'source_id';
+  return `
+    <div class="cand-blocked-section">
+      <button class="cand-blocked-toggle" id="${typePrefix}BlockedToggle">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        已屏蔽的源（${blockedList.length}）
+      </button>
+      <div class="cand-blocked-list" id="${typePrefix}BlockedList" style="display:none">
+        ${blockedList.map(b => `
+          <div class="cand-blocked-row" data-${idKey}="${esc(b.source_id)}">
+            <span class="cand-blocked-id">${esc(b.source_id)}</span>
+            <span class="cand-blocked-time">${new Date(b.blocked_at).toLocaleDateString()}</span>
+            <button class="cand-unblock-btn" title="取消屏蔽"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 9 8 9"/></svg> 恢复</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+/** 绑定已屏蔽区域的折叠/恢复按钮事件 */
+export function bindBlockedSection(listEl, api, songKey, type, typePrefix = 'cand') {
+  const idKey = typePrefix === 'cand' ? 'bvid' : 'source_id';
+  const toggle = listEl.querySelector(`#${typePrefix}BlockedToggle`);
+  if (toggle) {
+    toggle.onclick = () => {
+      const bl = listEl.querySelector(`#${typePrefix}BlockedList`);
+      if (bl) bl.style.display = bl.style.display === 'none' ? '' : 'none';
+    };
+  }
+  listEl.querySelectorAll('.cand-unblock-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const row = btn.closest('.cand-blocked-row');
+      const sourceId = row.dataset[idKey];
+      try {
+        await api('/stats/blocked', { method: 'DELETE', body: { song: songKey, type, sourceId } });
+        row.remove();
+        toast('已取消屏蔽');
+      } catch (err) { toast('恢复失败：' + err.message); }
+    };
   });
 }
 

@@ -6,6 +6,10 @@ updatedAt: 2026-07-02T02:57:15.913Z
 provider: 
 ---
 
+## 〇、项目全局视图
+
+在开始任何代码修改前，**先读取 `.project-graph.json`** 了解模块依赖和导出符号。该文件由 `npm run codegraph` 自动生成（每次 build/deploy 前执行），比 grep 更快更准确。
+
 ## 一、图标
 
 - **强制使用 [Lucide](https://lucide.dev/) 图标**，禁止 emoji、Unicode 符号、其他图标库。

@@ -17,7 +17,7 @@ router.use(authRequired);
 
 // 综合搜索：返回歌曲列表 + 命中歌手（命中歌手时返回该歌手前 100 首，含 total 和 album_count 以便前端展示）
 router.get('/search', async (req, res) => {
-  const { keyword } = req.query;
+  const keyword = String(req.query.keyword || '').slice(0, 200);
   if (!keyword) return res.status(400).json({ error: '请输入搜索关键字' });
   try {
     const result = await searchSongs(keyword);

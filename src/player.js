@@ -257,7 +257,7 @@ export function saveSession() {
       localStorage.setItem('wemusic_session', JSON.stringify(data));
       // 跨设备同步到服务端
       api('/auth/session', { method: 'PUT', body: data }).catch(() => {});
-    } catch {}
+    } catch { console.warn('保存本地会话失败') }
   }, 500);
 }
 
@@ -271,7 +271,7 @@ export async function restoreSession() {
     if (r && Array.isArray(r.queue) && r.queue.length > 0) {
       s = r;
     }
-  } catch {}
+  } catch { console.warn('服务端会话恢复失败，回退本地') }
   if (!s) {
     try {
       s = JSON.parse(localStorage.getItem('wemusic_session') || 'null');
@@ -309,7 +309,7 @@ export function cacheBvid(song) {
     api(`/stats/bvid/${encodeURIComponent(key)}`, {
       method: 'PUT',
       body: { name: song.name, singer: song.singer, bvid: song.bvid, bili_title: song._biliTitle, bili_dur: song._biliDur },
-    }).catch(() => {});
+    }).catch(() => { console.warn('全局 bvid 缓存保存失败') });
   }
 }
 
@@ -418,7 +418,7 @@ export async function prefetchNextBvid() {
         }
         return;
       }
-    } catch {}
+    } catch { console.warn('bvid 缓存读取失败') }
     const { best, candidates } = await api('/play/resolve', {
       method: 'POST',
       body: { name: song.name, singer: song.singer, duration: song.duration },
@@ -432,7 +432,7 @@ export async function prefetchNextBvid() {
       song._biliDur = match?.duration || best.duration || song.duration;
       cacheBvid(song);
     }
-  } catch {}
+  } catch { console.warn('预取 bvid 失败') }
 }
 
 export async function playFromList(songs, index, context, playlistId) {
@@ -467,7 +467,7 @@ export async function playCurrent() {
         song._biliTitle = cached.bili_title;
         song._biliDur = cached.bili_dur || song.duration;
       }
-    } catch {}
+    } catch { console.warn('bvid 缓存读取失败') }
     // 缓存里 bili_title 可能为空 → 回查 candidates 补全
     if (song.bvid && !song._biliTitle && song._candidates) {
       const m = song._candidates.find(c => c.bvid === song.bvid);
@@ -666,7 +666,7 @@ function _setIframeVolume(vol) {
       JSON.stringify({ type: 'setVolume', data: { volume: Math.round(vol * 100) } }),
       'https://player.bilibili.com'
     );
-  } catch {}
+  } catch { console.warn('B站 iframe 音量通信失败') }
 }
 
 export function startVideo(bvid, title, dur) {
@@ -690,7 +690,7 @@ export function startVideo(bvid, title, dur) {
   }
   applyPaneVisibility();
   const displayTitle = title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : 'Bilibili 播放');
-  $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">▶ Bilibili</span> ${esc(displayTitle)}</span>`;
+  $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(displayTitle)}</span>`;
   const inner = $('playStatus').querySelector('.status-inner');
   if (inner) checkMarquee(inner);
   startTimer(dur);
@@ -816,7 +816,7 @@ export function initPlayer() {
     // 后台时同步控制 bgAudio
     if (document.hidden && _bgBvid) {
       if (timerPaused) bgAudio.pause();
-      else bgAudio.play().catch(() => {});
+      else bgAudio.play().catch(() => {}); // 后台播放失败通常无害（用户可能没交互过）
     }
     toast(timerPaused ? '已暂停' : '继续播放');
   };
@@ -907,7 +907,7 @@ export function initPlayer() {
       applyPaneVisibility();
       // 更新底部播放器视频标题（空值时兜底为歌名）
       const vt = target.title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : 'Bilibili 播放');
-      $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">▶ Bilibili</span> ${esc(vt)}</span>`;
+      $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(vt)}</span>`;
       const inner = $('playStatus').querySelector('.status-inner');
       if (inner) checkMarquee(inner);
 
@@ -926,7 +926,7 @@ export function initPlayer() {
         try {
           const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
           if (d && typeof d === 'object' && (d.type || d.event)) stopCross();
-        } catch {}
+        } catch { /* 消息格式非法，忽略 */ }
       };
       window.addEventListener('message', crossMsg);
       setTimeout(stopCross, 800); // 兜底缩短到 800ms

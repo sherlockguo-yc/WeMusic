@@ -723,6 +723,31 @@ input[type='range']::-moz-range-thumb {
 .pl-rename-btn:hover { opacity: 1; color: var(--accent); }
 .pl-rename-btn svg { display: block; }
 
+/* 歌单分隔线 */
+.pl-divider {
+  margin: 16px 0 18px;
+  height: 1px;
+  border: none;
+  background: linear-gradient(to right,
+    transparent 0%,
+    var(--border) 12%,
+    var(--accent) 45%, var(--accent) 55%,
+    var(--border) 88%,
+    transparent 100%
+  );
+  position: relative;
+}
+.pl-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 6px; height: 6px;
+  background: var(--accent);
+  border-radius: 1px;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
 /* 帮助快捷键列表 */
 .help-list { margin: 4px 0 16px; }
 .help-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 14px; }
@@ -1481,6 +1506,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .chart-info { flex: 1; min-width: 0; }
 .chart-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chart-singer { font-size: 12px; color: var(--text-dim); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-album { font-size: calc(var(--font-size) * 0.85); color: var(--text-dim); opacity: 0.7; margin-left: 6px; white-space: nowrap; }
 .chart-ops { display: flex; gap: 6px; flex: 0 0 auto; }
 
 /* ---- 红心按钮 ---- */
@@ -1861,6 +1887,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   .view-title { font-size: 18px; }
   .pl-header { flex-direction: column; gap: 12px; }
   .pl-header .pl-cover-wrap { width: 100px; }
+  .pl-divider { margin: 12px 0 14px; }
 
   /* ---- 歌曲列表：简化列 ---- */
   .song-row {
@@ -1945,10 +1972,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
     align-items: center;
     justify-content: center;
   }
-  #queueBtn::before {
-    content: '☰';
-    font-size: 18px;
-  }
+  /* queueBtn 图标改为 HTML 内 SVG */
   #lyricsBtn {
     width: 36px;
     min-width: 36px;

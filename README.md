@@ -89,10 +89,12 @@
 
 ```bash
 npm install && npm run build && cp .env.example .env
-npm start                     # 或 npm run dev:full（开发模式）
+npm start                     # 启动服务 + 前端自动构建（vite build --watch）
 npm run deploy                # 构建 + 重启 + E2E
 npm test                      # 单元 + API + 依赖检查（git push 自动运行）
 ```
+
+`npm start` 会同时启动 Express 服务器和 Vite 构建监听。修改 `src/` 下任意文件后，Vite 自动重新打包到 `public/dist/`，刷新页面即可看到最新效果，无需手动 `npm run build`。
 
 ### 手机访问
 - **扫码**：「设置 → 移动端访问」或 `http://localhost:5174/qr`

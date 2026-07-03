@@ -1,9 +1,6 @@
 // ---------------- 歌单侧边栏 + 歌曲列表渲染 + 导入导出 ----------------
-import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml } from './utils.js';
+import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml, songColHeader } from './utils.js';
 
-const colHeader = `<div class="song-row-head">
-  <span class="h-idx">#</span><span class="h-name">歌名</span><span class="h-singer">歌手</span><span class="h-album">专辑</span><span class="h-bookmark"></span><span class="h-dur">时长</span><span class="h-ops">操作</span>
-</div>`;
 import { api } from './api.js';
 import { state } from './state.js';
 
@@ -28,7 +25,7 @@ export async function buildSongIndex() {
     }
     state.songIndex = idx;
     _indexDirty = false;
-  } catch {}
+  } catch { console.warn('buildSongIndex 失败') }
   finally { _indexBuilding = false; }
 }
 
@@ -382,7 +379,8 @@ export async function openPlaylist(id) {
           </div>
         </div>
       </div>
-      ${isEmpty ? '<div class="empty">歌单还是空的，去搜索添加歌曲吧</div>' : `${listToolsHtml()}${colHeader}<div class="song-list" id="plSongs"></div>`}`;
+      <div class="pl-divider"></div>
+      ${isEmpty ? '<div class="empty">歌单还是空的，去搜索添加歌曲吧</div>' : `${listToolsHtml()}${songColHeader}<div class="song-list" id="plSongs"></div>`}`;
     $('exportPlBtn').onclick = () => exportPlaylist(id, data.playlist.name);
     $('plRenameBtn').onclick = async () => {
       const r = await uiPromptDual('编辑歌单名称', data.playlist.name, '编辑歌单简介（可选）', data.playlist.desc || '');
@@ -397,19 +395,6 @@ export async function openPlaylist(id) {
     bindListTools(main, data.songs, container, 'playlist', id);
   } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
-
-// 全局即时 tooltip（替代 title 属性，无延迟）
-let _tipEl = null;
-function _initTip() { if (_tipEl) return; _tipEl = document.createElement('div'); _tipEl.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap'; document.body.appendChild(_tipEl); }
-document.addEventListener('mouseover', (e) => {
-  const el = e.target.closest('[data-tip]');
-  if (!el) return;
-  _initTip(); _tipEl.textContent = el.dataset.tip; _tipEl.style.display = 'block';
-  const onMove = (ev) => { _tipEl.style.left = (ev.clientX + 12) + 'px'; _tipEl.style.top = (ev.clientY - 28) + 'px'; };
-  onMove(e); el.addEventListener('mousemove', onMove, { once: true });
-  const hide = () => { _tipEl.style.display = 'none'; el.removeEventListener('mouseleave', hide); };
-  el.addEventListener('mouseleave', hide);
-});
 
 export function initPlaylistUI() {
   $('addClose').onclick = () => { $('addModal').classList.remove('show'); pendingAddSongs = null; };

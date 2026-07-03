@@ -1,5 +1,5 @@
 // ---------------- 歌词全屏页（含换源支持） ----------------
-import { $, esc, albumCover, toast, PLAY_ICON, PAUSE_ICON } from './utils.js';
+import { $, esc, albumCover, toast, PLAY_ICON, PAUSE_ICON, fetchBlockedList, blockedSectionHtml, bindBlockedSection } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 
@@ -69,7 +69,7 @@ export async function loadSongBackground(song) {
     $('lpBgCardSub').textContent = sub;
     $('lpBgCardBody').innerHTML = `<p>${desc}</p>`;
     if (btn) btn.classList.add('has-bg');
-  } catch {}
+  } catch { console.warn('loadSongBackground 失败') }
   _bgLoading = false;
 }
 
@@ -232,9 +232,7 @@ function renderLyricsLines() {
 
 // ---- 歌词换源弹层 ----
 async function openLyricsSwitchModal(song) {
-  // 先确保有候选列表
   if (!lyricsCandidates.length) {
-    // 实时拉取候选
     try {
       const data = await api(`/stats/lyrics?name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}`);
       lyricsCandidates = data.candidates || [];
@@ -245,17 +243,12 @@ async function openLyricsSwitchModal(song) {
 
   const modal = $('candModal');
   const list = $('candList');
-  // 复用换源弹层 → 改标题
   modal.querySelector('h3').textContent = '选择歌词版本（网易云音乐）';
 
   const songKey = `${song.name}__${song.singer || ''}`;
 
-  // 拉取用户已屏蔽的歌词源
-  let blockedList = [];
-  try {
-    const r = await api(`/stats/blocked/full?song=${encodeURIComponent(songKey)}&type=lyrics`);
-    blockedList = r.list || [];
-  } catch {}
+  // 拉取已屏蔽的歌词源
+  const blockedList = await fetchBlockedList(api, songKey, 'lyrics');
 
   list.innerHTML = lyricsCandidates.map((c, i) => {
     const isCurrent = c.id === lyricsCurrentSourceId;
@@ -268,27 +261,11 @@ async function openLyricsSwitchModal(song) {
       <span class="tag ${isCurrent ? 'current' : ''}">${isCurrent ? '当前' : '选择'}</span>
       <button class="cand-block-btn" title="屏蔽此歌词源，以后不再出现"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>`;
-  }).join('') + (blockedList.length ? `
-    <div class="cand-blocked-section">
-      <button class="cand-blocked-toggle" id="candLyricsBlockedToggle">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        已屏蔽的歌词源（${blockedList.length}）
-      </button>
-      <div class="cand-blocked-list" id="candLyricsBlockedList" style="display:none">
-        ${blockedList.map(b => `
-          <div class="cand-blocked-row" data-source-id="${esc(b.source_id)}">
-            <span class="cand-blocked-id">${esc(b.source_id)}</span>
-            <span class="cand-blocked-time">${new Date(b.blocked_at).toLocaleDateString()}</span>
-            <button class="cand-unblock-btn" title="取消屏蔽"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 9 8 9"/></svg> 恢复</button>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  ` : '');
+  }).join('') + blockedSectionHtml(blockedList, 'candLyrics');
 
   modal.classList.add('show');
 
-  // 关闭时总是恢复标题（无论点叉还是选候选）
+  // 关闭时恢复标题
   const restoreTitle = () => { modal.querySelector('h3').textContent = '选择播放资源（Bilibili）'; };
 
   list.querySelectorAll('.cand-row').forEach((row) => {
@@ -304,7 +281,6 @@ async function openLyricsSwitchModal(song) {
         toast('该歌词源暂无内容，请换一个试试');
       }
     };
-    // 屏蔽按钮
     row.querySelector('.cand-block-btn')?.addEventListener('click', async (e) => {
       e.stopPropagation();
       const c = lyricsCandidates[Number(row.dataset.i)];
@@ -317,33 +293,12 @@ async function openLyricsSwitchModal(song) {
     });
   });
 
-  // 点叉关闭时恢复标题（openCandModal 总会再设回 Bilibili 标题）
+  // 点叉关闭时恢复标题
   const origClose = $('candClose').onclick;
   $('candClose').onclick = () => { restoreTitle(); modal.classList.remove('show'); $('candClose').onclick = origClose; };
 
-  // 已屏蔽歌词源 - 折叠切换
-  const lyricsToggle = $('candLyricsBlockedToggle');
-  if (lyricsToggle) {
-    lyricsToggle.onclick = () => {
-      const bl = $('candLyricsBlockedList');
-      const show = bl.style.display === 'none';
-      bl.style.display = show ? '' : 'none';
-    };
-  }
-
-  // 已屏蔽歌词源 - 恢复按钮
-  list.querySelectorAll('.cand-blocked-row .cand-unblock-btn').forEach(btn => {
-    btn.onclick = async (e) => {
-      e.stopPropagation();
-      const row = btn.closest('.cand-blocked-row');
-      const sourceId = row.dataset.sourceId;
-      try {
-        await api('/stats/blocked', { method: 'DELETE', body: { song: songKey, type: 'lyrics', sourceId } });
-        row.remove();
-        toast('已取消屏蔽');
-      } catch (err) { toast('恢复失败：' + err.message); }
-    };
-  });
+  // 已屏蔽列表事件
+  bindBlockedSection(list, api, songKey, 'lyrics', 'candLyrics');
 }
 
 export function syncLyrics(sec) {

@@ -153,7 +153,7 @@ app.get('/qr', async (req, res) => {
 </head>
 <body>
   <div class="card">
-    <h1>🎵 WeMusic</h1>
+    <h1><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1db954" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>WeMusic</h1>
     <div class="sub">手机扫一扫，即刻使用</div>
     <div class="qr-wrap">
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}" alt="QR Code" />

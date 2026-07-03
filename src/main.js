@@ -1,7 +1,7 @@
 // WeMusic 主应用入口
 import { Auth, api } from './api.js';
 import { state } from './state.js';
-import { $ } from './utils.js';
+import { $, initGlobalTooltip } from './utils.js';
 import { loadPlaylists, setActiveNav, initPlaylistUI } from './playlist-ui.js';
 import { initPlayer, restoreSession, renderMode } from './player.js';
 import { initQueue, loadHistory } from './queue.js';
@@ -15,6 +15,7 @@ import { initStats, openDiscover } from './stats.js';
 if (!Auth.token) location.href = '/login.html';
 
 // 初始化全部模块
+initGlobalTooltip(); // 全局 tooltip（stats / playlist-ui 共用）
 initSettings();
 initPlayer();
 initQueue();
@@ -27,7 +28,7 @@ initStats();
 // 键盘快捷键
 document.addEventListener('keydown', (e) => {
   const tag = (e.target.tagName || '').toLowerCase();
-  const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+  const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable === true;
   if (e.key === 'Escape') {
     // 关闭浮层：优先关最上层的模态弹窗，再关歌词详情页，最后关小浮层
     // 顺序很重要：candModal 等模态弹窗可能盖在 lyricsPanel 上，必须先关

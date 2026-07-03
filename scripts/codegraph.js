@@ -2,7 +2,7 @@
 // 输出: .project-graph.json（AI 会话自动读取，无需 grep 文件）
 // 用法: npm run codegraph
 
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { parse } from '@babel/parser';
 import _traverse from '@babel/traverse';
@@ -120,3 +120,51 @@ const out = join(ROOT, '.project-graph.json');
 writeFileSync(out, JSON.stringify(graph, null, 2));
 console.log(`✅ CodeGraph 已生成: ${out}`);
 console.log(`   ${Object.keys(modules).length} 个模块, ${routes.length} 条路由`);
+
+// ---- 自动生成 docs/README.md 索引 ----
+try {
+  const docsDir = join(ROOT, 'docs');
+  const entries = readdirSync(docsDir, { withFileTypes: true });
+  const lines = ['# WeMusic 文档索引', '', '> 此文件由 `npm run codegraph` 自动生成，无需手动维护。', ''];
+
+  // 根目录下的 .md 文件
+  const rootMds = entries.filter(e => e.isFile() && e.name.endsWith('.md') && e.name !== 'README.md');
+  if (rootMds.length) {
+    lines.push('## 项目级文档', '');
+    for (const e of rootMds) {
+      const content = readFileSync(join(docsDir, e.name), 'utf8');
+      const title = content.match(/^#\s+(.+)/m)?.[1] || e.name.replace('.md', '');
+      lines.push(`- [${title}](${e.name})`);
+    }
+    lines.push('');
+  }
+
+  // 子目录
+  const dirs = entries.filter(e => e.isDirectory());
+  for (const d of dirs) {
+    const subFiles = readdirSync(join(docsDir, d.name)).filter(f => f.endsWith('.md'));
+    if (!subFiles.length) continue;
+    lines.push(`## ${d.name}/`, '');
+    for (const f of subFiles) {
+      const content = readFileSync(join(docsDir, d.name, f), 'utf8');
+      const title = content.match(/^#\s+(.+)/m)?.[1] || f.replace('.md', '');
+      lines.push(`- [${title}](${d.name}/${f})`);
+    }
+    lines.push('');
+  }
+
+  // 规则文件
+  const rulesDir = join(ROOT, '.codebuddy', 'rules');
+  if (existsSync(rulesDir)) {
+    const rules = readdirSync(rulesDir).filter(f => f.endsWith('.mdc'));
+    lines.push('## .codebuddy/rules/（AI 会话自动加载）', '');
+    for (const r of rules) {
+      const content = readFileSync(join(rulesDir, r), 'utf8');
+      const title = content.match(/^##\s+(.+)/m)?.[1] || r.replace('.mdc', '');
+      lines.push(`- **${r}** — ${title}`);
+    }
+  }
+
+  writeFileSync(join(docsDir, 'README.md'), lines.join('\n') + '\n');
+  console.log(`✅ docs/README.md 已更新`);
+} catch (e) { console.warn('⚠ docs/README.md 生成失败:', e.message); }

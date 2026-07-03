@@ -194,7 +194,8 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
 router.get('/weekly', (req, res) => {
   const uid = req.user.id;
   const now = new Date();
-  const offset = Math.max(0, parseInt(req.query.weekOffset) || 0);
+  const off = Number(req.query.weekOffset) || 0;
+  const offset = Math.max(0, Math.min(off, 52));
 
   const dayOfWeek = now.getDay();
   const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
@@ -231,7 +232,8 @@ router.get('/weekly', (req, res) => {
 router.get('/monthly', (req, res) => {
   const uid = req.user.id;
   const now = new Date();
-  const offset = Math.max(0, parseInt(req.query.monthOffset) || 0);
+  const off = Number(req.query.monthOffset) || 0;
+  const offset = Math.max(0, Math.min(off, 24));
 
   const targetStart = new Date(now.getFullYear(), now.getMonth() - offset, 1, 0, 0, 0, 0);
   const targetSince = targetStart.getTime();
@@ -345,7 +347,7 @@ router.post('/likes/:songMid', (req, res) => {
 
 // 批量查询红心状态（body: { mids: [...] }）
 router.post('/likes/check', (req, res) => {
-  const mids = Array.isArray(req.body?.mids) ? req.body.mids : [];
+  const mids = (Array.isArray(req.body?.mids) ? req.body.mids : []).slice(0, 500);
   if (!mids.length) return res.json({ liked: {} });
   const placeholders = mids.map(() => '?').join(',');
   const rows = db.prepare(

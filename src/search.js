@@ -1,5 +1,6 @@
 // ---------------- 搜索、歌手页、专辑页 ----------------
-import { $, esc, fmtDur, albumCover, toast } from './utils.js';
+import { $, esc, fmtDur, albumCover, toast, songColHeader } from './utils.js';
+import { heartOutline, heartFilled } from './ui.js';
 import { api } from './api.js';
 import { state } from './state.js';
 import { renderSongList, listToolsHtml, bindListTools, addSongs, songInPlaylists } from './playlist-ui.js';
@@ -9,16 +10,7 @@ const _navPush = (view, data) => import('./main.js').then(m => m.navPush(view, d
 // 歌手头像 URL
 const singerAvatar = (mid) => `https://y.gtimg.cn/music/photo_new/T001R300x300M000${mid}.jpg`;
 
-// 歌曲列表列头
-const songColHeader = `<div class="song-row-head">
-  <span class="h-idx">#</span>
-  <span class="h-name">歌名</span>
-  <span class="h-singer">歌手</span>
-  <span class="h-album">专辑</span>
-  <span class="h-bookmark"></span>
-  <span class="h-dur">时长</span>
-  <span class="h-ops">操作</span>
-</div>`;
+
 
 // ---- 搜索历史 ----
 function getSearchHistory() {

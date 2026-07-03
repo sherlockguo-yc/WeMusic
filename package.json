@@ -5,8 +5,8 @@
   "type": "module",
   "main": "server/index.js",
   "scripts": {
-    "start": "node --watch server/index.js",
-    "dev": "node --watch server/index.js",
+    "start": "trap 'kill 0' EXIT; vite build --watch & node --watch server/index.js & wait",
+    "dev": "trap 'kill 0' EXIT; vite build --watch & node --watch server/index.js & wait",
     "dev:watch": "node scripts/codegraph.js && node --watch server/index.js & vite build --watch",
     "init-db": "node server/db.js",
     "build": "node scripts/codegraph.js && vite build",
