@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { $ } from './utils.js';
 import { loadPlaylists, setActiveNav, initPlaylistUI } from './playlist-ui.js';
 import { initPlayer, restoreSession, renderMode } from './player.js';
-import { initQueue } from './queue.js';
+import { initQueue, loadHistory } from './queue.js';
 import { initSearch } from './search.js';
 import { initLyrics } from './lyrics.js';
 import { initUI } from './ui.js';
@@ -125,6 +125,7 @@ async function init() {
   // loadPlaylists 与不依赖歌单数据的操作并行执行
   const plPromise = loadPlaylists();
   restoreSession();
+  loadHistory(); // 服务端加载最近播放历史（跨设备共享）
   // 加载头像 -> 同时设置 state.isAdmin / state.user；加载服务端偏好同步
   loadAvatar().then(() => {
     if (state.isAdmin) {

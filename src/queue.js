@@ -1,25 +1,30 @@
 // ---------------- 播放队列 + 历史抽屉 ----------------
 import { $, esc, toast } from './utils.js';
+import { api } from './api.js';
 import { state } from './state.js';
 
 export let activeTab = 'queue';
 
-export function getPlayHistory() {
-  try { return JSON.parse(localStorage.getItem('wemusic_play_hist') || '[]'); }
-  catch { return []; }
+let _histCache = null; // 缓存最近播放列表
+
+export async function loadHistory() {
+  try {
+    const { history } = await api('/stats/history');
+    _histCache = history;
+  } catch { _histCache = []; }
 }
 
 export function pushPlayHistory(song) {
   if (!song || !song.name) return;
-  const item = {
+  // 写入本地缓存（服务端通过 play_logs 自动同步）
+  if (!_histCache) _histCache = [];
+  _histCache = _histCache.filter((x) => `${x.name}__${x.singer || ''}` !== `${song.name}__${song.singer || ''}`);
+  _histCache.unshift({
     song_mid: song.song_mid, name: song.name, singer: song.singer,
     album: song.album, album_mid: song.album_mid, duration: song.duration,
-    bvid: song.bvid, _biliTitle: song._biliTitle, _biliDur: song._biliDur,
-    at: Date.now(),
-  };
-  let h = getPlayHistory().filter((x) => `${x.name}__${x.singer || ''}` !== `${item.name}__${item.singer || ''}`);
-  h.unshift(item); h = h.slice(0, 100);
-  localStorage.setItem('wemusic_play_hist', JSON.stringify(h));
+    bvid: song.bvid, last_at: Date.now(),
+  });
+  _histCache = _histCache.slice(0, 100);
   if ($('queueDrawer').classList.contains('show') && activeTab === 'history') renderHistory();
 }
 
@@ -79,31 +84,19 @@ export function removeFromQueue(i) {
 
 export function renderHistory() {
   const list = $('qdList');
-  const hist = getPlayHistory();
-  if (!hist.length) { list.innerHTML = '<div class="empty">还没有播放记录</div>'; return; }
-  list.innerHTML = hist.map((s, i) => `
+  if (!_histCache || !_histCache.length) { list.innerHTML = '<div class="empty">还没有播放记录</div>'; return; }
+  list.innerHTML = _histCache.map((s, i) => `
     <div class="qd-row" data-i="${i}">
       <div class="qd-ct">
         <div class="qd-name">${esc(s.name)}</div>
         <div class="qd-singer">${esc(s.singer || '')}</div>
       </div>
-      <span class="qd-del" data-i="${i}" title="移出历史">✕</span>
     </div>`).join('');
 
   list.querySelectorAll('.qd-row').forEach((row) => {
     row.onclick = (e) => {
-      if (e.target.classList.contains('qd-del')) return;
-      const song = hist[Number(row.dataset.i)];
+      const song = _histCache[Number(row.dataset.i)];
       import('./player.js').then(({ playFromList }) => playFromList([{ ...song }], 0, null, null));
-    };
-  });
-  list.querySelectorAll('.qd-del').forEach((el) => {
-    el.onclick = (e) => {
-      e.stopPropagation();
-      const h = getPlayHistory();
-      h.splice(Number(el.dataset.i), 1);
-      localStorage.setItem('wemusic_play_hist', JSON.stringify(h));
-      renderHistory();
     };
   });
 }
@@ -137,8 +130,8 @@ export function initQueue() {
       document.title = 'WeMusic · 个人音乐';
       renderQueue(); toast('已清空播放队列');
     } else {
-      localStorage.removeItem('wemusic_play_hist');
-      renderHistory(); toast('已清空播放历史');
+      _histCache = [];
+      renderHistory(); toast('已清空播放历史（当前会话）');
     }
   };
   $('tabQueue').onclick = () => { activeTab = 'queue'; setTab('queue'); renderQueue(); };

@@ -240,7 +240,6 @@ export function highlightPlaying() {
 // ---- 会话持久化 ----
 let _saveSessTimer = null;
 export function saveSession() {
-  // debounce 500ms：避免高频切歌/修改队列时阻塞主线程
   if (_saveSessTimer) clearTimeout(_saveSessTimer);
   _saveSessTimer = setTimeout(() => {
     try {
@@ -249,31 +248,42 @@ export function saveSession() {
         album: s.album, album_mid: s.album_mid, duration: s.duration, bvid: s.bvid,
         _biliTitle: s._biliTitle, _biliDur: s._biliDur,
       }));
-      localStorage.setItem('wemusic_session', JSON.stringify({
-        queue: q, queueIndex: state.queueIndex, currentContext: state.currentContext,
-      }));
+      const data = { queue: q, queueIndex: state.queueIndex };
+      localStorage.setItem('wemusic_session', JSON.stringify(data));
+      // 跨设备同步到服务端
+      api('/auth/session', { method: 'PUT', body: data }).catch(() => {});
     } catch {}
   }, 500);
 }
 
 export function flushSession() { if (_saveSessTimer) { clearTimeout(_saveSessTimer); saveSession(); } }
 
-export function restoreSession() {
+export async function restoreSession() {
+  let s = null;
+  // 优先从服务端恢复（跨设备同步），失败回退 localStorage
   try {
-    const s = JSON.parse(localStorage.getItem('wemusic_session') || 'null');
-    if (!s || !Array.isArray(s.queue) || s.queue.length === 0) return;
-    state.queue = s.queue;
-    state.queueIndex = s.queueIndex >= 0 && s.queueIndex < s.queue.length ? s.queueIndex : 0;
-    state.currentContext = s.currentContext || null;
-    state.current = state.queue[state.queueIndex];
-    if (state.current) {
-      $('npTitle').textContent = state.current.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : state.current.name;
-      checkMarquee($('npTitle'));
-      updateNpCover(state.current);
-      $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
-      setStatus(`上次播放 · 点 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><polygon points="6 3 20 12 6 21 6 3"/></svg> 继续`);
+    const r = await api('/auth/session');
+    if (r && Array.isArray(r.queue) && r.queue.length > 0) {
+      s = r;
     }
   } catch {}
+  if (!s) {
+    try {
+      s = JSON.parse(localStorage.getItem('wemusic_session') || 'null');
+      if (!s || !Array.isArray(s.queue) || s.queue.length === 0) s = null;
+    } catch { s = null; }
+  }
+  if (!s) return;
+  state.queue = s.queue;
+  state.queueIndex = s.queueIndex >= 0 && s.queueIndex < s.queue.length ? s.queueIndex : 0;
+  state.current = state.queue[state.queueIndex];
+  if (state.current) {
+    $('npTitle').textContent = state.current.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : state.current.name;
+    checkMarquee($('npTitle'));
+    updateNpCover(state.current);
+    $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
+    setStatus(`上次播放 · 点 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><polygon points="6 3 20 12 6 21 6 3"/></svg> 继续`);
+  }
 }
 
 // ---- bvid 缓存 ----

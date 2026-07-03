@@ -55,6 +55,16 @@ router.post('/log', (req, res) => {
   res.json({ ok: true });
 });
 
+// 最近播放历史（从 play_logs 查最近 100 首不重复歌曲，跨设备共享）
+router.get('/history', (req, res) => {
+  const rows = db.prepare(`
+    SELECT song_mid, name, singer, album, album_mid, duration, bvid, MAX(played_at) AS last_at
+    FROM play_logs WHERE user_id=? GROUP BY name, COALESCE(singer,'')
+    ORDER BY last_at DESC LIMIT 100
+  `).all(req.user.id);
+  res.json({ history: rows });
+});
+
 // ============================================================
 // 统计数据查询
 // ============================================================

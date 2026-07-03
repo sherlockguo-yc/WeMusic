@@ -103,6 +103,26 @@ router.put('/preferences', authRequired, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- 播放会话跨设备同步 ----
+router.get('/session', authRequired, (req, res) => {
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const prefs = row ? JSON.parse(row.data) : {};
+  res.json({ queue: prefs._sessionQueue || [], queueIndex: prefs._sessionIndex ?? -1 });
+});
+
+router.put('/session', authRequired, (req, res) => {
+  const { queue, queueIndex } = req.body || {};
+  if (!Array.isArray(queue)) return res.status(400).json({ error: '无效队列' });
+  // 合并到现有 preferences（不覆盖主题等偏好）
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const prefs = row ? JSON.parse(row.data) : {};
+  prefs._sessionQueue = queue.slice(0, 500);
+  prefs._sessionIndex = Number(queueIndex) || 0;
+  db.prepare('INSERT OR REPLACE INTO user_preferences (user_id, data, updated_at) VALUES (?, ?, ?)')
+    .run(req.user.id, JSON.stringify(prefs), Date.now());
+  res.json({ ok: true });
+});
+
 // ---- 管理员端点 ----
 function adminOnly(req, res, next) {
   if (!config.adminUsers.includes(req.user.username)) {
