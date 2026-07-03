@@ -34,8 +34,8 @@
       <div class="side-section">
         <span>我的歌单</span>
         <span class="side-actions">
-          <button id="importPlBtn" title="导入歌单">⇪</button>
-          <button id="newPlaylistBtn" title="新建歌单">＋</button>
+          <button id="importPlBtn" title="导入歌单"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
+          <button id="newPlaylistBtn" title="新建歌单"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
         </span>
       </div>
       <div id="playlistList"></div>
@@ -97,13 +97,11 @@
         </div>
       </div>
       <div class="controls">
-        <button class="icon-btn" id="modeBtn" title="播放模式：列表循环">🔁</button>
-        <button class="icon-btn" id="prevBtn" title="上一首">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="18" x2="5" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <button class="icon-btn" id="modeBtn" title="播放模式：列表循环"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
+        <button class="icon-btn" id="prevBtn" title="上一首"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
         </button>
-        <button class="icon-btn play" id="playPauseBtn" title="播放/暂停">▶</button>
-        <button class="icon-btn" id="nextBtn" title="下一首">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="6" x2="19" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <button class="icon-btn play" id="playPauseBtn" title="播放/暂停"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
+        <button class="icon-btn" id="nextBtn" title="下一首"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
         </button>
         <div class="volume-wrap">
           <button class="icon-btn vol" id="volBtn" title="静音">
@@ -161,12 +159,12 @@
         <div class="lp-bg-overlay" id="lpBgOverlay" style="display:none">
           <div class="lp-bg-card" id="lpBgCard">
             <div class="lp-bg-card-header">
-              <span class="lp-bg-card-icon">💿</span>
+              <span class="lp-bg-card-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span>
               <div class="lp-bg-card-heading">
                 <div class="lp-bg-card-title" id="lpBgCardTitle">歌曲背景</div>
                 <div class="lp-bg-card-sub" id="lpBgCardSub"></div>
               </div>
-              <button class="lp-bg-card-close" id="lpBgCardClose">✕</button>
+              <button class="lp-bg-card-close" id="lpBgCardClose"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
             </div>
             <div class="lp-bg-card-body" id="lpBgCardBody"></div>
           </div>
@@ -174,9 +172,9 @@
       </div>
       <!-- 歌词页底部播放控制栏 -->
       <div class="lp-controls">
-        <button class="lp-ctrl-btn" id="lpPrevBtn" title="上一首">⏮</button>
-        <button class="lp-ctrl-btn play" id="lpPlayBtn" title="播放/暂停">▶</button>
-        <button class="lp-ctrl-btn" id="lpNextBtn" title="下一首">⏭</button>
+        <button class="lp-ctrl-btn" id="lpPrevBtn" title="上一首"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg></button>
+        <button class="lp-ctrl-btn play" id="lpPlayBtn" title="播放/暂停"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
+        <button class="lp-ctrl-btn" id="lpNextBtn" title="下一首"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
         <div class="lp-progress">
           <span class="lp-time" id="lpCurTime">0:00</span>
           <input type="range" class="lp-seek" id="lpSeekBar" min="0" max="1000" value="0" />
@@ -249,7 +247,7 @@
       <h3>添加到歌单</h3>
       <div id="addList" class="add-list"></div>
       <div class="prompt-actions">
-        <button class="btn sm" id="addNewPl">＋ 新建歌单</button>
+        <button class="btn sm" id="addNewPl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 新建歌单</button>
         <button class="btn sm" id="addClose">取消</button>
       </div>
     </div>

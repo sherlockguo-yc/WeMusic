@@ -176,7 +176,7 @@ export function renderSidebar() {
 // ---- 列表渲染 ----
 export function listToolsHtml() {
   return `<div class="list-tools">
-    <button class="btn green sm" data-tool="playall">▶ 播放全部</button>
+    <button class="btn green sm" data-tool="playall"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg> 播放全部</button>
     <button class="btn sm" data-tool="shuffle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="M4 4l5 5"/></svg> 随机播放</button>
     <input class="filter-input" data-tool="filter" placeholder="在列表中筛选…" />
   </div>`;
@@ -242,7 +242,7 @@ export function renderSongList(container, songs, opts = {}) {
       <span class="dur">${fmtDur(s.duration)}</span>
       <span class="ops">
         ${likeBtns}
-        ${showAdd ? '<button class="icon-btn" title="添加到歌单" data-act="add">＋</button>' : ''}
+        ${showAdd ? '<button class="icon-btn" title="添加到歌单" data-act="add"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>' : ''}
         ${showDelete ? '<button class="icon-btn" title="从歌单移除" data-act="del"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' : ''}
       </span>
     </div>`;

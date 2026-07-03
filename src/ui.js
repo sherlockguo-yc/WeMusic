@@ -13,7 +13,7 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
   const menu = $('ctxMenu');
   const inPlaylist = context === 'playlist';
   const items = [
-    { label: '＋ 添加到歌单', act: 'add' },
+    { label: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 添加到歌单', act: 'add' },
     { sep: true },
     { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 复制 Bilibili 链接', act: 'copy', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
     { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> 在 Bilibili 搜索此歌', act: 'search' },
@@ -248,7 +248,7 @@ export function initUI() {
     const rect = btn.getBoundingClientRect();
     const menu = $('ctxMenu');
     menu.innerHTML = `
-      <div class="ctx-item" id="ctxNpAdd">＋ 添加到歌单</div>
+      <div class="ctx-item" id="ctxNpAdd"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 添加到歌单</div>
       ${song.bvid ? `<div class="ctx-item" id="ctxNpCopy">⎘ 复制 Bilibili 链接</div>` : ''}`;
     menu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
     menu.style.top = (rect.top - menu.offsetHeight - 4) + 'px';

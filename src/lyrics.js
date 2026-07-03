@@ -3,6 +3,10 @@ import { $, esc, albumCover, toast } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 
+// 预加载 player 模块（避免在 setInterval 中重复 import，解决循环依赖）
+const _playerP = _playerP;
+const _uiP = _uiP;
+
 export let lyricsLines = [];
 export let lyricsFor = '';
 export let lyricsCandidates = []; // 当前候选列表
@@ -82,18 +86,18 @@ export function updateLyricsPanelMeta(song) {
   if (cover) bg.style.backgroundImage = `url(${cover})`;
   else bg.style.backgroundImage = 'none';
 
-  import('./ui.js').then(({ heartOutline, heartFilled }) => {
+  _uiP.then(({ heartOutline, heartFilled }) => {
   const isLiked = song.song_mid && state.likedMids && state.likedMids.has(song.song_mid);
   $('lpLikeRow').innerHTML = `
     ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? heartFilled : heartOutline}</button>` : ''}
-    <button class="lp-action-btn" title="添加到歌单" id="lpAddBtn">＋ 歌单</button>
+    <button class="lp-action-btn" title="添加到歌单" id="lpAddBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 歌单</button>
     <button class="lp-action-btn" title="歌词换源" id="lpSwitchBtn">⤢ 歌词</button>
     <button class="lp-action-btn lp-bg-action" title="歌曲背景" id="lpBgBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 背景</button>
   `;
   const lpLikeBtn = document.getElementById('lpLikeBtn');
   if (lpLikeBtn) {
       lpLikeBtn.onclick = async () => {
-      const { toggleLike, heartOutline, heartFilled } = await import('./ui.js');
+      const { toggleLike, heartOutline, heartFilled } = await _uiP;
       await toggleLike(song, null);
       const liked2 = state.likedMids.has(song.song_mid);
       lpLikeBtn.innerHTML = liked2 ? heartFilled : heartOutline;
@@ -113,7 +117,7 @@ export function updateLyricsPanelMeta(song) {
     const ov = $('lpBgOverlay');
     ov.style.display = ov.style.display === 'none' || !ov.style.display ? 'flex' : 'none';
   };
-  }); // close import('./ui.js').then(...)
+  }); // close _uiP.then(...)
 }
 
 export function openLyricsPanel() {
@@ -132,23 +136,28 @@ export function openLyricsPanel() {
     updateLyricsPanelMeta(state.current);
     loadLyrics(state.current);
   }
-  import('./player.js').then(({ autoTimer, timerPaused }) => {
+  _playerP.then(({ autoTimer, timerPaused }) => {
     if (autoTimer && !timerPaused) panel.classList.add('playing');
   });
 
   // 启动 UI 同步定时器（仅在面板显示时运行）
   if (_lyricsUISyncId) clearInterval(_lyricsUISyncId);
   _lyricsUISyncId = setInterval(() => {
-    $('lpCurTime').textContent = $('curTime').textContent;
-    $('lpDurTime').textContent = $('durTime').textContent;
-    $('lpSeekBar').value = $('seekBar').value;
-    $('lpPlayBtn').textContent = $('playPauseBtn').textContent;
+    // 脏检查：仅在值变化时更新 DOM
+    const ct = $('curTime').textContent,
+          dt = $('durTime').textContent,
+          sb = $('seekBar').value,
+          pb = $('playPauseBtn').textContent;
+    if ($('lpCurTime').textContent !== ct) $('lpCurTime').textContent = ct;
+    if ($('lpDurTime').textContent !== dt) $('lpDurTime').textContent = dt;
+    if ($('lpSeekBar').value !== sb) $('lpSeekBar').value = sb;
+    if ($('lpPlayBtn').textContent !== pb) $('lpPlayBtn').textContent = pb;
   }, 500);
 
   // 启动歌词进度同步定时器
   if (_lyricsSyncId) clearInterval(_lyricsSyncId);
   _lyricsSyncId = setInterval(() => {
-    import('./player.js').then(({ autoTimer, timerPaused, elapsed }) => {
+    _playerP.then(({ autoTimer, timerPaused, elapsed }) => {
       if (!autoTimer) { panel.classList.remove('playing'); return; }
       panel.classList.toggle('playing', !timerPaused);
       if (!timerPaused && lyricsLines.length) {
@@ -362,16 +371,16 @@ export function initLyrics() {
   // 背景面板关闭方式（静态绑定）
   $('lpBgCardClose').onclick = () => { $('lpBgOverlay').style.display = 'none'; };
   $('lpBgOverlay').onclick = (e) => { if (e.target === e.currentTarget) $('lpBgOverlay').style.display = 'none'; };
-  $('lpPrevBtn').onclick = () => import('./player.js').then(({ playPrev }) => playPrev());
-  $('lpNextBtn').onclick = () => import('./player.js').then(({ playNext }) => playNext(false));
+  $('lpPrevBtn').onclick = () => _playerP.then(({ playPrev }) => playPrev());
+  $('lpNextBtn').onclick = () => _playerP.then(({ playNext }) => playNext(false));
   $('lpPlayBtn').onclick = () => {
     if (!state.current) return toast('请选择一首歌曲播放');
     const mounted = $('videoContainer').children.length > 0;
-    if (!mounted) { import('./player.js').then(({ playCurrent }) => playCurrent()); return; }
-    import('./player.js').then((p) => {
+    if (!mounted) { _playerP.then(({ playCurrent }) => playCurrent()); return; }
+    _playerP.then((p) => {
       p.timerPaused = !p.timerPaused;
-      $('playPauseBtn').textContent = p.timerPaused ? '▶' : '⏸';
-      $('lpPlayBtn').textContent = p.timerPaused ? '▶' : '⏸';
+      $('playPauseBtn').innerHTML = p.timerPaused ? p.PLAY_ICON : p.PAUSE_ICON;
+      $('lpPlayBtn').innerHTML = p.timerPaused ? p.PLAY_ICON : p.PAUSE_ICON;
       toast(p.timerPaused ? '已暂停自动连播' : '继续自动连播');
     });
   };

@@ -4,6 +4,10 @@ import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { clearSleep, sleepAfterSong } from './settings.js';
 
+// Lucide SVG 图标
+export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
+export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
 export let autoTimer = null;
 export let elapsed = 0;
 export let totalDur = 0;
@@ -56,7 +60,7 @@ export function startTimer(d) {
   totalDur = Number(d) || totalDur || (state.current && state.current.duration) || 0;
   $('durTime').textContent = fmtDur(totalDur);
   timerPaused = false;
-  $('playPauseBtn').textContent = '⏸';
+  $('playPauseBtn').innerHTML = PAUSE_ICON;
   autoTimer = setInterval(() => {
     if (timerPaused) return;
     elapsed++;
@@ -121,8 +125,8 @@ function checkMarquee(el) {
   el.style.transform = '';
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      const extra = el.scrollWidth - parent.clientWidth + 8;
-      if (extra > 4) { el.classList.add('marquee'); startMarquee(el, extra); }
+      const overflow = el.scrollWidth - parent.clientWidth;
+      if (overflow > 4) { el.classList.add('marquee'); startMarquee(el, overflow + 8); }
     });
   });
 }
@@ -156,8 +160,8 @@ export function setVpTitle(title) {
   inner.classList.remove('scrolling');
   inner.style.transform = '';
   requestAnimationFrame(() => {
-    const extra = inner.scrollWidth - el.clientWidth + 8;
-    if (extra > 4) { inner.classList.add('scrolling'); startMarquee(inner, extra); }
+    const overflow = inner.scrollWidth - el.clientWidth;
+    if (overflow > 4) { inner.classList.add('scrolling'); startMarquee(inner, overflow + 8); }
   });
 }
 
@@ -269,7 +273,7 @@ export function restoreSession() {
       checkMarquee($('npTitle'));
       updateNpCover(state.current);
       $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
-      setStatus('上次播放 · 点 ▶ 继续');
+      setStatus(`上次播放 · 点 ${PLAY_ICON} 继续`);
     }
   } catch {}
 }
@@ -779,7 +783,7 @@ export function initPlayer() {
     const mounted = vc.children.length > 0 || !!vc.dataset.pendingBvid;
     if (!mounted) { playCurrent(); return; }
     timerPaused = !timerPaused;
-    $('playPauseBtn').textContent = timerPaused ? '▶' : '⏸';
+    $('playPauseBtn').innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON;
     // 后台时同步控制 bgAudio
     if (document.hidden && _bgBvid) {
       if (timerPaused) bgAudio.pause();
@@ -830,11 +834,11 @@ export function initPlayer() {
   // Media Session
   navigator.mediaSession.setActionHandler('play', () => {
     if (state.current && $('videoContainer').children.length > 0) {
-      timerPaused = false; $('playPauseBtn').textContent = '⏸';
+      timerPaused = false; $('playPauseBtn').innerHTML = PAUSE_ICON;
     } else if (state.current) { playCurrent(); }
   });
   navigator.mediaSession.setActionHandler('pause', () => {
-    timerPaused = true; $('playPauseBtn').textContent = '▶';
+    timerPaused = true; $('playPauseBtn').innerHTML = PLAY_ICON;
   });
   navigator.mediaSession.setActionHandler('previoustrack', playPrev);
   navigator.mediaSession.setActionHandler('nexttrack', () => playNext(false));

@@ -7,6 +7,8 @@ export default defineConfig({
   build: {
     outDir: '../public/dist',
     emptyOutDir: true,
+    target: 'es2020',
+    minify: 'esbuild',
     rollupOptions: {
       input: {
         app: resolve(__dirname, 'src/main.js'),
@@ -16,12 +18,20 @@ export default defineConfig({
         entryFileNames: '[name].js',
         chunkFileNames: 'chunks/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
+        manualChunks: {
+          stats: [resolve(__dirname, 'src/stats.js')],
+          search: [resolve(__dirname, 'src/search.js')],
+          lyrics: [resolve(__dirname, 'src/lyrics.js')],
+          player: [resolve(__dirname, 'src/player.js')],
+          playlist: [resolve(__dirname, 'src/playlist-ui.js')],
+        },
       },
+    },
+    esbuild: {
+      drop: ['console', 'debugger'],
     },
   },
   server: {
-    proxy: {
-      '/api': 'http://localhost:5174',
-    },
+    proxy: { '/api': 'http://localhost:5174' },
   },
 });

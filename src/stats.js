@@ -76,7 +76,7 @@ function computePersona(data, avgSec, compHighPct, periodWord) {
   const topArtist = data.topArtists[0];
   const topArtistShare = topArtist && data.period.plays ? topArtist.play_count / data.period.plays : 0;
   const artistName = topArtist?.singer || '';
-  if (topArtistShare > 0.4) return { icon: '⭐', label: `${artistName} 铁粉`, desc: `${periodWord}最爱 ${artistName}，占了超四成播放` };
+  if (topArtistShare > 0.4) return { icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`, label: `${artistName} 铁粉`, desc: `${periodWord}最爱 ${artistName}，占了超四成播放` };
   if (data.uniqueArtists > 30 * scale) return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="3" y2="18"/></svg>', label: '音乐探险家', desc: `${periodWord}邂逅了 ${data.uniqueArtists} 位歌手` };
   if (data.newSongs > 15 * scale) return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6"/><path d="M17 3a4 4 0 0 1 0 8h-3.5"/><path d="M3 18v-2a4 4 0 0 1 4-4h2.5"/><circle cx="13" cy="13" r="2.5"/></svg>', label: '新曲猎人', desc: `${periodWord}新发现了 ${data.newSongs} 首歌` };
   if (avgSec > 240) return { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>', label: '深度聆听者', desc: '平均每首歌聆听超过 4 分钟' };
@@ -596,7 +596,7 @@ export async function openStats() {
             <div class="ts-meta">
               <span class="ts-cnt">${s.play_count}次</span>
               <span class="ts-dur">${fmtMin(s.total_sec || 0)}</span>
-              <button class="icon-btn play ts-play" title="播放" data-i="${i}">▶</button>
+              <button class="icon-btn play ts-play" title="播放" data-i="${i}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
             </div>
           </div>`).join('')
         : '<div class="stats-empty">还没有播放记录</div>';
@@ -710,7 +710,7 @@ function renderChartList(container, songs) {
       <span class="chart-rank ${rankClass}">${rank}</span>
       ${cover ? `<img class="chart-cover" src="${cover}" loading="lazy" onerror="this.style.display='none'" />` : '<div class="chart-cover-ph"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>'}
       <div class="chart-info"><div class="chart-name">${esc(s.name)}</div><div class="chart-singer">${esc(s.singer || '')}</div></div>
-      <div class="chart-ops"><button class="icon-btn play" title="播放" data-act="play">▶</button><button class="icon-btn" title="添加到歌单" data-act="add">＋</button></div>
+      <div class="chart-ops"><button class="icon-btn play" title="播放" data-act="play"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button><button class="icon-btn" title="添加到歌单" data-act="add"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button></div>
     </div>`;
   }).join('');
   container.querySelectorAll('.chart-row').forEach((row) => {
@@ -760,7 +760,7 @@ function renderLikesView(main, songs, mode = 'list') {
           <div class="likes-singer-head">
             <span class="likes-singer-name">${esc(singer)}</span>
             <span class="likes-singer-cnt">${ss.length} 首</span>
-            <button class="btn sm green likes-singer-play" data-singer="${esc(singer)}">▶ 播放</button>
+            <button class="btn sm green likes-singer-play" data-singer="${esc(singer)}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg> 播放</button>
           </div>
           <div class="song-list"></div>
         </div>
@@ -825,7 +825,7 @@ export async function openSavedAlbums() {
   try {
     const { albums } = await api('/stats/albums');
     if (!albums.length) {
-      main.innerHTML = `<div class="view-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 我的专辑</div><div class="empty">还没有收藏专辑<br><br>试试搜一个歌手，点击专辑进入详情页，然后点「＋ 收藏专辑」</div>`;
+      main.innerHTML = `<div class="view-title"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 我的专辑</div><div class="empty">还没有收藏专辑<br><br>试试搜一个歌手，点击专辑进入详情页，然后点「收藏专辑」</div>`;
       return;
     }
     const grid = albums.map((a) => {
