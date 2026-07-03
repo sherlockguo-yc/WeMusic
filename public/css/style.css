@@ -503,21 +503,19 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .player .np .np-title-line { font-size: 14px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .player .np .np-title-line.marquee {
   overflow: visible; text-overflow: clip;
-  animation: marquee 8s ease-in-out infinite both;
-  --marquee-offset: -200px;
+  /* transform 由 rAF 驱动 */
 }
-.player .np .np-title-line.marquee:hover { animation-play-state: paused; }
 .player .player-status {
   color: var(--text-dim); font-size: 12px; white-space: nowrap;
   overflow: hidden; /* text-overflow: ellipsis 会截断 inner span 内容为 "..."，必须移除 */
   min-width: 0; max-width: 100%;
   /* 绝对定位：贴在进度条（380px 居中）右侧 */
   position: absolute;
-  left: calc(50% + 202px);  /* 190(进度条半宽) + 12(间隙) */
+  left: calc(50% + 202px);  /* 左贴进度条：190(进度条半宽) + 12(间隙) */
   top: 50%;
   transform: translateY(-50%);
-  width: 220px;
-  max-width: calc(50% - 412px); /* 防止超出右按钮 (200px 按钮 + 12 间隙) */
+  right: 210px;            /* 右贴词/队列等按钮：留一点间距 */
+  width: auto;             /* 让 left + right 决定宽度 */
   z-index: 1;
 }
 /* 视频标题内层 span：自然宽度时 scrollWidth 可被父级裁剪检出溢出 */
@@ -526,18 +524,10 @@ body.light .lp-bg-card-close { border-color: var(--border); }
   display: inline-block; /* 不用 min-width: max-content，否则 scrollWidth == clientWidth 永远不溢出 */
 }
 .status-inner.marquee {
-  animation: marquee 8s ease-in-out infinite both;
-  --marquee-offset: -200px;
+  /* transform 由 rAF 驱动 */
 }
-.status-inner.marquee:hover { animation-play-state: paused; }
 .player .player-status .badge { color: var(--accent); }
 .player-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
-
-@keyframes marquee {
-  0%, 12%   { transform: translateX(0); }
-  40%, 60%  { transform: translateX(var(--marquee-offset)); }
-  88%, 100% { transform: translateX(0); }
-}
 .np-actions { grid-area: unset; display: flex; gap: 8px; margin-top: 1px; }
 .np-act-btn {
   background: none; border: none; color: var(--text-dim); font-size: 15px;
@@ -1611,13 +1601,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   display: inline-block; min-width: max-content; white-space: nowrap;
 }
 .vp-title-inner.scrolling {
-  animation: vp-scroll 10s ease-in-out infinite;
-  --scroll-dist: 0;
-}
-@keyframes vp-scroll {
-  0%, 8%   { transform: translateX(0); }
-  45%, 75% { transform: translateX(var(--scroll-dist)); }
-  92%, 100% { transform: translateX(0); }
+  /* transform 由 rAF 驱动 */
 }
 .video-pane .vp-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .video-pane .vp-btn { color: var(--text-dim); cursor: pointer; white-space: nowrap; }

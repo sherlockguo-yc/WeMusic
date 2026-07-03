@@ -328,8 +328,8 @@ export function initSettings() {
   $('mobileQRClose').onclick = () => $('mobileQRModal').classList.remove('show');
   $('mobileQRModal').onclick = (e) => { if (e.target.id === 'mobileQRModal') $('mobileQRModal').classList.remove('show'); };
 
-  // 打赏弹窗（使用 base64 嵌入式二维码，防止被轻易替换）
-  $('donateBtn').onclick = () => { $('donateModal').classList.add('show'); $('donateQR').src = DONATE_QR_BASE64; };
+  // 打赏弹窗：使用 public/icons/donate-qr-cropped.png 静态资源
+  $('donateBtn').onclick = () => { $('donateModal').classList.add('show'); };
   $('donateClose').onclick = () => $('donateModal').classList.remove('show');
   $('donateModal').onclick = (e) => { if (e.target.id === 'donateModal') $('donateModal').classList.remove('show'); };
 

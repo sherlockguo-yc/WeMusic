@@ -54,6 +54,7 @@
 - 深色/浅色/跟随系统，10 色主题，字号 4 档，字体 6 种。
 - Lucide SVG 图标全站统一，hover 反馈全覆盖。
 - 顶栏按钮：反馈 / 打赏（圆形 $）/ 管理员（盾牌）/ 帮助（?）。
+- 底栏长歌名 / 视频标题自动左右滚动，视频浮窗标题同样支持。详见 `docs/MARQUEE.md`。
 - 设置面板滚动提示（渐变遮罩 + 箭头）、移动端扫码访问（设置面板 / `/qr`）。
 - `npm run mobile`：手机 USB + adb 一键打开浏览器。
 - 侧边栏宽度拖拽、定时停止播放、响应式 + PWA。
@@ -88,7 +89,7 @@
 npm install && npm run build && cp .env.example .env
 npm start                     # 或 npm run dev:full（开发模式）
 npm run deploy                # 构建 + 重启
-npm run verify                # 自动化验证（API + UI + 截图）
+npm test                      # 运行测试（单元 + API 集成 + E2E）
 ```
 
 ### 手机访问
@@ -145,7 +146,9 @@ WeMusic/
 ├── shared/                # 海报模板（前后端共用）
 ├── public/                # HTML / CSS / PWA / dist
 ├── server/                # Express + routes + services
-├── scripts/               # build-restart / verify / mobile-open
+├── scripts/               # build-restart / mobile-open
+├── tests/                 # 单元测试 + API 集成测试
+├── e2e/                   # Playwright E2E 测试
 ├── data/                  # SQLite 数据库
 └── package.json
 ```

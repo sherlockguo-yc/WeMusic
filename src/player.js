@@ -73,19 +73,56 @@ export function stopTimer() {
 }
 
 // 检测文本溢出：比较 inner.scrollWidth（文本宽度）vs 父级.clientWidth（可见宽度）
+// ---- 匀速滚动驱动 ----
+// rAF 状态机：暂停 → 滚动 → 暂停 → 回滚，40px/s 匀速，支持 hover 暂停
+function startMarquee(inner, extra) {
+  if (extra <= 0) return;
+  const SPEED = 40; // px/s
+  const PAUSE = 2000; // ms
+  const scrollTime = (extra / SPEED) * 1000;
+  const cycle = PAUSE * 2 + scrollTime * 2;
+
+  let t = 0, lastTs = 0, running = true;
+
+  function tick(ts) {
+    inner._mId = requestAnimationFrame(tick);
+    if (!running) return; // hover 暂停
+    if (!lastTs) lastTs = ts;
+    const dt = Math.min(ts - lastTs, 100); // 防止切回后跳帧
+    t += dt;
+    lastTs = ts;
+
+    const ct = t % cycle;
+    let px;
+    if (ct < PAUSE) {
+      px = 0;
+    } else if (ct < PAUSE + scrollTime) {
+      px = -extra * ((ct - PAUSE) / scrollTime);
+    } else if (ct < PAUSE * 2 + scrollTime) {
+      px = -extra;
+    } else {
+      px = -extra * (1 - (ct - PAUSE * 2 - scrollTime) / scrollTime);
+    }
+    inner.style.transform = `translateX(${px.toFixed(1)}px)`;
+  }
+
+  inner.addEventListener('mouseenter', () => { running = false; });
+  inner.addEventListener('mouseleave', () => { running = true; lastTs = 0; });
+  inner._mId = requestAnimationFrame(tick);
+}
+
+// 检测溢出 → 启动/停止滚动
 function checkMarquee(el) {
   if (!el) return;
   const parent = el.parentElement;
   if (!parent) return;
+  if (el._mId) { cancelAnimationFrame(el._mId); el._mId = 0; }
   el.classList.remove('marquee');
-  el.style.removeProperty('--marquee-offset');
+  el.style.transform = '';
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      const extra = el.scrollWidth - parent.clientWidth;
-      if (extra > 4) {
-        el.style.setProperty('--marquee-offset', `-${extra + 8}px`);
-        el.classList.add('marquee');
-      }
+      const extra = el.scrollWidth - parent.clientWidth + 8;
+      if (extra > 4) { el.classList.add('marquee'); startMarquee(el, extra); }
     });
   });
 }
@@ -113,16 +150,14 @@ export function setStatus(html) { $('playStatus').innerHTML = html; }
 export function setVpTitle(title) {
   const el = $('vpTitle');
   const text = title || 'Bilibili 播放';
-  // 包裹 inner span，父级 overflow hidden 裁剪，span 在内部滚动
   el.innerHTML = `<span class="vp-title-inner">${text}</span>`;
   const inner = el.querySelector('.vp-title-inner');
+  if (inner._mId) { cancelAnimationFrame(inner._mId); inner._mId = 0; }
   inner.classList.remove('scrolling');
+  inner.style.transform = '';
   requestAnimationFrame(() => {
-    if (inner.scrollWidth > el.clientWidth + 4) {
-      const dist = -(inner.scrollWidth - el.clientWidth + 24);
-      inner.style.setProperty('--scroll-dist', dist + 'px');
-      inner.classList.add('scrolling');
-    }
+    const extra = inner.scrollWidth - el.clientWidth + 8;
+    if (extra > 4) { inner.classList.add('scrolling'); startMarquee(inner, extra); }
   });
 }
 
