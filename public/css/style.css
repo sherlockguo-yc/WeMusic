@@ -500,7 +500,7 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 }
 .player .np-cover { grid-area: cover; }
 .player .np { grid-area: np; min-width: 0; overflow: hidden; }
-.player .np .np-title-line { font-size: 14px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.player .np .np-title-line { font-size: calc(var(--font-size) * 1.1); font-weight: 700; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .player .np .np-title-line.marquee {
   overflow: visible; text-overflow: clip;
   /* transform 由 rAF 驱动 */
@@ -1915,8 +1915,8 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   }
   .player .np-cover { width: 44px; height: 44px; flex: 0 0 auto; }
   .player .np { flex: 1; min-width: 0; max-width: none; }
-  .player .np .t { font-size: 13px; }
-  .player .np .s { font-size: 11px; }
+  .player .np .t { font-size: calc(var(--font-size) * 0.93); }
+  .player .np .s { font-size: calc(var(--font-size) * 0.8); }
   .controls { order: 3; flex: 0 0 auto; width: 100%; justify-content: center; gap: 6px; }
   .player .controls .icon-btn { width: 36px; height: 36px; font-size: 14px; }
   .player .controls .icon-btn.play { width: 44px; height: 44px; font-size: 18px; }

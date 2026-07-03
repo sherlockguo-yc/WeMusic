@@ -405,8 +405,10 @@ export async function prefetchNextBvid() {
     song._candidates = candidates;
     if (best) {
       song.bvid = best.bvid;
-      song._biliTitle = best.title;
-      song._biliDur = best.duration || song.duration;
+      // 优先用 candidates 里同名 bvid 的 title
+      const match = best.bvid ? candidates.find(c => c.bvid === best.bvid) : null;
+      song._biliTitle = match?.title || best.title || '';
+      song._biliDur = match?.duration || best.duration || song.duration;
       cacheBvid(song);
     }
   } catch {}
@@ -458,8 +460,10 @@ export async function playCurrent() {
       song._candidates = candidates;
       if (!best) { setStatus('未找到合适资源，可点「换源」'); return; }
       song.bvid = best.bvid;
-      song._biliTitle = best.title;
-      song._biliDur = best.duration || song.duration;
+      // 优先用 candidates 里同名 bvid 的 title（B 站偶尔返回 best.title 为空时回查）
+      const match = best.bvid ? candidates.find(c => c.bvid === best.bvid) : null;
+      song._biliTitle = match?.title || best.title || '';
+      song._biliDur = (match?.duration || best.duration || song.duration);
       cacheBvid(song);
     } catch (e) {
       if (seq !== playSeq) return;
@@ -874,6 +878,10 @@ export function initPlayer() {
       delete $('videoContainer').dataset.pendingBvid;
       mountVideoAt(target.bvid, target.title, elapsed > 5 ? elapsed : 0);
       applyPaneVisibility();
+      // 更新底部播放器视频标题
+      $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">▶ Bilibili</span> ${esc(target.title || '')}</span>`;
+      const inner = $('playStatus').querySelector('.status-inner');
+      if (inner) checkMarquee(inner);
 
       // 交叉：收到来自 B 站的 postMessage（视频已初始化）时立即停 bgAudio
       // 兜底：800ms 后无论如何停止（避免双声道时间过长）
