@@ -9,6 +9,7 @@ import { existsSync } from 'node:fs';
 const PORT = process.env.PORT || '5174';
 const LOG = '/tmp/wemusic.log';
 const cwd = process.cwd();
+const SKIP_VERIFY = process.env.SKIP_VERIFY === '1'; // 紧急热修时跳过验证
 
 function log(step, msg) {
   console.log(`\x1b[36m[${step}]\x1b[0m ${msg}`);
@@ -69,4 +70,14 @@ try {
   }
 } catch (e) {
   console.warn(`健康检查失败: ${e.message}，请查看日志: tail -f ${LOG}`);
+}
+
+// 4. 自动化验证（非必需，可用 SKIP_VERIFY=1 跳过）
+if (!SKIP_VERIFY) {
+  log('4/4', '运行自动化验证 ...');
+  try {
+    execSync('node scripts/e2e.js', { cwd, stdio: 'inherit', timeout: 60000 });
+  } catch (e) {
+    console.warn('⚠  验证失败（可能不影响核心功能），请手动检查或重试: npm run verify');
+  }
 }

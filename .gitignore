@@ -10,3 +10,4 @@ generated-images/
 .playwright-cli/
 playwright-cli.json
 coverage/
+.project-graph.json

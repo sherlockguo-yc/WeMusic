@@ -1,0 +1,1 @@
+{"options":{"tsPreCompilationDeps":false,"tsConfig":{},"combinedDependencies":false,"doNotFollow":{},"exclude":{},"externalModuleResolutionStrategy":"node_modules","includeOnly":{},"enhancedResolveOptions":{},"preset":"default"},"rules":[{"name":"no-circular","severity":"error","from":{},"to":{}}]}

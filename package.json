@@ -7,21 +7,24 @@
   "scripts": {
     "start": "node --watch server/index.js",
     "dev": "node --watch server/index.js",
-    "dev:watch": "node --watch server/index.js & vite build --watch",
+    "dev:watch": "node scripts/codegraph.js && node --watch server/index.js & vite build --watch",
     "init-db": "node server/db.js",
-    "build": "vite build",
+    "build": "node scripts/codegraph.js && vite build",
     "build:watch": "vite build --watch",
     "dev:full": "concurrently \"node --watch server/index.js\" \"vite build --watch\"",
-    "deploy": "node scripts/build-restart.js",
+    "deploy": "node scripts/codegraph.js && node scripts/build-restart.js",
     "verify": "npm test",
     "mobile": "node scripts/mobile-open.js",
     "webhook": "node server/webhook.js",
-    "test": "vitest run",
+    "test": "vitest run && node scripts/check-deps.js",
     "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run tests/unit/",
     "test:api": "vitest run tests/api/",
     "test:e2e": "playwright test",
-    "test:all": "npm run test:unit && npm run test:api && npm run test:e2e"
+    "test:all": "npm run test:unit && npm run test:api && npm run test:e2e",
+    "e2e": "node scripts/e2e.js",
+    "check-deps": "node scripts/check-deps.js",
+    "codegraph": "node scripts/codegraph.js"
   },
   "keywords": [
     "music",
@@ -42,8 +45,11 @@
     "puppeteer": "^24.43.1"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.7",
+    "@babel/traverse": "^7.29.7",
     "@playwright/test": "^1.61.1",
     "@vitest/coverage-v8": "^4.1.9",
+    "dependency-cruiser": "^16.10.4",
     "supertest": "^7.2.2",
     "vite": "^6.4.3",
     "vitest": "^4.1.9"
