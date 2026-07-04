@@ -10,12 +10,14 @@
 
 ## specs/
 
+- [QQ 音乐接口文档](specs/QQ音乐接口文档.md)
 - [歌词源 & 视频源候选选择逻辑](specs/候选选择.md)
 - [后台播放机制](specs/后台播放.md)
 - [文本左右滚动](specs/文本滚动.md)
 
 ## .codebuddy/rules/（AI 会话自动加载）
 
+- **CSS布局混用禁止.mdc** — 十二、CSS 布局：禁止 Grid/Flex 与 absolute 混用
 - **代码拆分规范.mdc** — 一、共享常量
 - **前端开发规范.mdc** — 〇、项目全局视图
 - **弹窗层级规范.mdc** — 十一、弹窗层级

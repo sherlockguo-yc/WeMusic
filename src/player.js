@@ -807,17 +807,9 @@ export function initPlayer() {
   $('prevBtn').onclick = () => playPrev();
   $('nextBtn').onclick = () => playNext(false);
   $('playPauseBtn').onclick = () => {
-    if (!state.current) return toast('请选择一首歌曲播放');
-    const vc = $('videoContainer');
-    const mounted = vc.children.length > 0 || !!vc.dataset.pendingBvid;
-    if (!mounted) { playCurrent(); return; }
-    timerPaused = !timerPaused;
-    $('playPauseBtn').innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON;
-    // 后台时同步控制 bgAudio
-    if (document.hidden && _bgBvid) {
-      if (timerPaused) bgAudio.pause();
-      else bgAudio.play().catch(() => {}); // 后台播放失败通常无害（用户可能没交互过）
-    }
+    const result = togglePause();
+    if (result === 'noSong') return toast('请选择一首歌曲播放');
+    if (result === 'mounted') return;
     toast(timerPaused ? '已暂停' : '继续播放');
   };
 
@@ -935,4 +927,20 @@ export function initPlayer() {
       setTimeout(() => _setIframeVolume(_bgVolume), 400);
     }
   });
+}
+
+// 导出可被外部（歌词页、键盘快捷键）调用的暂停切换函数
+// 不能通过 p.timerPaused 直接赋值（构建后为只读 getter），只能通过此函数操作
+export function togglePause() {
+  if (!state.current) return 'noSong';
+  const vc = $('videoContainer');
+  const mounted = vc.children.length > 0 || !!vc.dataset.pendingBvid;
+  if (!mounted) { playCurrent(); return 'mounted'; }
+  timerPaused = !timerPaused;
+  $('playPauseBtn').innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON;
+  if (document.hidden && _bgBvid) {
+    if (timerPaused) bgAudio.pause();
+    else bgAudio.play().catch(() => {});
+  }
+  return timerPaused;
 }

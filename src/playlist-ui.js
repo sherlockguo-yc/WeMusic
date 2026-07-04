@@ -4,6 +4,11 @@ import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, alb
 import { api } from './api.js';
 import { state } from './state.js';
 
+// ---- 按钮 SVG 图标 ----
+const ADD_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>';
+const SHARE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+const DEL_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
 // ---- 歌曲索引 ----
 let _indexBuilding = false;
 export let _indexDirty = true;
@@ -239,8 +244,9 @@ export function renderSongList(container, songs, opts = {}) {
       <span class="dur">${fmtDur(s.duration)}</span>
       <span class="ops">
         ${likeBtns}
-        ${showAdd ? '<button class="icon-btn" title="添加到歌单" data-act="add"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>' : ''}
-        ${showDelete ? '<button class="icon-btn" title="从歌单移除" data-act="del"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' : ''}
+        ${showAdd || showDelete ? `<button class="icon-btn song-more-btn" title="更多操作" data-act="more">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+        </button>` : ''}
       </span>
     </div>`;
   }).join('');
@@ -252,6 +258,31 @@ export function renderSongList(container, songs, opts = {}) {
       btn.onclick = (e) => {
         e.stopPropagation();
         const act = btn.dataset.act;
+        if (act === 'more') {
+          // 显示 "..." 更多菜单
+          const song = songs[i];
+          const rect = btn.getBoundingClientRect();
+          const menu = document.getElementById('ctxMenu');
+          menu.innerHTML = [
+            showAdd ? `<div class="ctx-item" data-act="add">${ADD_ICON} 添加到歌单</div>` : '',
+            song.song_mid ? `<div class="ctx-item" data-act="share">${SHARE_ICON} 分享</div>` : '',
+            showDelete ? `<div class="ctx-item danger" data-act="del">${DEL_ICON} 从歌单移除</div>` : '',
+          ].filter(Boolean).join('');
+          menu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
+          menu.style.top = Math.min(rect.bottom + 4, window.innerHeight - menu.offsetHeight - 8) + 'px';
+          menu.classList.add('show');
+          menu.querySelectorAll('.ctx-item[data-act]').forEach((el) => {
+            el.onclick = (ev) => {
+              ev.stopPropagation();
+              menu.classList.remove('show');
+              const a = el.dataset.act;
+              if (a === 'add') addSongs([song]);
+              else if (a === 'share') import('./share.js').then(({ openShareModal }) => openShareModal(song));
+              else if (a === 'del') deleteSong(playlistId, song.id, row);
+            };
+          });
+          return;
+        }
         if (act === 'add') addSongs([songs[i]]);
         else if (act === 'del') deleteSong(playlistId, songs[i].id, row);
         else if (act === 'like') import('./ui.js').then(({ toggleLike }) => toggleLike(songs[i], btn));

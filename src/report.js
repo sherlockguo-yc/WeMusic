@@ -3,8 +3,7 @@ import { $, esc, fmtSec, fmtFullMin, rankBadge, toast, setTooltip, albumCover } 
 import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { setActiveNav } from './playlist-ui.js';
-import html2canvas from 'html2canvas';
-import { posterHTML, posterCSS, POSTER_THEME_LIST } from '../shared/poster-template.js';
+import { POSTER_THEME_LIST } from '../shared/poster-template.js';
 function timeLabel(h) {
   if (h == null) return null;
   if (h >= 5 && h < 9)  return { label: '清晨', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>' };
@@ -193,7 +192,7 @@ function buildReportHtml(data, periodType) {
 }
 
 // ============================================================
-// 分享海报生成（方案 A：本地 html2canvas / 方案 B：服务端 Puppeteer）
+// 分享海报生成（服务端 Puppeteer 渲染）
 // ============================================================
 
 let _posterData = null;
@@ -227,28 +226,7 @@ function downloadUrl(url, filename) {
   document.body.removeChild(a);
 }
 
-// 方案 A：前端 html2canvas 截图（快，无需等待服务端）
-async function generatePosterLocal() {
-  if (!_posterData) return;
-  toast('正在本地生成海报…');
-  const holder = document.createElement('div');
-  holder.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;';
-  holder.innerHTML = `<style>${posterCSS(_posterTheme)}</style>${posterHTML(_posterData, _posterTheme)}`;
-  document.body.appendChild(holder);
-  try {
-    const node = holder.querySelector('.wm-poster');
-    const canvas = await html2canvas(node, { scale: 2, backgroundColor: null, useCORS: true });
-    downloadUrl(canvas.toDataURL('image/png'), `wemusic-report-${Date.now()}.png`);
-    toast('海报已生成，开始下载');
-    $('posterModal').classList.remove('show');
-  } catch (e) {
-    toast('本地生成失败：' + e.message);
-  } finally {
-    document.body.removeChild(holder);
-  }
-}
-
-// 方案 B：服务端 Puppeteer 渲染（效果更精细，需等待网络请求）
+// 服务端 Puppeteer 渲染（效果更精细，需等待网络请求）
 async function generatePosterServer() {
   if (!_posterData) return;
   toast('正在请求服务端生成…');
@@ -281,7 +259,6 @@ function bindPosterModalOnce() {
   _posterModalBound = true;
   $('posterModalClose').onclick = () => $('posterModal').classList.remove('show');
   $('posterModal').onclick = (e) => { if (e.target.id === 'posterModal') $('posterModal').classList.remove('show'); };
-  $('posterLocalBtn').onclick = generatePosterLocal;
   $('posterServerBtn').onclick = generatePosterServer;
 }
 

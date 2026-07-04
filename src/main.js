@@ -96,6 +96,7 @@ async function restoreView(view, data) {
   else if (view === 'search'  && data?.kw) { document.getElementById('searchInput').value = data.kw; import('./search.js').then(({ doSearch }) => doSearch()).catch((e) => { console.error('[nav] search restore fail:', e); _popstateView = null; }); }
   else if (view === 'artist'  && data?.mid) import('./search.js').then(({ openArtist }) => openArtist(data.mid, data.name)).catch((e) => { console.error('[nav] artist restore fail:', e); _popstateView = null; });
   else if (view === 'album'       && data?.mid) import('./search.js').then(({ openAlbum }) => openAlbum(data.mid, data.name)).catch((e) => { console.error('[nav] album restore fail:', e); _popstateView = null; });
+  else if (view === 'share')       import('./share.js').then(({ renderSharePage }) => renderSharePage(data)).catch((e) => { console.error('[nav] share restore fail:', e); _popstateView = null; });
   else if (view === 'stats')       import('./stats.js').then(({ openStats }) => openStats()).catch((e) => { console.error('[nav] stats restore fail:', e); _popstateView = null; });
   else if (view === 'savedAlbums') import('./stats.js').then(({ openSavedAlbums }) => openSavedAlbums()).catch((e) => { console.error('[nav] savedAlbums restore fail:', e); _popstateView = null; });
   else if (view === 'likes')   import('./stats.js').then(({ openLikesPage }) => openLikesPage()).catch((e) => { console.error('[nav] likes restore fail:', e); _popstateView = null; });

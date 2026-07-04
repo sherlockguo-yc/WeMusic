@@ -329,16 +329,14 @@ export function initLyrics() {
   $('lpBgOverlay').onclick = (e) => { if (e.target === e.currentTarget) $('lpBgOverlay').style.display = 'none'; };
   $('lpPrevBtn').onclick = () => _playerP.then(({ playPrev }) => playPrev());
   $('lpNextBtn').onclick = () => _playerP.then(({ playNext }) => playNext(false));
-  $('lpPlayBtn').onclick = () => {
-    if (!state.current) return toast('请选择一首歌曲播放');
-    const mounted = $('videoContainer').children.length > 0;
-    if (!mounted) { _playerP.then(({ playCurrent }) => playCurrent()); return; }
-    _playerP.then((p) => {
-      p.timerPaused = !p.timerPaused;
-      $('playPauseBtn').innerHTML = p.timerPaused ? PLAY_ICON : PAUSE_ICON;
-      $('lpPlayBtn').innerHTML = p.timerPaused ? PLAY_ICON : PAUSE_ICON;
-      toast(p.timerPaused ? '已暂停自动连播' : '继续自动连播');
-    });
+  $('lpPlayBtn').onclick = async () => {
+    const { togglePause } = await _playerP;
+    const result = togglePause();
+    if (result === 'noSong') return toast('请选择一首歌曲播放');
+    if (result === 'mounted') return;
+    // togglePause 已更新 playPauseBtn，这里同步更新歌词页按钮
+    $('lpPlayBtn').innerHTML = $('playPauseBtn').innerHTML;
+    toast(result ? '已暂停自动连播' : '继续自动连播');
   };
   $('lpSeekBar').addEventListener('input', () => {
     $('seekBar').value = Number($('lpSeekBar').value);

@@ -1,5 +1,5 @@
 // ============================================================
-// 听歌报告分享海报模板（纯字符串模板，前端 html2canvas / 后端 puppeteer 共用）
+// 听歌报告分享海报模板（纯字符串模板，服务端 Puppeteer 渲染专用）
 // 不依赖 DOM / Node 任何 API，可在浏览器和 Node ESM 中同时 import。
 // ============================================================
 
@@ -65,151 +65,10 @@ export const POSTER_THEMES = {
 
 export const POSTER_THEME_LIST = Object.values(POSTER_THEMES);
 
-// ---- CSS：结构样式统一，主题变量按 key 生成 ----
-export function posterCSS(themeKey) {
-  const t = POSTER_THEMES[themeKey] || POSTER_THEMES.mint;
-  return `
-.wm-poster {
-  width: 690px;
-  padding: 48px 40px 36px;
-  background: ${t.bg};
-  color: ${t.text};
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-  box-sizing: border-box;
-  position: relative;
-  overflow: hidden;
-  border-radius: 0;
-}
-.wm-poster * { box-sizing: border-box; }
-.wp-brand { font-size: 15px; font-weight: 700; letter-spacing: .04em; opacity: .85; display: flex; align-items: center; gap: 6px; }
-.wp-title { font-size: 30px; font-weight: 800; margin-top: 18px; line-height: 1.3; }
-.wp-date { font-size: 14px; color: ${t.textDim}; margin-top: 6px; }
-
-.wp-hero { display: flex; align-items: baseline; gap: 10px; margin-top: 34px; }
-.wp-hero-num { font-size: 68px; font-weight: 800; color: ${t.accent}; line-height: 1; }
-.wp-hero-label { font-size: 15px; color: ${t.textDim}; }
-
-.wp-persona {
-  margin-top: 26px; padding: 20px 22px; border-radius: 20px;
-  background: ${t.cardBg}; border: 1px solid ${t.cardBorder};
-  display: flex; align-items: center; gap: 16px;
-}
-.wp-persona-icon { font-size: 40px; flex: 0 0 auto; }
-.wp-persona-label { font-size: 19px; font-weight: 800; }
-.wp-persona-desc { font-size: 13px; color: ${t.textDim}; margin-top: 3px; }
-
-.wp-insight {
-  margin-top: 18px; font-size: 14px; line-height: 1.6; color: ${t.textDim};
-  font-style: italic;
-}
-
-.wp-section { margin-top: 30px; }
-.wp-section-title {
-  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: ${t.textDim}; margin-bottom: 14px;
-}
-.wp-song-row {
-  display: flex; align-items: center; gap: 14px; padding: 9px 0;
-  border-bottom: 1px solid ${t.cardBorder};
-  font-size: 15px;
-}
-.wp-song-row:last-child { border-bottom: none; }
-.wp-rank { width: 22px; font-weight: 800; color: ${t.accent}; flex: 0 0 auto; font-size: 15px; }
-.wp-song-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-song-singer { font-size: 12.5px; color: ${t.textDim}; flex: 0 0 auto; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.wp-artist-chips { display: flex; flex-wrap: wrap; gap: 10px; }
-.wp-chip {
-  padding: 8px 16px; border-radius: 20px; background: ${t.chipBg};
-  font-size: 14px; font-weight: 600;
-}
-
-.wp-stats-row { display: flex; gap: 14px; margin-top: 30px; }
-.wp-mini-stat {
-  flex: 1; text-align: center; padding: 16px 8px; border-radius: 16px;
-  background: ${t.cardBg}; border: 1px solid ${t.cardBorder};
-}
-.wp-mini-stat b { display: block; font-size: 22px; font-weight: 800; }
-.wp-mini-stat span { display: block; font-size: 11.5px; color: ${t.textDim}; margin-top: 4px; }
-
-.wp-footer {
-  margin-top: 34px; text-align: center; font-size: 11.5px; color: ${t.textDim};
-  padding-top: 18px; border-top: 1px solid ${t.cardBorder};
-}
-`;
-}
-
-// ---- HTML：接收已格式化好的数据，生成海报卡片 outerHTML ----
-export function posterHTML(data, themeKey) {
-  const {
-    appName = 'WeMusic',
-    title = '本周听歌报告',
-    dateRange = '',
-    plays = 0,
-    duration = '0 分钟',
-    uniqueSongs = 0,
-    days = 0,
-    persona = { icon: '🎶', label: '自由旋律人', desc: '' },
-    insightText = '',
-    topSongs = [],
-    topArtists = [],
-    generatedAt = '',
-  } = data || {};
-
-  const songRows = topSongs.slice(0, 5).map((s, i) => `
-    <div class="wp-song-row">
-      <span class="wp-rank">${i + 1}</span>
-      <span class="wp-song-name">${esc(s.name)}</span>
-      <span class="wp-song-singer">${esc(s.singer || '')}</span>
-    </div>`).join('') || `<div class="wp-song-row"><span class="wp-song-name">暂无播放记录</span></div>`;
-
-  const artistChips = topArtists.slice(0, 6).map((a) => `<span class="wp-chip">${esc(a.name)}</span>`).join('')
-    || `<span class="wp-chip">暂无数据</span>`;
-
-  return `<div class="wm-poster theme-${themeKey}">
-    <div class="wp-brand">🎵 ${esc(appName)}</div>
-    <div class="wp-title">${esc(title)}</div>
-    <div class="wp-date">${esc(dateRange)}</div>
-
-    <div class="wp-hero">
-      <div class="wp-hero-num">${plays}</div>
-      <div class="wp-hero-label">次播放 · ${esc(duration)}</div>
-    </div>
-
-    <div class="wp-persona">
-      <div class="wp-persona-icon">${persona.icon}</div>
-      <div>
-        <div class="wp-persona-label">${esc(persona.label)}</div>
-        <div class="wp-persona-desc">${esc(persona.desc)}</div>
-      </div>
-    </div>
-
-    ${insightText ? `<div class="wp-insight">"${esc(insightText)}"</div>` : ''}
-
-    <div class="wp-section">
-      <div class="wp-section-title">Top 歌曲</div>
-      ${songRows}
-    </div>
-
-    <div class="wp-section">
-      <div class="wp-section-title">Top 歌手</div>
-      <div class="wp-artist-chips">${artistChips}</div>
-    </div>
-
-    <div class="wp-stats-row">
-      <div class="wp-mini-stat"><b>${uniqueSongs}</b><span>不重复歌曲</span></div>
-      <div class="wp-mini-stat"><b>${days}</b><span>听歌天数</span></div>
-    </div>
-
-    <div class="wp-footer">由 ${esc(appName)} 生成 · ${esc(generatedAt)}</div>
-  </div>`;
-}
-
 // ============================================================
-// 精工版海报（方案 B 专用）——仅供服务端 Puppeteer 渲染。
+// 精工版海报 —— 仅供服务端 Puppeteer 渲染。
 // 用到：专辑封面模糊背景、封面拼贴墙、歌曲缩略图。
-// 依赖远程图片正常显示（跨域不受限），html2canvas 方案无法可靠支持，
-// 因此刻意保持与「方案 A 简约版」视觉差异化，发挥 Puppeteer 真实浏览器渲染的优势。
+// 依赖远程图片正常显示（跨域不受限），发挥 Puppeteer 真实浏览器渲染的优势。
 // ============================================================
 
 const PRO_ACCENTS = {

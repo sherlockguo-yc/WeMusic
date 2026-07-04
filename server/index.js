@@ -1,7 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { config, PUBLIC_DIR } from './config.js';
-import './db.js'; // 初始化数据库
+import db from './db.js'; // 初始化数据库
 
 import authRouter from './routes/auth.js';
 import musicRouter from './routes/music.js';
@@ -67,6 +67,37 @@ app.use('/api/stats', statsRouter);
 
 // 健康检查：只返回 ok，不暴露版本/环境等信息
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// ============================================================
+// 分享元数据（无须登录，根据 song_mid / album_mid 返回歌名/歌手/封面）
+// ============================================================
+app.get('/api/share/meta', (req, res) => {
+  const { s: songMid, amid: albumMid } = req.query;
+  if (!songMid && !albumMid) return res.status(400).json({ error: '缺少参数' });
+
+  // 从本地数据库查找元数据（跨用户）
+  let row = null;
+  if (songMid) {
+    row = db.prepare('SELECT DISTINCT name, singer, album, album_mid, duration FROM songs WHERE song_mid = ? LIMIT 1').get(songMid)
+      || db.prepare('SELECT DISTINCT name, singer, album, album_mid, duration FROM play_logs WHERE song_mid = ? LIMIT 1').get(songMid);
+  }
+  if (!row && albumMid) {
+    row = db.prepare('SELECT DISTINCT name, singer, album, album_mid, duration FROM songs WHERE album_mid = ? LIMIT 1').get(albumMid)
+      || db.prepare('SELECT DISTINCT name, singer, album, album_mid, duration FROM play_logs WHERE album_mid = ? LIMIT 1').get(albumMid);
+  }
+
+  const amid = row?.album_mid || albumMid || '';
+  const coverURL = amid ? 'https:' + '//' + 'y.qq.com/music/photo_new/T002R300x300M000' + amid + '.jpg' : null;
+
+  res.json({
+    name: row?.name || '',
+    singer: row?.singer || '',
+    album: row?.album || '',
+    duration: row?.duration || 0,
+    album_mid: amid,
+    coverURL,
+  });
+});
 
 // ============================================================
 // 静态前端
