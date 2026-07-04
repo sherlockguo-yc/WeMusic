@@ -196,6 +196,29 @@ export async function renderSharePage(data) {
 }
 
 /**
+ * 预取歌词源：如果这首歌还没 sourceId，主动调公开 API 拉取默认版本
+ * 解决"未打开歌词详情页就分享"拿不到歌词源的问题
+ * 成功后会写入 localStorage 缓存，下次直接命中
+ */
+async function ensureLyricsSourceFor(song) {
+  if (!song || !song.song_mid || !song.name) return;
+  if (getLyricsSourceIdForSong(song.song_mid)) return; // 已有
+  try {
+    const params = new URLSearchParams();
+    params.set('n', song.name);
+    if (song.singer) params.set('a', song.singer);
+    const resp = await fetch(`/api/share/lyrics?${params.toString()}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data && data.sourceId) {
+      const cache = getSourceCache();
+      cache[song.song_mid] = data.sourceId;
+      localStorage.setItem('wemusic_lyrics_src', JSON.stringify(cache));
+    }
+  } catch { /* 静默失败，弹窗照常显示 */ }
+}
+
+/**
  * 打开分享弹窗（从播放器/右键菜单触发）
  */
 export async function openShareModal(song) {
@@ -203,15 +226,19 @@ export async function openShareModal(song) {
     toast('该歌曲不支持分享');
     return;
   }
+
+  // 预取歌词源（拿不到就静默跳过，正常显示弹窗）
+  await ensureLyricsSourceFor(song);
+
   const url = buildShareURL(song);
   if (!url) { toast('无法生成分享链接'); return; }
 
-  // 歌词源：cache 优先，避免切歌/加载间隙的"未选择"竞态
+  // 歌词源：cache 优先 + 预取 fallback
   const sourceId = getLyricsSourceIdForSong(song.song_mid);
   const lsrc = sourceTypeOf(sourceId);
   const lyricsLabel = lsrc
     ? (lsrc === 'netease' ? '网易云音乐' : 'QQ 音乐')
-    : (song.bvid ? '仅视频源（歌词将自动搜索）' : '自动搜索');
+    : '无';
 
   const albumImg = coverURL(song.album_mid);
 

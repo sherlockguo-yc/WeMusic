@@ -72,6 +72,8 @@ let _popstateView = null; // popstate 恢复时设为对应 view，navPush 消�
 export function navPush(view, data) {
   const wasPop = !!_popstateView;
   console.log('[nav] navPush:', view, 'popstateView:', _popstateView || '(null)', 'len:', history.length);
+  // 退出 share 视图时清理 body.share-view（恢复主区域滚动条）
+  if (view !== 'share') document.body.classList.remove('share-view');
   if (_popstateView) {
     history.replaceState({ view, data }, '', location.href);
     _popstateView = null;

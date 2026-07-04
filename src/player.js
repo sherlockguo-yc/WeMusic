@@ -64,6 +64,7 @@ export function startTimer(d) {
   $('durTime').textContent = fmtDur(totalDur);
   timerPaused = false;
   $('playPauseBtn').innerHTML = PAUSE_ICON;
+  $('playPauseBtn').title = '暂停自动连播';
   autoTimer = setInterval(() => {
     if (timerPaused) return;
     elapsed++;
@@ -287,7 +288,7 @@ export async function restoreSession() {
     checkMarquee($('npTitle'));
     updateNpCover(state.current);
     $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
-    setStatus(`上次播放 · 点 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px"><polygon points="6 3 20 12 6 21 6 3"/></svg> 继续`);
+    setStatus(`上次播放 · 点 ▶ 恢复连播`);
     highlightPlaying();
   }
 }
@@ -810,7 +811,8 @@ export function initPlayer() {
     const result = togglePause();
     if (result === 'noSong') return toast('请选择一首歌曲播放');
     if (result === 'mounted') return;
-    toast(timerPaused ? '已暂停' : '继续播放');
+    $('playPauseBtn').title = timerPaused ? '继续自动连播' : '暂停自动连播';
+    toast(timerPaused ? '已暂停自动连播' : '继续自动连播');
   };
 
   $('videoBtn').onclick = () => {
@@ -852,14 +854,16 @@ export function initPlayer() {
   });
   window.addEventListener('mouseup', () => { dragging = false; });
 
-  // Media Session
+  // Media Session（"播放"=恢复自动连播 / "暂停"=暂停自动连播）
   navigator.mediaSession.setActionHandler('play', () => {
     if (state.current && $('videoContainer').children.length > 0) {
       timerPaused = false; $('playPauseBtn').innerHTML = PAUSE_ICON;
+      $('playPauseBtn').title = '暂停自动连播';
     } else if (state.current) { playCurrent(); }
   });
   navigator.mediaSession.setActionHandler('pause', () => {
     timerPaused = true; $('playPauseBtn').innerHTML = PLAY_ICON;
+    $('playPauseBtn').title = '继续自动连播';
   });
   navigator.mediaSession.setActionHandler('previoustrack', playPrev);
   navigator.mediaSession.setActionHandler('nexttrack', () => playNext(false));
@@ -938,6 +942,7 @@ export function togglePause() {
   if (!mounted) { playCurrent(); return 'mounted'; }
   timerPaused = !timerPaused;
   $('playPauseBtn').innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON;
+  $('playPauseBtn').title = timerPaused ? '继续自动连播' : '暂停自动连播';
   if (document.hidden && _bgBvid) {
     if (timerPaused) bgAudio.pause();
     else bgAudio.play().catch(() => {});

@@ -8,6 +8,7 @@ import musicRouter from './routes/music.js';
 import playlistRouter from './routes/playlist.js';
 import playRouter from './routes/play.js';
 import statsRouter from './routes/stats.js';
+import { searchLyricsCandidates } from './services/lyrics.js';
 
 const app = express();
 
@@ -97,6 +98,29 @@ app.get('/api/share/meta', (req, res) => {
     album_mid: amid,
     coverURL,
   });
+});
+
+// ============================================================
+// 分享歌词预取（无须登录，根据歌名+歌手返回默认网易云 sourceId）
+// 解决"未打开歌词详情页就分享"拿不到歌词源的问题
+// ============================================================
+app.get('/api/share/lyrics', async (req, res) => {
+  const { n: name, a: singer } = req.query;
+  if (!name) return res.json({ sourceId: null, sourceType: null });
+  try {
+    const candidates = await searchLyricsCandidates(name, singer || '');
+    if (candidates && candidates.length > 0) {
+      return res.json({
+        sourceId: String(candidates[0].id),
+        sourceType: 'netease',
+        name: candidates[0].name || '',
+        artist: candidates[0].artist || '',
+      });
+    }
+  } catch (e) {
+    console.error('[share/lyrics]', e.message);
+  }
+  res.json({ sourceId: null, sourceType: null });
 });
 
 // ============================================================

@@ -244,7 +244,7 @@ async function openLyricsSwitchModal(song) {
 
   const modal = $('candModal');
   const list = $('candList');
-  modal.querySelector('h3').textContent = '选择歌词版本（网易云音乐）';
+  modal.querySelector('h3').textContent = '选择歌词版本';
 
   const songKey = `${song.name}__${song.singer || ''}`;
 
@@ -253,10 +253,15 @@ async function openLyricsSwitchModal(song) {
 
   list.innerHTML = lyricsCandidates.map((c, i) => {
     const isCurrent = c.id === lyricsCurrentSourceId;
+    const isQQ = c.source === 'qq';
+    const platformLabel = isQQ ? 'QQ音乐' : '网易云';
     return `<div class="cand-row ${isCurrent ? 'current' : ''}" data-i="${i}">
       <span class="cand-rank">${i + 1}</span>
       <div class="ct">
-        <div class="title">${esc(c.name)}</div>
+        <div class="title">
+          ${esc(c.name)}
+          <span class="cand-source-tag${isQQ ? ' qq' : ''}">${esc(platformLabel)}</span>
+        </div>
         <div class="meta">歌手：${esc(c.artist || '未知')} ${isCurrent ? '（当前）' : ''}</div>
       </div>
       <span class="tag ${isCurrent ? 'current' : ''}">${isCurrent ? '当前' : '选择'}</span>

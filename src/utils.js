@@ -3,8 +3,9 @@
 export const $ = (id) => document.getElementById(id);
 
 // Lucide SVG 图标（放在 utils.js 避免被 manualChunks 拆分到独立 chunk 时出现 TDZ 错误）
-export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';
-export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+// 注意：这里的"播放/暂停"图标用于"自动连播"开关，不是控制音乐播放
+export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';  // 自动连播已暂停 → 点击恢复
+export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'; // 自动连播进行中 → 点击暂停
 
 // 统一歌曲列表列头（避免 search.js / playlist-ui.js 重复定义）
 export const songColHeader = `<div class="song-row-head">
