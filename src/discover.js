@@ -71,7 +71,7 @@ async function loadDiscoverTab(tab) {
       container.innerHTML = `${headerHtml}${songColHeader}<div class="song-list" id="discoverList"></div>`;
       // 推荐说明 tooltip（立即出现，不走 title 属性延迟）
       const recHelp = container.querySelector('.rec-help');
-      if (recHelp) setTooltip(recHelp);
+      if (recHelp) setTooltip(recHelp, recHelp.dataset.tipText);
       renderSongList($('discoverList'), data.songs, { showAdd: true });
     } else {
       const topId = tab.replace('chart-', '');
