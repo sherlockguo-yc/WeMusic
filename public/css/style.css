@@ -742,30 +742,7 @@ input[type='range']::-moz-range-thumb {
 .pl-rename-btn:hover { opacity: 1; color: var(--accent); }
 .pl-rename-btn svg { display: block; }
 
-/* 歌单分隔线 */
-.pl-divider {
-  margin: 16px 0 18px;
-  height: 1px;
-  border: none;
-  background: linear-gradient(to right,
-    transparent 0%,
-    var(--border) 12%,
-    var(--accent) 45%, var(--accent) 55%,
-    var(--border) 88%,
-    transparent 100%
-  );
-  position: relative;
-}
-.pl-divider::after {
-  content: '';
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%) rotate(45deg);
-  width: 6px; height: 6px;
-  background: var(--accent);
-  border-radius: 1px;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 40%, transparent);
-}
+
 
 /* 帮助快捷键列表 */
 .help-list { margin: 4px 0 16px; }
@@ -847,7 +824,7 @@ input[type='range']::-moz-range-thumb {
 .btn.danger:hover { background: var(--danger); color: #fff; }
 
 /* 侧边栏导航快捷入口 */
-.side-nav { padding: 4px 8px 8px; }
+.side-nav { padding: 4px 8px 8px; border-bottom: 1px solid var(--border); }
 
 
 .side-nav-item {
@@ -2304,8 +2281,6 @@ body.share-view .main { overflow: hidden; }
   .view-title { font-size: 18px; }
   .pl-header { flex-direction: column; gap: 12px; }
   .pl-header .pl-cover-wrap { width: 100px; }
-  .pl-divider { margin: 12px 0 14px; }
-
   /* ---- 歌曲列表：简化列 ---- */
   .song-row {
     grid-template-columns: 22px 1fr auto auto;

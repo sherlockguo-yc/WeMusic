@@ -410,7 +410,6 @@ export async function openPlaylist(id) {
           </div>
         </div>
       </div>
-      <div class="pl-divider"></div>
       ${isEmpty ? '<div class="empty">歌单还是空的，去搜索添加歌曲吧</div>' : `${listToolsHtml()}${songColHeader}<div class="song-list" id="plSongs"></div>`}`;
     $('exportPlBtn').onclick = () => exportPlaylist(id, data.playlist.name);
     $('plRenameBtn').onclick = async () => {
