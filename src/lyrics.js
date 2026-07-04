@@ -138,6 +138,7 @@ export function openLyricsPanel() {
   }
   _playerP.then(({ autoTimer, timerPaused }) => {
     if (autoTimer && !timerPaused) panel.classList.add('playing');
+    $('lpPlayBtn').innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON;
   });
 
   // 启动 UI 同步定时器（仅在面板显示时运行）
@@ -147,11 +148,11 @@ export function openLyricsPanel() {
     const ct = $('curTime').textContent,
           dt = $('durTime').textContent,
           sb = $('seekBar').value,
-          pb = $('playPauseBtn').textContent;
+          pb = $('playPauseBtn').innerHTML;
     if ($('lpCurTime').textContent !== ct) $('lpCurTime').textContent = ct;
     if ($('lpDurTime').textContent !== dt) $('lpDurTime').textContent = dt;
     if ($('lpSeekBar').value !== sb) $('lpSeekBar').value = sb;
-    if ($('lpPlayBtn').textContent !== pb) $('lpPlayBtn').textContent = pb;
+    if ($('lpPlayBtn').innerHTML !== pb) $('lpPlayBtn').innerHTML = pb;
   }, 500);
 
   // 启动歌词进度同步定时器

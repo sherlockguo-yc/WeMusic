@@ -9,7 +9,8 @@
  */
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const H  = { 'User-Agent': UA, Referer: 'https://music.163.com/' };
+const HQQ = { 'User-Agent': UA, Referer: 'https://y.qq.com/portal/player.html' };
+const H   = { 'User-Agent': UA, Referer: 'https://music.163.com/' };
 
 // 内存歌词缓存：key = name__singer → { lines, candidates, sourceId, ts }
 const _lyricCache = new Map();
@@ -110,6 +111,65 @@ async function neFetchLyric(songId) {
   }
 }
 
+// ---- QQ 音乐歌词源 ----
+
+async function qqSearchSongs(keyword) {
+  const url = `https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?key=${encodeURIComponent(keyword)}&format=json`;
+  try { const j = await (await fetch(url, { headers: HQQ })).json();
+    return (j?.data?.song?.itemlist || []).map((s) => ({ mid: s.mid, name: s.name, singer: s.singer }));
+  } catch { return []; }
+}
+
+export async function qqFetchLyric(songmid) {
+  const url = `https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=${encodeURIComponent(songmid)}&format=json`;
+  try { const text = await (await fetch(url, { headers: HQQ })).text();
+    const m = text.match(/\{.*\}/s); if (!m) return '';
+    const d = JSON.parse(m[0]); const b64 = d?.lyric || d?.Lyric || '';
+    if (!b64) return ''; return Buffer.from(b64, 'base64').toString('utf-8');
+  } catch { return ''; }
+}
+
+function scoreCandidate(song, { name, singerFirst }) {
+  const nameLow = name.toLowerCase(); const sName = song.name || '';
+  const exactName = sName.toLowerCase() === nameLow;
+  const artistNames = song.singer || (song.artists || []).map((a) => a.name).join(' ');
+  const hasSinger = singerFirst && singerFirst.length >= 2 &&
+    artistNames.toLowerCase().includes(singerFirst.toLowerCase());
+  let quality = 0;
+  if (hasSinger) quality += 5;
+  if (exactName) quality += 3;
+  if (sName.toLowerCase().includes(nameLow)) quality += 1;
+  return { quality };
+}
+
+async function searchQQCandidates(name, singer = '') {
+  const singerFirst = singer.split(/[\/、,，&]/)[0].trim();
+  const nameClean = stripBrackets(name);
+  const bracketCN = (name.match(/[（(]([^)）]+)[）)]/) || [])[1] || '';
+  const queries = [], seen = new Set();
+  const add = (q) => { if (!seen.has(q)) { seen.add(q); queries.push(q); } };
+  if (singerFirst) { add(`${name} ${singerFirst}`); if (nameClean !== name) add(`${nameClean} ${singerFirst}`); if (bracketCN) add(`${bracketCN} ${singerFirst}`); }
+  add(name); if (nameClean !== name) add(nameClean); if (bracketCN) add(bracketCN);
+  const results = await Promise.allSettled(queries.map((q) => qqSearchSongs(q)));
+  const seenMid = new Set(); const candidates = [];
+  for (const r of results) { if (r.status !== 'fulfilled') continue;
+    for (const s of r.value) { if (!s.mid || seenMid.has(s.mid)) continue; seenMid.add(s.mid);
+      const { quality } = scoreCandidate(s, { name, singerFirst });
+      candidates.push({ id: `qq:${s.mid}`, mid: s.mid, name: s.name, artist: s.singer, quality, source: 'qq' }); }
+  }
+  candidates.sort((a, b) => b.quality - a.quality);
+  const topCandidates = candidates.filter((c) => c.quality >= 2).slice(0, 5);
+  if (!topCandidates.length) return [];
+  const lyricResults = await Promise.allSettled(topCandidates.map((c) => qqFetchLyric(c.mid)));
+  const verified = [];
+  for (let i = 0; i < topCandidates.length; i++) {
+    if (lyricResults[i].status !== 'fulfilled') continue;
+    const raw = lyricResults[i].value; if (!raw.trim()) continue;
+    verified.push({ ...topCandidates[i], raw });
+  }
+  return verified.map((c) => ({ id: c.id, mid: c.mid, name: c.name, artist: c.artist, quality: c.quality, source: 'qq' }));
+}
+
 /** 搜索并返回歌词（已解析的 LRC 数组 + 原始字符串） */
 export async function fetchLyrics(name, singer = '') {
   const singerFirst = singer.split(/[\/、,，&]/)[0].trim();
@@ -146,7 +206,14 @@ export async function fetchLyrics(name, singer = '') {
     if (candidate) { best = candidate; break; }
   }
 
-  if (!best) throw new Error('未找到匹配歌词');
+  if (!best) {
+    const qq = await searchQQCandidates(name, singer);
+    const bestQQ = qq[0];
+    if (!bestQQ) throw new Error('未找到匹配歌词');
+    const raw = await qqFetchLyric(bestQQ.mid);
+    if (!raw.trim()) throw new Error('该歌曲暂无歌词');
+    return { song: bestQQ.name, artist: bestQQ.artist, sourceId: bestQQ.id, raw, lines: parseLrc(raw) };
+  }
 
   const raw = await neFetchLyric(best.id);
   if (!raw.trim()) throw new Error('该歌曲暂无歌词');
@@ -181,39 +248,38 @@ export async function searchLyricsCandidates(name, singer = '') {
 
   // 并行发起所有搜索
   console.log(`[lyrics:candidates] "${name}" / "${singerFirst}" — queries: [${queries.join(' | ')}]`);
-  const results = await Promise.allSettled(queries.map((q) => neSearchSongs(q)));
+  const [neResults, qqResults] = await Promise.allSettled([
+    Promise.allSettled(queries.map((q) => neSearchSongs(q))),
+    searchQQCandidates(name, singer),
+  ]);
 
   const idSeen = new Set();
   const candidates = [];
 
-  for (const r of results) {
-    if (r.status !== 'fulfilled') continue;
-    for (const s of r.value) {
-      const sid = s.id;
-      if (!sid || idSeen.has(sid)) continue;
-      idSeen.add(sid);
-
-      const artistText = (s.artists || []).map((a) => a.name).join(' / ');
-      const exactName = s.name?.toLowerCase() === name.toLowerCase();
-      // 歌手匹配改为「歌手名至少 2 字符且在 artist 名中以完整词形式出现」
-      const hasSinger = singerFirst && singerFirst.length >= 2 &&
-        (s.artists || []).some((a) => {
-          const an = a.name?.toLowerCase() || '';
-          const sf = singerFirst.toLowerCase();
-          // 直接包含或作为词边界匹配（前后是空格/分隔符/边界）
-          return an.includes(sf) || new RegExp(`(^|[^\\w])${sf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\w])`, 'i').test(an);
-        });
-
-      let quality = 0;
-      if (exactName) quality += 4;
-      if (hasSinger) quality += 3;
-      if (s.name?.toLowerCase().includes(name.toLowerCase())) quality += 1;
-
-      candidates.push({ id: s.id, name: s.name, artist: artistText, quality });
+  if (neResults.status === 'fulfilled') {
+    for (const r of neResults.value) {
+      if (r.status !== 'fulfilled') continue;
+      for (const s of r.value) {
+        const sid = s.id;
+        if (!sid || idSeen.has(`ne:${sid}`)) continue;
+        idSeen.add(`ne:${sid}`);
+        const artistText = (s.artists || []).map((a) => a.name).join(' / ');
+        const { quality } = scoreCandidate(s, { name, singerFirst });
+        candidates.push({ id: s.id, name: s.name, artist: artistText, quality, source: 'ne' });
+      }
     }
   }
 
-  console.log(`[lyrics:candidates] raw candidates: ${candidates.length}, quality≥4:${candidates.filter(c=>c.quality>=4).length}, ≥3:${candidates.filter(c=>c.quality>=3).length}, ≥2:${candidates.filter(c=>c.quality>=2).length}, ≥1:${candidates.filter(c=>c.quality>=1).length}`);
+  if (qqResults.status === 'fulfilled') {
+    for (const c of qqResults.value) {
+      const dedupKey = `qq:${c.name?.toLowerCase()}__${c.artist?.toLowerCase()}`;
+      if (idSeen.has(dedupKey)) continue;
+      idSeen.add(dedupKey);
+      if (c.quality >= 4) candidates.push(c);
+    }
+  }
+
+  console.log(`[lyrics:candidates] raw candidates: ${candidates.length}, hasSinger(≥5):${candidates.filter(c=>c.quality>=5).length}, exactName(≥4):${candidates.filter(c=>c.quality>=4).length}, ≥2:${candidates.filter(c=>c.quality>=2).length}, ≥1:${candidates.filter(c=>c.quality>=1).length}`);
 
   candidates.sort((a, b) => b.quality - a.quality);
 
@@ -232,7 +298,9 @@ export async function searchLyricsCandidates(name, singer = '') {
   // 只验证 top 10 候选（最终返回 12 个，留裕量），大幅减少 HTTP 请求
   topCandidates = topCandidates.slice(0, 10);
 
-  const lyricResults = await Promise.allSettled(topCandidates.map((c) => neFetchLyric(c.id)));
+  const lyricResults = await Promise.allSettled(topCandidates.map((c) =>
+    c.source === 'qq' ? qqFetchLyric(c.mid) : neFetchLyric(c.id)
+  ));
   const verified = [];
   let emptyCount = 0;
   for (let i = 0; i < topCandidates.length; i++) {

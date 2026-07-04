@@ -235,9 +235,15 @@ export async function searchSongs(keyword) {
   if (singer && singer.mid) {
     try {
       const ss = await getSingerSongs(singer.mid, 100, 0);
-      songs = ss.songs;
-      total = ss.total;
-      hasMore = total > 100;
+      // 歌手结果 ≤ 5 首 → 可能是 smartbox 假匹配（如"外婆的彭湖湾"），回退到关键词搜索
+      if (ss.total <= 5) {
+        songs = full.songs.length > 0 ? full.songs : sb.songs;
+        total = songs.length; hasMore = false;
+      } else {
+        songs = ss.songs;
+        total = ss.total;
+        hasMore = total > 100;
+      }
     } catch {
       songs = full.songs.length > 0 ? full.songs : sb.songs;
       total = songs.length; hasMore = false;

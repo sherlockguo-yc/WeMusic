@@ -4,7 +4,7 @@
 import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
-import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache } from '../services/lyrics.js';
+import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache, qqFetchLyric, parseLrc } from '../services/lyrics.js';
 import { getTopList, searchSongs, searchSongsForRecommend } from '../services/qqmusic.js';
 import { renderPosterPNG } from '../services/poster.js';
 import { POSTER_THEMES } from '../../shared/poster-template.js';
@@ -623,6 +623,12 @@ router.get('/lyrics', async (req, res) => {
   try {
     // 1. 若指定了 sourceId，直接按该 id 拉取（不缓存，换源操作）
     if (sourceId) {
+      if (String(sourceId).startsWith('qq:')) {
+        const mid = String(sourceId).replace('qq:', '');
+        const raw = await qqFetchLyric(mid);
+        if (!raw.trim()) return res.json({ lines: [], sourceId, error: '该歌曲暂无歌词' });
+        return res.json({ lines: parseLrc(raw), sourceId, song: name, artist: singer });
+      }
       const result = await fetchLyricsById(Number(sourceId));
       return res.json({ lines: result.lines, sourceId: Number(sourceId) });
     }

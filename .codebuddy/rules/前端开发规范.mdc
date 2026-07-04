@@ -20,6 +20,21 @@ provider:
 - 按钮内图标对齐：按钮 `display: inline-flex; align-items: center; gap: 5px;`，SVG `flex-shrink: 0`。
 - 新增图标流程：打开 [lucide.dev/icons](https://lucide.dev/icons) → 找图标 → 复制 SVG path → 套模板。
 
+### 图标与文字在同一行水平对齐
+
+**这是一类反复出现的问题**。SVG 图标和文字放在同一个容器（span/badge/label 等）或同一行内时，经常出现「图标偏高/偏低、与文字中心线不齐」的情况。必须遵守以下规则：
+
+**容器为 inline/inline-block（图标和文字是容器内的兄弟元素）：**
+- 容器设置 `display: inline-flex; align-items: center; gap: 3px;`
+- SVG 设置 `flex-shrink: 0`
+
+**容器为 inline-flex（容器自身作为 inline 元素与外部文字相邻）：**
+- 必须额外设置 `vertical-align: middle`，否则 inline-flex 默认 `baseline` 对齐，会与旁边文字错位。
+
+**通用原则：**
+- 任何包含 SVG 图标 + 文字的组合，都要同时考虑**内部对齐**（图标 vs 文字）和**外部对齐**（组合 vs 相邻文字）。
+- 新增/修改类似组合时，检查两个维度：`align-items: center` + `vertical-align: middle`。
+
 ## 二、CSS 变量
 
 - 颜色必须使用 CSS 变量，**禁止硬编码颜色值**：

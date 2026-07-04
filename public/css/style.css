@@ -526,7 +526,7 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .status-inner.marquee {
   /* transform 由 rAF 驱动 */
 }
-.player .player-status .badge { color: var(--accent); }
+.player .player-status .badge { color: var(--accent); display: inline-flex; align-items: center; gap: 3px; vertical-align: middle; }
 .player-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
 .np-actions { grid-area: unset; display: flex; gap: 8px; margin-top: 1px; }
 .np-act-btn {
