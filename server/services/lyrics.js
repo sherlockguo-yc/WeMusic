@@ -312,7 +312,7 @@ export async function searchLyricsCandidates(name, singer = '') {
     verified.push({ ...c, raw });
   }
   console.log(`[lyrics:candidates] verified: ${verified.length} valid, ${emptyCount} empty, failed:${lyricResults.filter(r=>r.status==='rejected').length}`);
-  return verified.slice(0, 12).map((c) => ({ id: c.id, name: c.name, artist: c.artist, quality: c.quality }));
+  return verified.slice(0, 12).map((c) => ({ id: c.id, name: c.name, artist: c.artist, quality: c.quality, source: c.source }));
 }
 
 /** 按 网易云 songId 直接拉取歌词 */

@@ -101,7 +101,7 @@ app.get('/api/share/meta', (req, res) => {
 });
 
 // ============================================================
-// 分享歌词预取（无须登录，根据歌名+歌手返回默认网易云 sourceId）
+// 分享歌词预取（无须登录，根据歌名+歌手返回默认 sourceId）
 // 解决"未打开歌词详情页就分享"拿不到歌词源的问题
 // ============================================================
 app.get('/api/share/lyrics', async (req, res) => {
@@ -110,11 +110,13 @@ app.get('/api/share/lyrics', async (req, res) => {
   try {
     const candidates = await searchLyricsCandidates(name, singer || '');
     if (candidates && candidates.length > 0) {
+      const c = candidates[0];
       return res.json({
-        sourceId: String(candidates[0].id),
-        sourceType: 'netease',
-        name: candidates[0].name || '',
-        artist: candidates[0].artist || '',
+        sourceId: String(c.id),
+        // 根据 candidate.source 判断实际来源（不要硬编码网易云）
+        sourceType: c.source === 'qq' ? 'qqmusic' : 'netease',
+        name: c.name || '',
+        artist: c.artist || '',
       });
     }
   } catch (e) {
