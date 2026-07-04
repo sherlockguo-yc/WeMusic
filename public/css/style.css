@@ -2177,8 +2177,6 @@ body.share-view .main { overflow: hidden; }
   .progress-wrap { gap: 4px; }
   .progress-wrap .time { min-width: 32px; font-size: 11px; }
   .player .player-status { font-size: 11px; }
-  /* 歌词按钮更紧凑 */
-  #lyricsBtn { padding: 4px 8px; }
 }
 
 /* =============================================
@@ -2375,13 +2373,6 @@ body.share-view .main { overflow: hidden; }
     justify-content: center;
   }
   /* queueBtn 图标改为 HTML 内 SVG */
-  #lyricsBtn {
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    padding: 0;
-    font-size: 12px;
-  }
 
   /* ---- 弹层适配 ---- */
   .modal { max-height: 85dvh; }

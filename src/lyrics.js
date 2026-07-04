@@ -324,7 +324,6 @@ export function syncLyrics(sec) {
 }
 
 export function initLyrics() {
-  $('lyricsBtn').onclick = openLyricsPanel;
   $('npCover').style.cursor = 'pointer';
   $('npCover').onclick = openLyricsPanel;
   $('lpClose').onclick = closeLyricsPanel;
