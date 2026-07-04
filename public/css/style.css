@@ -488,11 +488,22 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .loading { color: var(--text-dim); text-align: center; padding: 30px 0; }
 
 /* ---------- 播放器 ---------- */
+/*
+ * 底栏播放器：单一 Grid 容器，所有横排子元素（封面/歌名/控制按钮/进度条/视频标题/右侧按钮）
+ * 全部是这个 grid 的直接轨道（track），零 absolute 定位。
+ * Grid 轨道之间在数学上不可能重叠，新增/修改任何一列都不会影响其他列的边界计算——
+ * 这是唯一能从架构上杜绝“文字覆盖按钮/进度条”反复出现的方式。
+ * 【铁律】禁止给本 grid 的任何直接子元素设置 position: absolute 来定位（会跳出 grid 轨道计算，
+ * 重新引入两套独立布局算法互相打架的问题）。如需微调视觉位置，只能调整 grid-template-columns
+ * 的 minmax()/fr 比例，或该子元素内部的 margin/justify-self。
+ */
 .player {
   grid-area: player; border-top: 1px solid var(--border); background: var(--bg-soft);
   display: grid;
-  grid-template-columns: 46px minmax(60px, 180px) auto 1fr auto;
-  grid-template-areas: "cover np controls . right";
+  /* cover: 固定 46px | np: 60-180px 弹性 | controls: 按内容自适应 |
+     progress: 弹性剩余空间（进度条在此列内居中） | status: 视频标题，60px 起，不抢占空间 | right: 按钮组按内容自适应 */
+  grid-template-columns: 46px minmax(60px, 180px) auto minmax(140px, 1fr) minmax(60px, 260px) auto;
+  grid-template-areas: "cover np controls progress status right";
   align-items: center; gap: 0 6px;
   padding: 10px 14px calc(10px + var(--safe-bottom)) 18px;
   position: relative; z-index: 10;
@@ -506,17 +517,11 @@ body.light .lp-bg-card-close { border-color: var(--border); }
   /* transform 由 rAF 驱动 */
 }
 .player .player-status {
+  grid-area: status;
   color: var(--text-dim); font-size: 12px; white-space: nowrap;
   overflow: hidden; /* text-overflow: ellipsis 会截断 inner span 内容为 "..."，必须移除 */
-  min-width: 0; max-width: 100%;
-  /* 绝对定位：贴在进度条（380px 居中）右侧 */
-  position: absolute;
-  left: calc(50% + 202px);  /* 左贴进度条：190(进度条半宽) + 12(间隙) */
-  top: 50%;
-  transform: translateY(-50%);
-  right: 210px;            /* 右贴词/队列等按钮：留一点间距 */
-  width: auto;             /* 让 left + right 决定宽度 */
-  z-index: 1;
+  min-width: 0;
+  /* grid 列布局：不再用 absolute 定位，右边界由浏览器自动计算，永不与 .player-right 重叠 */
 }
 /* 视频标题内层 span：自然宽度时 scrollWidth 可被父级裁剪检出溢出 */
 .status-inner {
@@ -537,14 +542,13 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 #npLikeBtn.liked { color: var(--accent); }
 .player .controls { grid-area: controls; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .player .progress-center {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 380px; max-width: calc(100vw - 600px);
-  pointer-events: none; /* 让点击穿透到下层 */
-  z-index: 1;
+  grid-area: progress;
+  display: flex; justify-content: center; align-items: center;
+  min-width: 0; max-width: 100%;
+  /* 不再用 absolute + left:50% 相对整条 footer 居中，而是在自己的 grid 列内居中，
+     与 status/right 列天然不重叠（grid 轨道边界由浏览器统一计算） */
 }
-.player .progress-center * { pointer-events: auto; } /* 恢复进度条交互 */
 .player .player-right { grid-area: right; }
-.player .player-status { grid-area: status; }
 /* 封面 hover 效果保持不变 */
 .player .np-cover {
   width: 46px; height: 46px; border-radius: 8px;
@@ -576,13 +580,8 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 #modeBtn svg { display: block; }
 #modeBtn:hover { color: var(--text); border-color: transparent; }
 
-
-.player-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
-
-
-/* 进度条 */
-.progress-center { display: flex; justify-content: center; min-width: 0; }
-.progress-wrap { max-width: 400px; width: 100%; display: flex; align-items: center; gap: 6px; min-width: 120px; }
+/* 进度条内层 wrap：在 .progress-center 列内部再居中，不影响外层 grid 轨道边界 */
+.progress-wrap { max-width: 400px; width: 100%; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .progress-wrap .time { color: var(--text-dim); font-size: 12px; min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* 音量 */
@@ -1949,15 +1948,13 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   .player .controls .icon-btn.play { width: 44px; height: 44px; font-size: 18px; }
   /* 移动端进度条：取消绝对定位，回到正常流 */
   .player .progress-center { position: static; transform: none; width: 100%; max-width: none; pointer-events: auto; }
-  /* 移动端视频标题：取消绝对定位 */
-  .player .player-status { position: static; transform: none; width: auto; max-width: 100%; left: auto; top: auto; }
   /* 进度条独占一行 */
   .progress-wrap {
     order: 10;
     flex-basis: 100%;
     gap: 6px;
   }
-  .player .player-status { display: none; }
+  .player .player-status { display: none; } /* 移动端隐藏视频标题 */
   .volume-wrap { display: none; }
 
   /* 移动端隐藏次要按钮（看视频、换源、队列），只留核心：歌词 + 上下首 + 播放/暂停 */

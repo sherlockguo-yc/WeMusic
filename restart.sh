@@ -12,8 +12,8 @@ if [ -n "$PID" ]; then
   echo "已停止旧进程 (PID $PID)"
 fi
 
-# 启动新进程
+# 启动新进程（nodemon 监听 server/ 目录，代码变更自动重启）
 cd "$(dirname "$0")"
-nohup node server/index.js > "$LOG" 2>&1 &
+nohup npx nodemon server/index.js > "$LOG" 2>&1 &
 echo "服务器已启动 (PID $!, 端口 $PORT)"
 echo "日志: $LOG"

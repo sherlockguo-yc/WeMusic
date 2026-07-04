@@ -213,11 +213,12 @@ async function fullSearch(keyword, num = 50) {
 /**
  * 关键字搜索：返回歌曲列表 + 命中歌手
  * 策略：
- *   1. 同时跑 fullSearch + smartbox，优先从中识别命中歌手
- *   2. 命中歌手 → 直接用 GetSingerSongList 返回该歌手完整歌曲（第一批 100 首）
- *      这样不会丢歌，且数量准确；前端可继续"加载更多"
- *   3. 未命中歌手 → 用 fullSearch 结果（歌曲关键字搜索）
- *   4. 兜底退化到 smartbox 联想结果
+ *   1. 同时跑 fullSearch + smartbox，从中识别候选歌手
+ *   2. 置信度校验：候选歌手名必须出现在 fullSearch/smartbox 歌曲结果的
+ *      singer 字段中（否则视为 smartbox 假匹配，如"外婆"→"外婆的彭湖湾"）
+ *   3. 通过校验 → GetSingerSongList 歌手完整歌曲 + 前端翻页
+ *   4. 未通过 / 无歌手 → fullSearch 关键词搜索结果
+ *   5. 兜底退化到 smartbox 联想结果
  *   最终对结果做精选集去重 + 音质排序
  */
 export async function searchSongs(keyword) {
@@ -226,27 +227,39 @@ export async function searchSongs(keyword) {
     smartbox(keyword).catch(() => ({ songs: [], singer: null })),
   ]);
 
-  const singer = (full.singer?.mid ? full.singer : null) || (sb.singer?.mid ? sb.singer : null);
+  let singer = (full.singer?.mid ? full.singer : null) || (sb.singer?.mid ? sb.singer : null);
   let songs;
-
   let total;
   let hasMore;
 
   if (singer && singer.mid) {
-    try {
-      const ss = await getSingerSongs(singer.mid, 100, 0);
-      // 歌手结果 ≤ 5 首 → 可能是 smartbox 假匹配（如"外婆的彭湖湾"），回退到关键词搜索
-      if (ss.total <= 5) {
-        songs = full.songs.length > 0 ? full.songs : sb.songs;
-        total = songs.length; hasMore = false;
-      } else {
+    // 置信度校验：猜出的歌手名是否出现在关键词搜索结果的歌手字段里？
+    // fullSearch/smartbox 返回的歌曲已经按关键词相关性排序，这些歌曲的
+    // 歌手字段是可信的——如果猜出的歌手名不在其中，说明是 smartbox
+    // 将包含关键词的怪异艺人名（如"外婆的彭湖湾"）误识别为命中歌手。
+    const singerName = (singer.name || '').toLowerCase().trim();
+    const searchSongs = full.songs.length > 0 ? full.songs : sb.songs;
+    const keywordMatchesSingerInResults = singerName && searchSongs.some((s) => {
+      const songSingers = (s.singer || '').toLowerCase();
+      return songSingers.includes(singerName);
+    });
+
+    if (keywordMatchesSingerInResults) {
+      // 置信度高 → 进入歌手模式
+      try {
+        const ss = await getSingerSongs(singer.mid, 100, 0);
         songs = ss.songs;
         total = ss.total;
         hasMore = total > 100;
+      } catch {
+        songs = full.songs.length > 0 ? full.songs : sb.songs;
+        total = songs.length; hasMore = false;
       }
-    } catch {
+    } else {
+      // 置信度低 → 假匹配，退回关键词搜索，同时清除误识别的歌手避免前端展示错误歌手卡片
       songs = full.songs.length > 0 ? full.songs : sb.songs;
       total = songs.length; hasMore = false;
+      singer = null;
     }
   } else {
     songs = full.songs.length > 0 ? full.songs : sb.songs;
