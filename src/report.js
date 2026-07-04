@@ -77,7 +77,10 @@ function buildReportHtml(data, periodType) {
   const vsPlaysStr = vsPlays >= 0 ? `↑${vsPlays}` : `↓${Math.abs(vsPlays)}`;
   const vsSecStr = data.period.sec > data.lastPeriod.sec ? '↑' : (data.period.sec < data.lastPeriod.sec ? '↓' : '→');
 
-  const avgSec = data.period.plays ? Math.round(data.period.sec / data.period.plays) : 0;
+  // 平均每首播放时长：使用有效播放（≥30s 或 ≥40% 进度）做分母，过滤掉快速切歌
+  const meaningfulPlays = data.period.meaningfulPlays || data.period.plays;
+  const meaningfulSec = data.period.meaningfulSec || data.period.sec;
+  const avgSec = meaningfulPlays ? Math.round(meaningfulSec / meaningfulPlays) : 0;
   const persona = computePersona(data, avgSec, compHighPct, periodWord);
   const topArtistName = data.topArtists[0]?.singer;
   const insight = computeInsight(data.peakHour, topArtistName, periodWord);
@@ -144,11 +147,11 @@ function buildReportHtml(data, periodType) {
         <div class="wr-card habit">
           <div class="wr-card-hd"><span class="wr-card-icon i-habit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${esc(persona.label)}</span></div>
           <div class="wr-habit">
-            <div class="wr-h-row"><span>跳过率</span><span><b>${skipPct}%</b><small>&lt;30s / ${data.skip.total}次</small></span></div>
+            <div class="wr-h-row"><span>跳过率</span><span><b>${skipPct}%</b><small>&lt;25%进度 / ${data.skip.total}次</small></span></div>
             <div class="wr-h-row"><span>重复播放率</span><span><b>${data.repeatRate}%</b><small>（同一首歌反复听的比例）</small></span></div>
             <div class="wr-h-row"><span>新歌发现</span><span><b>${data.newSongs}</b> 首</span></div>
             <div class="wr-h-row"><span>歌手多样性</span><span><b>${data.uniqueArtists}</b> 位</span></div>
-            <div class="wr-h-row"><span>场均时长</span><span><b>${fmtSec(avgSec)}</b></span></div>
+            <div class="wr-h-row"><span>平均每首播放时长</span><span><b>${fmtSec(avgSec)}</b></span></div>
             <div class="wr-h-row"><span>最爱时段</span><span><b>${data.peakLabel || '无数据'}</b></span></div>
           </div>
         </div>

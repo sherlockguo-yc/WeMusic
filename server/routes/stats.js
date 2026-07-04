@@ -83,13 +83,23 @@ router.get('/overview', (req, res) => {
 // 统一响应结构：period / lastPeriod / trend / label，供周报月报共用前端渲染逻辑
 // ============================================================
 
+// —— 有效播放判断（SQL 表达式片段） ——
+// 有效播放：播了 ≥ 30 秒，或播了 ≥ 40% 总时长（短歌也能公平计入）
+// 用于：跳过率分母、新歌发现门槛、平均每首播放时长计算
+// 表达式引用列名 played_sec、duration，用在 WHERE / CASE 中直接拼接
+const MEANINGFUL_COND = "played_sec >= 30 OR (duration > 0 AND CAST(played_sec AS REAL)/duration >= 0.4)";
+// 跳过判断：播了 < 25% 总时长（duration 未知时回退 30s 绝对阈值）
+const SKIP_COND = "(duration > 0 AND CAST(played_sec AS REAL)/duration < 0.25) OR ((duration IS NULL OR duration = 0) AND played_sec < 30)";
+
 // 公共函数：构建听歌报告数据
 function buildReport(uid, since, until, compareSince, compareUntil, label) {
-  // —— 概览 ——
+  // —— 概览（含有效播放次数） ——
   const periodT = db.prepare(`
     SELECT COUNT(*) AS plays, SUM(played_sec) AS sec,
            COUNT(DISTINCT name||singer) AS unique_songs,
-           COUNT(DISTINCT date(played_at/1000,'unixepoch','localtime')) AS days
+           COUNT(DISTINCT date(played_at/1000,'unixepoch','localtime')) AS days,
+           SUM(CASE WHEN ${MEANINGFUL_COND} THEN 1 ELSE 0 END) AS meaningful_plays,
+           SUM(CASE WHEN ${MEANINGFUL_COND} THEN played_sec ELSE 0 END) AS meaningful_sec
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
   `).get(uid, since, until);
 
@@ -112,15 +122,17 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
     GROUP BY singer ORDER BY play_count DESC LIMIT 5
   `).all(uid, since, until);
 
-  // —— 跳过率 ——
+  // —— 跳过率（相对阈值：播放时长 < 歌曲时长的 25%；无 duration 时回退 30s 绝对阈值） ——
   const skipRow = db.prepare(`
-    SELECT COUNT(*) AS total, SUM(CASE WHEN played_sec < 30 THEN 1 ELSE 0 END) AS skipped
+    SELECT COUNT(*) AS total, SUM(CASE WHEN ${SKIP_COND} THEN 1 ELSE 0 END) AS skipped
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
   `).get(uid, since, until);
 
-  // —— 新歌发现数 ——
+  // —— 新歌发现数（仅统计有效播放中首次出现的歌曲；注意使用 DISTINCT 避免重复计数） ——
   const newSongs = db.prepare(`
-    SELECT COUNT(*) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    SELECT COUNT(DISTINCT name||'__'||COALESCE(singer,'')) AS cnt
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    AND ${MEANINGFUL_COND}
     AND (name||'__'||COALESCE(singer,'')) NOT IN (
       SELECT name||'__'||COALESCE(singer,'') FROM play_logs WHERE user_id=? AND played_at < ?
     )
@@ -172,6 +184,8 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
       sec: periodT.sec || 0,
       uniqueSongs: periodT.unique_songs || 0,
       days: periodT.days || 0,
+      meaningfulPlays: periodT.meaningful_plays || 0,
+      meaningfulSec: periodT.meaningful_sec || 0,
     },
     lastPeriod: {
       plays: lastPeriodT?.plays || 0,
