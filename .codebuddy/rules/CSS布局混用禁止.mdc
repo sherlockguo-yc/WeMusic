@@ -1,0 +1,48 @@
+---
+description: 禁止在同一容器中混用 Grid/Flex 和 position:absolute 定位——始终用一种布局系统
+alwaysApply: true
+enabled: true
+updatedAt: 2026-07-04T08:12:00.000Z
+provider: 
+---
+
+## 十二、CSS 布局：禁止 Grid/Flex 与 absolute 混用
+
+### 核心原则
+
+**同一容器中，只允许一种布局系统决定子元素的水平位置**。混用 grid/flex 和 `position: absolute` 等于让两套独立算法同时计算位置，必然在某个窗口宽度/字号下互相矛盾，导致重叠。
+
+**✅ 正确**：所有横排子元素都是同一个 grid/flex 的子项
+**❌ 错误**：部分子元素用 grid-area，部分用 `position: absolute; left:…; right:…` 独立定位
+
+### 背景（为什么会有这条规则）
+
+播放器底栏（`.player`）在同一区域反复出现"文字覆盖按钮/进度条"的问题至少 2 次：
+
+| 第几次 | 症状 | "修复" | 为什么又坏了 |
+|--------|------|--------|-------------|
+| 1 | 视频标题覆盖「词」按钮 | `.player-status` 从 absolute 改为 grid 列 | 只改了一半：`.progress-center` 仍是 `position:absolute;left:50%` 独立居中，两个系统并存 |
+| 2 | 视频标题覆盖进度条时长 | 把 `.progress-center` 也收进 grid，彻底移除 absolute | **终于根治**——所有 6 个子元素都是同一 grid 的轨道 |
+
+教训：只要还有**一个**子元素游离在 grid/flex 系统之外（用 absolute 独立定位），就还没有真正解决问题——它会在另一个尺寸下换个位置重新冲突。
+
+### 规则
+
+1. **设计阶段**：新增任何「和现有元素共享一行」的 UI 组件前，确认它是现有 grid 列的扩展、还是新增一条 track。**禁止**用 `position: absolute` 图省事"糊一个位置上去"。
+2. **编码阶段**：给任何容器内元素写 `position: absolute` 之前，检查是否有**兄弟元素**在 grid/flex 流中。如果有，这是红灯信号。
+3. **修复 bug 阶段**：如果发现「A 覆盖 B」类的布局 bug，先检查容器内是否同时存在 grid/flex 子元素和 absolute 子元素。如果有，只调 `right`/`left` 像素值是治标不治本——必须让所有相关元素回到同一个布局系统中。
+4. **验证阶段**：改完不是看默认窗口截图。用 `getBoundingClientRect()` 抓取所有相关元素的边界，检查多档窗口宽度（720px～1920px）下两两之间 `right ≤ left`。
+
+### 快速检查命令
+
+```bash
+# 检查 .player 下是否有 absolute 定位的子元素
+grep -n 'position: absolute' public/css/style.css | head -20
+# 如果看到 .player 子元素的 absolute，说明又有人在开历史倒车
+```
+
+### 例外
+
+- 子元素**内部**的装饰性 absolute（如按钮内的 SVG、封面 overlay、工具提示）不违反此规则——只要不影响兄弟元素间的位置计算。
+- 移动端 `@media (max-width: 720px)` 下 `.player` 切为 `flex; flex-wrap: wrap` 是**有意为之的独立布局模式**，不适用 desktop 的 grid 约束。
+- 垂直方向（如 `top: 50%; transform: translateY(-50%)` 垂直居中）可以单独用 absolute 调整，只要水平位置仍由 grid/flex 决定。

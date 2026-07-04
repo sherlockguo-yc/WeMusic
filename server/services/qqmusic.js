@@ -194,26 +194,29 @@ function deduplicateByAlbum(songs, mode = 'name+singer') {
   return result;
 }
 
-/** 完整搜索（仅用于识别歌手，不再作为主要歌曲来源） */
-async function fullSearch(keyword, num = 50) {
-  const data = await musicu('music.search.SearchCgiService', 'DoSearchForQQMusicDesktop', {
-    num_per_page: num,
-    page_num: 1,
-    query: keyword,
-    search_type: 0,
-  });
-  const list = data?.body?.song?.list || [];
-  const sList = data?.body?.singer?.list || [];
-  const singer = sList[0]
-    ? { mid: sList[0].singerMID || sList[0].mid || '', name: sList[0].singerName || sList[0].name || '' }
-    : null;
-  return { songs: list.map(normalizeSong), singer };
+/** 完整搜索：QQ 音乐网页/客户端搜索接口（DoSearchForQQMusicDesktop 已失效，返回空） */
+async function fullSearch(keyword, num = 30) {
+  const url =
+    'https://c.y.qq.com/soso/fcgi-bin/search_for_qq_cp?' +
+    new URLSearchParams({ w: keyword, n: String(num), format: 'json', p: '1' }).toString();
+  const json = await getJSON(url);
+  const list = json?.data?.song?.list || [];
+  const songs = list.map((s) => normalizeSong({
+    mid: s.songmid,
+    id: s.songid,
+    name: s.songname,
+    singer: s.singer,
+    album: s.albumname,
+    albummid: s.albummid,
+    interval: s.interval,
+  }));
+  return { songs, singer: null };
 }
 
 /**
  * 关键字搜索：返回歌曲列表 + 命中歌手
  * 策略：
- *   1. 同时跑 fullSearch + smartbox，从中识别候选歌手
+ *   1. fullSearch（song_for_qq_cp）拿歌曲列表，smartbox 拿歌手候选
  *   2. 置信度校验：候选歌手名必须出现在 fullSearch/smartbox 歌曲结果的
  *      singer 字段中（否则视为 smartbox 假匹配，如"外婆"→"外婆的彭湖湾"）
  *   3. 通过校验 → GetSingerSongList 歌手完整歌曲 + 前端翻页
