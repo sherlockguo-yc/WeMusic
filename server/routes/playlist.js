@@ -135,11 +135,12 @@ router.get('/:id/export', (req, res) => {
 
 // ---- 导入（新建歌单 + 插入歌曲） ----
 router.post('/import', (req, res) => {
-  const { name, songs } = req.body || {};
+  const { name, desc, songs } = req.body || {};
   const list = Array.isArray(songs) ? songs : [];
   if (list.length === 0) return res.status(400).json({ error: '没有可导入的歌曲' });
   const plName = String(name || '导入的歌单').slice(0, 80);
-  const info = db.prepare('INSERT INTO playlists (user_id, name, created_at) VALUES (?, ?, ?)').run(req.user.id, plName, Date.now());
+  const plDesc = String(desc || '').slice(0, 500);
+  const info = db.prepare('INSERT INTO playlists (user_id, name, desc, created_at) VALUES (?, ?, ?, ?)').run(req.user.id, plName, plDesc, Date.now());
   const added = insertSongsBulk(info.lastInsertRowid, list);
   res.json({ id: info.lastInsertRowid, name: plName, added });
 });

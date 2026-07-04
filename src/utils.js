@@ -128,6 +128,10 @@ export function uiPrompt(title, defaultVal = '') {
     const input = $('promptInput');
     $('promptTitle').textContent = title;
     input.value = defaultVal;
+    // 隐藏双输入弹窗可能残留的 label
+    $('promptLabel1').style.display = 'none';
+    $('promptLabel2').style.display = 'none';
+    $('promptInput2').style.display = 'none';
     mask.classList.add('show');
     setTimeout(() => { input.focus(); input.select(); }, 30);
     const done = (val) => {
@@ -148,17 +152,28 @@ export function uiPrompt(title, defaultVal = '') {
   });
 }
 
-/** 双输入弹窗：一个弹窗里同时编辑两个字段（如歌单名 + 简介） */
-export function uiPromptDual(label1 = '', val1 = '', label2 = '', val2 = '') {
+/** 双输入弹窗：一个弹窗里同时编辑两个字段（如歌单名 + 简介）
+ * @param title 弹窗标题
+ * @param label1 第一个输入框的 label 文字（必传，会一直显示在 input 上方）
+ * @param val1 第一个输入框的值
+ * @param label2 第二个输入框的 label 文字（必传）
+ * @param val2 第二个输入框的值 */
+export function uiPromptDual(title = '', label1 = '', val1 = '', label2 = '', val2 = '') {
   return new Promise((resolve) => {
     const mask = $('promptModal');
     const input1 = $('promptInput');
     const input2 = $('promptInput2');
-    $('promptTitle').textContent = label1 || '';
-    input1.placeholder = label1;
+    const labelEl1 = $('promptLabel1');
+    const labelEl2 = $('promptLabel2');
+    $('promptTitle').textContent = title || '';
+    labelEl1.textContent = label1;
+    labelEl1.style.display = '';
+    input1.placeholder = '';
     input1.value = val1;
     input1.style.display = '';
-    input2.placeholder = label2;
+    labelEl2.textContent = label2;
+    labelEl2.style.display = '';
+    input2.placeholder = '';
     input2.value = val2;
     input2.style.display = '';
     mask.classList.add('show');
@@ -171,6 +186,7 @@ export function uiPromptDual(label1 = '', val1 = '', label2 = '', val2 = '') {
       input2.onkeydown = null;
       mask.onclick = null;
       input2.style.display = 'none';
+      labelEl2.style.display = 'none';
       if (cancel) return resolve(null);
       resolve({ val1: input1.value.trim() || null, val2: input2.value.trim() || null });
     };
@@ -192,6 +208,10 @@ export function uiConfirm(message) {
     const input = $('promptInput');
     $('promptTitle').textContent = message;
     input.style.display = 'none';
+    // 隐藏双输入弹窗可能残留的 label / input2
+    $('promptLabel1').style.display = 'none';
+    $('promptLabel2').style.display = 'none';
+    $('promptInput2').style.display = 'none';
     mask.classList.add('show');
     const done = (val) => {
       mask.classList.remove('show');

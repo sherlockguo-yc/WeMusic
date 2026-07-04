@@ -143,7 +143,7 @@ export function renderSidebar() {
           ev.stopPropagation();
           menu.classList.remove('show');
           if (it.dataset.act === 'edit') {
-            const r = await uiPromptDual('编辑歌单名称', pl.name, '编辑歌单简介（可选）', pl.desc || '');
+            const r = await uiPromptDual('编辑歌单', '歌单名称', pl.name, '歌单简介（可选）', pl.desc || '');
             if (!r) return;
             await api(`/playlists/${id}`, { method: 'PUT', body: { name: r.val1, desc: r.val2 || '' } });
             await loadPlaylists();
@@ -406,14 +406,14 @@ export async function openPlaylist(id) {
           <div class="view-sub">${data.songs.length} 首 · 总时长 ${fmtTotal(totalSec)}</div>
           ${data.playlist.desc ? `<div class="pl-desc-detail">${esc(data.playlist.desc)}</div>` : ''}
           <div class="section-head" style="margin:12px 0 0">
-            <button class="btn sm" id="exportPlBtn">⤓ 导出歌单</button>
+            <button class="btn sm" id="exportPlBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> 导出歌单</button>
           </div>
         </div>
       </div>
       ${isEmpty ? '<div class="empty">歌单还是空的，去搜索添加歌曲吧</div>' : `${listToolsHtml()}${songColHeader}<div class="song-list" id="plSongs"></div>`}`;
     $('exportPlBtn').onclick = () => exportPlaylist(id, data.playlist.name);
     $('plRenameBtn').onclick = async () => {
-      const r = await uiPromptDual('编辑歌单名称', data.playlist.name, '编辑歌单简介（可选）', data.playlist.desc || '');
+      const r = await uiPromptDual('编辑歌单', '歌单名称', data.playlist.name, '歌单简介（可选）', data.playlist.desc || '');
       if (!r) return;
       await api(`/playlists/${id}`, { method: 'PUT', body: { name: r.val1, desc: r.val2 || '' } });
       await loadPlaylists();
@@ -430,15 +430,15 @@ export function initPlaylistUI() {
   $('addClose').onclick = () => { $('addModal').classList.remove('show'); pendingAddSongs = null; };
   $('addModal').onclick = (e) => { if (e.target.id === 'addModal') { $('addModal').classList.remove('show'); pendingAddSongs = null; } };
   $('addNewPl').onclick = async () => {
-    const name = await uiPrompt('新歌单名称', '');
-    if (!name) return;
-    const res = await api('/playlists', { method: 'POST', body: { name } });
+    const r = await uiPromptDual('新建歌单', '歌单名称', '', '歌单简介（可选）', '');
+    if (!r || !r.val1) return;
+    const res = await api('/playlists', { method: 'POST', body: { name: r.val1, desc: r.val2 || '' } });
     await loadPlaylists(); commitAdd(res.id);
   };
   $('newPlaylistBtn').onclick = async () => {
-    const name = await uiPrompt('新歌单名称', '');
-    if (!name) return;
-    await api('/playlists', { method: 'POST', body: { name } });
+    const r = await uiPromptDual('新建歌单', '歌单名称', '', '歌单简介（可选）', '');
+    if (!r || !r.val1) return;
+    await api('/playlists', { method: 'POST', body: { name: r.val1, desc: r.val2 || '' } });
     await loadPlaylists(); toast('歌单已创建');
   };
 
@@ -476,9 +476,9 @@ export function initPlaylistUI() {
       const songs = Array.isArray(json.songs) ? json.songs : [];
       if (songs.length === 0) return toast('文件中没有歌曲数据');
       const defName = json.name || file.name.replace(/\.json$/i, '');
-      const name = await uiPrompt('导入为新歌单，名称：', defName);
-      if (!name) return;
-      const res = await api('/playlists/import', { method: 'POST', body: { name, songs } });
+      const r = await uiPromptDual('导入为新歌单', '歌单名称', defName, '歌单简介（可选）', '');
+      if (!r || !r.val1) return;
+      const res = await api('/playlists/import', { method: 'POST', body: { name: r.val1, desc: r.val2 || '', songs } });
       await loadPlaylists(); state.targetPlaylistId = res.id; renderSidebar(); openPlaylist(res.id);
       toast(`已导入 ${res.added} 首到「${res.name}」`);
     } catch { toast('导入失败：文件格式不正确'); }
