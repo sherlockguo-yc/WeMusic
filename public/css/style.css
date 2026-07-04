@@ -1650,6 +1650,12 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px;
 }
 .modal h3 { margin-bottom: 12px; }
+
+/* 打赏弹窗：双码并排 */
+.donate-qrs { display: flex; flex-direction: column; gap: 20px; align-items: center; }
+.donate-qr-item { text-align: center; }
+.donate-label { display: block; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--text); }
+.donate-qr-item img { display: block; margin: 0 auto; }
 /* 滚动提示遮罩：模态内容溢出时底部渐变提示"下面还有" */
 .modal-scroll-hint {
   position: sticky; bottom: 0; left: 0; right: 0;
