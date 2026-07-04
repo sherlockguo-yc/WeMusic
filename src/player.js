@@ -284,7 +284,7 @@ export async function restoreSession() {
   state.queueIndex = s.queueIndex >= 0 && s.queueIndex < s.queue.length ? s.queueIndex : 0;
   state.current = state.queue[state.queueIndex];
   if (state.current) {
-    $('npTitle').textContent = state.current.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : state.current.name;
+    $('npTitle').textContent = state.current.singer ? `${state.current.name} - ${state.current.singer}` : state.current.name;
     checkMarquee($('npTitle'));
     updateNpCover(state.current);
     $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
@@ -451,7 +451,7 @@ export async function playCurrent() {
   const seq = ++playSeq;
   state.current = song;
   highlightPlaying();
-  $('npTitle').textContent = song.singer ? `${song.name} - ${song.singer.split('/')[0]}` : song.name;
+  $('npTitle').textContent = song.singer ? `${song.name} - ${song.singer}` : song.name;
   checkMarquee($('npTitle'));
   document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
   updateNpCover(song);
@@ -690,7 +690,7 @@ export function startVideo(bvid, title, dur) {
     setTimeout(() => _bgPreload(bvid), 500);
   }
   applyPaneVisibility();
-  const displayTitle = title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : 'Bilibili 播放');
+  const displayTitle = title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer}` : 'Bilibili 播放');
   $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(displayTitle)}</span>`;
   const inner = $('playStatus').querySelector('.status-inner');
   if (inner) checkMarquee(inner);
@@ -902,7 +902,7 @@ export function initPlayer() {
       mountVideoAt(target.bvid, target.title, elapsed > 5 ? elapsed : 0);
       applyPaneVisibility();
       // 更新底部播放器视频标题（空值时兜底为歌名）
-      const vt = target.title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer.split('/')[0]}` : 'Bilibili 播放');
+      const vt = target.title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer}` : 'Bilibili 播放');
       $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(vt)}</span>`;
       const inner = $('playStatus').querySelector('.status-inner');
       if (inner) checkMarquee(inner);

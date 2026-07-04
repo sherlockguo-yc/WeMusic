@@ -15,6 +15,10 @@
 - [后台播放机制](specs/后台播放.md)
 - [文本左右滚动](specs/文本滚动.md)
 
+## 功能规划/
+
+- [功能规划](功能规划/README.md)
+
 ## .codebuddy/rules/（AI 会话自动加载）
 
 - **CSS布局混用禁止.mdc** — 十二、CSS 布局：禁止 Grid/Flex 与 absolute 混用

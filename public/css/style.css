@@ -1626,7 +1626,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 }
 /* 标题文字包裹层：支持无限滚动 */
 .vp-title-inner {
-  display: inline-block; min-width: max-content; white-space: nowrap;
+  display: inline-block; white-space: nowrap;
 }
 .vp-title-inner.scrolling {
   /* transform 由 rAF 驱动 */
