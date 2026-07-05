@@ -4,14 +4,27 @@
    ============================================ */
 
 /* ---- 主布局：左侧导航 + 右侧内容 ---- */
+/*
+ * 布局方案：让 .admin-layout 浮在 .app 之上，绕开原 grid 约束
+ *   1. body.admin-view 隐藏原侧栏/顶栏/播放器
+ *   2. .admin-layout 用 position:fixed 覆盖整个视口
+ *   3. <main> 仍保留为容器，仅给 admin-layout 提供挂载点
+ * 这样不会破坏 .app 原 grid，也不会产生 absolute 子元素游离的问题
+ */
 .admin-view .sidebar,
 .admin-view .topbar,
 .admin-view .player { display: none; }
+
+.admin-view .app { display: block; }
 
 .admin-layout {
   display: flex;
   height: 100vh;
   width: 100vw;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg);
 }
 
 /* ---- 左侧导航 ---- */
@@ -30,12 +43,25 @@
   padding: 0 16px 16px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
+  text-align: center;
 }
 
 .admin-logo {
-  font-size: calc(var(--font-size) * 1.2);
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  display: inline-block;
+}
+
+.admin-logo .logo-accent {
   color: var(--accent);
+}
+
+.admin-logo .logo-suffix {
+  color: var(--text-dim);
+  font-size: calc(var(--font-size) * 0.9);
+  font-weight: 600;
+  margin-left: 6px;
 }
 
 .admin-nav { flex: 1; }
@@ -326,40 +352,77 @@
   margin-bottom: 14px;
 }
 
-.admin-config-group h3 {
-  font-size: calc(var(--font-size) * 1.05);
-  margin: 0 0 12px;
-  color: var(--text);
-}
-
-.admin-config-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.admin-config-row label {
-  min-width: 80px;
-  font-size: var(--font-size);
-  color: var(--text);
-}
-
-.admin-config-row select,
-.admin-config-row input {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text);
-  font-size: var(--font-size);
-  outline: none;
-}
-
 .admin-hint {
   font-size: calc(var(--font-size) * 0.82);
   color: var(--text-dim);
-  margin: 0 0 12px;
+  margin: 0 0 14px;
+}
+
+/* ---- 开关行 ---- */
+.admin-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.admin-toggle-row + .admin-toggle-row {
+  border-top: 1px solid var(--border);
+}
+
+.admin-toggle-label {
+  font-size: var(--font-size);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.admin-toggle-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- 开关按钮 ---- */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 12px;
+  transition: background 0.2s;
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.toggle-switch input:checked + .toggle-track {
+  background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-track::after {
+  transform: translateX(20px);
 }
 
 /* ---- 内存条 ---- */
@@ -387,3 +450,91 @@
   border-radius: 4px;
   transition: width 0.5s;
 }
+
+/* ---- 选项弹窗（uiChoice）---- */
+.choice-message {
+  color: var(--text-dim);
+  font-size: calc(var(--font-size) * 0.88);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.choice-row:hover {
+  border-color: var(--accent);
+  background: var(--bg-soft);
+}
+
+.choice-row.selected {
+  border-color: var(--accent);
+  background: var(--bg-soft);
+}
+
+.choice-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+}
+
+.choice-row.selected .choice-radio {
+  border-color: var(--accent);
+}
+
+.choice-row.selected .choice-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.choice-content { flex: 1; min-width: 0; }
+
+.choice-label {
+  font-size: var(--font-size);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.choice-desc {
+  font-size: calc(var(--font-size) * 0.82);
+  color: var(--text-dim);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* ---- 配置自动保存状态指示 ---- */
+.config-status {
+  font-size: calc(var(--font-size) * 0.78);
+  min-width: 60px;
+}
+
+.config-status.saving { color: var(--text-dim); }
+
+.config-status.saved { color: var(--accent); font-weight: 600; }
+
+.config-status.error { color: var(--danger); }

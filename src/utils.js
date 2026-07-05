@@ -240,6 +240,51 @@ export function uiConfirm(message) {
   });
 }
 
+// 选项弹窗：展示一个可选列表（单选），返回所选项的 value
+// options: [{ value, label, desc? }]   currentValue: 当前值（高亮显示）
+export function uiChoice(title, message, options, currentValue = null) {
+  return new Promise((resolve) => {
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask show';
+    mask.innerHTML = `
+      <div class="modal modal-sm">
+        <h3>${esc(title)}</h3>
+        ${message ? `<div class="choice-message">${esc(message)}</div>` : ''}
+        <div class="choice-list"></div>
+        <div class="prompt-actions">
+          <button class="btn sm choice-cancel">取消</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(mask);
+
+    const list = mask.querySelector('.choice-list');
+    options.forEach((opt) => {
+      const row = document.createElement('div');
+      row.className = 'choice-row' + (opt.value === currentValue ? ' selected' : '');
+      row.innerHTML = `
+        <div class="choice-radio"><span class="choice-dot"></span></div>
+        <div class="choice-content">
+          <div class="choice-label">${esc(opt.label)}</div>
+          ${opt.desc ? `<div class="choice-desc">${esc(opt.desc)}</div>` : ''}
+        </div>
+      `;
+      row.onclick = () => done(opt.value);
+      list.appendChild(row);
+    });
+
+    const cleanup = () => {
+      mask.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+    const done = (val) => { cleanup(); resolve(val); };
+    const onKey = (e) => { if (e.key === 'Escape') done(null); };
+    mask.querySelector('.choice-cancel').onclick = () => done(null);
+    mask.onclick = (e) => { if (e.target === mask) done(null); };
+    document.addEventListener('keydown', onKey);
+  });
+}
+
 // ---- 全局 tooltip：统一 stats.js / playlist-ui.js 两套实现 ----
 let _tipEl = null;
 

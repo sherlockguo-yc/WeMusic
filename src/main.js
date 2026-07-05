@@ -120,6 +120,8 @@ document.getElementById('navFwd').onclick = () => history.forward();
 // 导航箭头由 navPush / popstate 分别更新，不再猴子补丁 history.pushState
 window.addEventListener('popstate', (e) => {
   console.log('[nav] popstate:', e.state?.view, 'length:', history.length, 'current:', history.state?.view);
+  // 离开管理面板时，移除 admin-view 样式（否则侧栏/顶栏会被隐藏）
+  if (e.state?.view !== 'admin') document.body.classList.remove('admin-view');
   if (!e.state?.view) return;
   restoreView(e.state.view, e.state.data);
   updateNavArrows();

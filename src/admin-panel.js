@@ -26,7 +26,7 @@ export function openAdminPanel(initialTab = 'overview') {
     <div class="admin-layout">
       <nav class="admin-sidebar">
         <div class="admin-sidebar-header">
-          <span class="admin-logo">WeMusic 管理</span>
+          <span class="admin-logo">We<span class="logo-accent">Music</span><span class="logo-suffix">管理</span></span>
         </div>
         <div class="admin-nav">
           ${TABS.map((t) => `

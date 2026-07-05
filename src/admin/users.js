@@ -1,6 +1,6 @@
 // 用户管理 Tab（含归档用户）
 import { api } from '../api.js';
-import { esc, toast } from '../utils.js';
+import { esc, toast, uiConfirm, uiPrompt, uiChoice } from '../utils.js';
 
 let currentRole = 'viewer';
 let activeView = 'active'; // 'active' | 'archived'
@@ -127,17 +127,21 @@ function bindActions(container) {
       const username = btn.dataset.username;
 
       if (action === 'archive') {
-        if (!confirm(`确认归档用户「${username}」？归档后该用户将无法登录。`)) return;
+        const ok = await uiConfirm(`确认归档用户「${username}」？\n\n归档后该用户将无法登录，但数据保留。可在「归档用户」页面恢复或彻底删除。`);
+        if (!ok) return;
         await api(`/admin/users/${id}/archive`, { method: 'POST' });
         toast(`已归档 ${username}`);
         loadPage(1);
       } else if (action === 'restore') {
-        if (!confirm(`确认恢复用户「${username}」？`)) return;
+        const ok = await uiConfirm(`确认恢复用户「${username}」？`);
+        if (!ok) return;
         await api(`/admin/users/${id}/restore`, { method: 'POST' });
         toast(`已恢复 ${username}`);
         loadPage(1);
       } else if (action === 'delete') {
-        const confirmName = prompt(`请输入用户名「${username}」以确认删除（此操作不可恢复）：`);
+        const ok = await uiConfirm(`确认彻底删除用户「${username}」？\n\n此操作不可恢复。`);
+        if (!ok) return;
+        const confirmName = await uiPrompt('二次验证', `请输入用户名「${username}」以确认删除：`);
         if (confirmName !== username) { toast('用户名不匹配，已取消'); return; }
         try {
           await api(`/admin/users/${id}`, { method: 'DELETE', body: { confirmUsername: username } });
@@ -145,10 +149,21 @@ function bindActions(container) {
           loadPage(1);
         } catch (e) { toast(e.message || '删除失败'); }
       } else if (action === 'role') {
-        const roles = ['user', 'viewer', 'moderator', 'admin'];
-        if (currentRole === 'super_admin') roles.push('super_admin');
-        const newRole = prompt(`修改「${username}」的角色（可选：${roles.join('/')}，当前：查看表格）：`);
-        if (!newRole || !roles.includes(newRole)) { toast('无效角色'); return; }
+        const roleDefs = [
+          { value: 'user',       label: '用户',     desc: '普通用户，无管理权限' },
+          { value: 'viewer',     label: '观察员',   desc: '只读访问看板、用户列表、审计日志' },
+          { value: 'moderator',  label: '审核员',   desc: '内容审核、用户列表查看' },
+          { value: 'admin',      label: '管理员',   desc: '除权限/备份/功能开关外的全部模块' },
+        ];
+        if (currentRole === 'super_admin') {
+          roleDefs.push({ value: 'super_admin', label: '超级管理员', desc: '全部权限 + 管理其他管理员' });
+        }
+        const newRole = await uiChoice(
+          `修改「${username}」的角色`,
+          '请选择该用户的新角色：',
+          roleDefs,
+        );
+        if (!newRole) return;
         await api(`/admin/users/${id}/role`, { method: 'PUT', body: { role: newRole } });
         toast(`已更新 ${username} 角色为 ${roleLabel(newRole)}`);
         loadPage(1);

@@ -1,75 +1,80 @@
-// 系统配置 Tab（功能开关 + 注册控制）
+// 系统配置 Tab（功能开关 + 注册控制）—— 开关按钮，点击即生效
 import { api } from '../api.js';
 import { esc, toast } from '../utils.js';
 
-export async function renderConfig(container, role) {
+const KEYS = [
+  { id: 'cfgAllowRegister', key: 'allowRegister', label: '允许注册' },
+  { id: 'cfgDiscover', key: 'discoverEnabled', label: '发现页' },
+  { id: 'cfgSearch', key: 'searchEnabled', label: '搜索' },
+  { id: 'cfgStats', key: 'statsEnabled', label: '数据统计' },
+  { id: 'cfgLikes', key: 'likesEnabled', label: '喜欢/红心' },
+];
+
+export async function renderConfig(container) {
   container.innerHTML = '<div class="loading">加载中...</div>';
 
   try {
-    const config = await api('/admin/config');
+    const saved = await api('/admin/config');
 
     container.innerHTML = `
       <div class="admin-section">
         <h2 class="admin-section-title">系统配置</h2>
+        <p class="admin-hint">点击开关即生效，无需额外操作。</p>
 
         <div class="admin-config-group">
-          <h3>注册控制</h3>
-          <div class="admin-config-row">
-            <label>允许注册</label>
-            <select id="cfgAllowRegister">
-              <option value="true" ${config.allowRegister !== false ? 'selected' : ''}>开启</option>
-              <option value="false" ${config.allowRegister === false ? 'selected' : ''}>关闭</option>
-            </select>
-            <button class="btn sm green" data-save="allowRegister">保存</button>
-          </div>
-        </div>
-
-        <div class="admin-config-group">
-          <h3>功能开关</h3>
-          <p class="admin-hint">运行时启用/禁用各个功能模块，无需重启服务。</p>
-          <div class="admin-config-row">
-            <label>发现页</label>
-            <select id="cfgDiscover">
-              <option value="true" ${config.discoverEnabled !== false ? 'selected' : ''}>开启</option>
-              <option value="false" ${config.discoverEnabled === false ? 'selected' : ''}>关闭</option>
-            </select>
-            <button class="btn sm green" data-save="discoverEnabled">保存</button>
-          </div>
-          <div class="admin-config-row">
-            <label>搜索</label>
-            <select id="cfgSearch">
-              <option value="true" ${config.searchEnabled !== false ? 'selected' : ''}>开启</option>
-              <option value="false" ${config.searchEnabled === false ? 'selected' : ''}>关闭</option>
-            </select>
-            <button class="btn sm green" data-save="searchEnabled">保存</button>
-          </div>
-          <div class="admin-config-row">
-            <label>数据统计</label>
-            <select id="cfgStats">
-              <option value="true" ${config.statsEnabled !== false ? 'selected' : ''}>开启</option>
-              <option value="false" ${config.statsEnabled === false ? 'selected' : ''}>关闭</option>
-            </select>
-            <button class="btn sm green" data-save="statsEnabled">保存</button>
-          </div>
-          <div class="admin-config-row">
-            <label>喜欢/红心</label>
-            <select id="cfgLikes">
-              <option value="true" ${config.likesEnabled !== false ? 'selected' : ''}>开启</option>
-              <option value="false" ${config.likesEnabled === false ? 'selected' : ''}>关闭</option>
-            </select>
-            <button class="btn sm green" data-save="likesEnabled">保存</button>
-          </div>
+          ${KEYS.map(({ id, key, label }) => {
+            const on = saved[key] !== false;
+            return `
+              <div class="admin-toggle-row">
+                <span class="admin-toggle-label">${label}</span>
+                <div class="admin-toggle-right">
+                  <label class="toggle-switch" id="${id}Switch">
+                    <input type="checkbox" id="${id}" ${on ? 'checked' : ''}>
+                    <span class="toggle-track"></span>
+                  </label>
+                  <span class="config-status" id="${id}Status"></span>
+                </div>
+              </div>`;
+          }).join('')}
         </div>
       </div>
     `;
 
-    container.querySelectorAll('[data-save]').forEach((btn) => {
-      btn.onclick = async () => {
-        const key = btn.dataset.save;
-        const select = container.querySelector(`#cfg${key.charAt(0).toUpperCase() + key.slice(1)}`);
-        const value = select.value === 'true';
-        await api(`/admin/config/${key}`, { method: 'PUT', body: { value } });
-        toast('已保存');
+    // 绑定自动保存
+    KEYS.forEach(({ id, key }) => {
+      const checkbox = container.querySelector(`#${id}`);
+      const switchEl = container.querySelector(`#${id}Switch`);
+      const status = container.querySelector(`#${id}Status`);
+      if (!checkbox) return;
+
+      let prevChecked = checkbox.checked;
+
+      // 点击整行区域（含开关）触发切换
+      switchEl.onclick = async (e) => {
+        // 让浏览器先完成 checkbox 的勾选变化
+        await new Promise((r) => setTimeout(r, 0));
+        const nowChecked = checkbox.checked;
+
+        if (nowChecked === prevChecked) return; // 没变化
+
+        status.textContent = '保存中…';
+        status.className = 'config-status saving';
+
+        try {
+          await api(`/admin/config/${key}`, { method: 'PUT', body: { value: nowChecked } });
+          prevChecked = nowChecked;
+          status.textContent = '✓';
+          status.className = 'config-status saved';
+          setTimeout(() => {
+            if (status.className === 'config-status saved') { status.textContent = ''; status.className = 'config-status'; }
+          }, 2000);
+        } catch (e) {
+          checkbox.checked = prevChecked;
+          status.textContent = '失败';
+          status.className = 'config-status error';
+          toast(e.message || '保存失败，已恢复');
+          setTimeout(() => { status.textContent = ''; status.className = 'config-status'; }, 3000);
+        }
       };
     });
   } catch (e) {
