@@ -125,7 +125,7 @@ export function initQueue() {
         destroyVideo(); saveSession();
       });
       $('npTitle').textContent = '未在播放';
-      $('npCover').classList.remove('show');
+      $('npCoverWrap').classList.remove('show');
       document.title = 'WeMusic · 个人音乐';
       renderQueue(); toast('已清空播放队列');
     } else {

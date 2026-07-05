@@ -4,11 +4,19 @@
 PORT=5174
 LOG=/tmp/wemusic.log
 
-# 杀掉旧进程
+# 杀掉旧进程（包括 nodemon 子进程）
+pkill -f "nodemon" 2>/dev/null
+pkill -f "npx nodemon" 2>/dev/null
 PID=$(lsof -ti:$PORT 2>/dev/null)
 if [ -n "$PID" ]; then
   kill $PID 2>/dev/null
   sleep 1
+  # 如仍存活，强制杀掉
+  PID2=$(lsof -ti:$PORT 2>/dev/null)
+  if [ -n "$PID2" ]; then
+    kill -9 $PID2 2>/dev/null
+    sleep 1
+  fi
   echo "已停止旧进程 (PID $PID)"
 fi
 

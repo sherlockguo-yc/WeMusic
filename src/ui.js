@@ -1,5 +1,5 @@
 // ---------------- 通用 UI：右键菜单、换源、喜欢、弹幕 ----------------
-import { $, esc, fmtDur, fmtPlay, toast, fetchBlockedList, blockedSectionHtml, bindBlockedSection } from './utils.js';
+import { $, esc, fmtDur, fmtPlay, toast, fetchBlockedList, blockedSectionHtml, bindBlockedSection, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 
@@ -160,6 +160,77 @@ export async function toggleLike(song, btn) {
 export const heartOutline = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
 export const heartFilled = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
 
+// ---- 不喜欢 ----
+export async function toggleDislike(song, btn) {
+  const songKey = `${song.name}__${song.singer || ''}`;
+  try {
+    const r = await api('/stats/disliked-songs', {
+      method: 'POST',
+      body: { song_key: songKey },
+    });
+    const isCurrent = state.current && `${state.current.name}__${state.current.singer || ''}` === songKey;
+
+    if (r.disliked) {
+      state.dislikedSongKeys.add(songKey);
+      if (btn) {
+        btn.classList.add('disliked-active');
+        btn.title = '取消不喜欢';
+        // 通用：更新按钮内 SVG 的 fill 和 line stroke
+        updateDislikeBtnSVG(btn, true);
+      }
+      toast('已标记为不喜欢');
+      // 如果是当前播放的歌 → 同步播放器按钮状态 + 自动切下一首
+      if (isCurrent) {
+        updateNpDislikeBtn();
+        import('./player.js').then(({ playNext }) => playNext(false));
+      }
+    } else {
+      state.dislikedSongKeys.delete(songKey);
+      if (btn) {
+        btn.classList.remove('disliked-active');
+        btn.title = '不喜欢';
+        updateDislikeBtnSVG(btn, false);
+      }
+      toast('已取消不喜欢');
+      // 如果是当前播放的歌 → 同步播放器按钮状态
+      if (isCurrent) updateNpDislikeBtn();
+    }
+  } catch (e) { toast('操作失败：' + e.message); }
+}
+
+/** 通用：更新 dislike 按钮内的 SVG — 对 player 用 innerHTML 替换，对列表行用 setAttribute */
+function updateDislikeBtnSVG(btn, disliked) {
+  if (btn.id === 'npDislikeBtn') {
+    btn.innerHTML = disliked ? BROKEN_HEART_FILLED : BROKEN_HEART_OUTLINE;
+    return;
+  }
+  // 列表行按钮：直接改 SVG 属性（避免重建 DOM）
+  const svg = btn.querySelector('svg');
+  if (!svg) return;
+  svg.setAttribute('fill', disliked ? 'currentColor' : 'none');
+  const line = svg.querySelector('line');
+  if (line) line.setAttribute('stroke', disliked ? '#6b6b6b' : 'currentColor');
+}
+
+export function updateNpDislikeBtn() {
+  const btn = $('npDislikeBtn');
+  if (!btn || !state.current) return;
+  const songKey = `${state.current.name}__${state.current.singer || ''}`;
+  const disliked = state.dislikedSongKeys.has(songKey);
+  btn.classList.toggle('disliked-active', !!disliked);
+  btn.title = disliked ? '取消不喜欢' : '不喜欢';
+  // 关键：切换底部播放器按钮的图标（静态 HTML 里的 fill="none" 不会自动变）
+  btn.innerHTML = disliked ? BROKEN_HEART_FILLED : BROKEN_HEART_OUTLINE;
+}
+
+// 启动时从服务端加载已不喜欢的歌曲
+export async function loadDislikedSongs() {
+  try {
+    const { disliked } = await api('/stats/disliked-songs');
+    state.dislikedSongKeys = new Set(disliked);
+  } catch { console.warn('加载不喜欢列表失败'); }
+}
+
 export function updateNpLikeBtn() {
   const btn = $('npLikeBtn');
   if (!btn || !state.current) return;
@@ -193,11 +264,16 @@ export function initUI() {
   $('candClose').onclick = () => $('candModal').classList.remove('show');
   $('candModal').onclick = (e) => { if (e.target.id === 'candModal') $('candModal').classList.remove('show'); };
 
-  // 播放器喜欢 + 三点菜单
+  // 播放器喜欢 + 不喜欢 + 三点菜单
   $('npLikeBtn').onclick = async () => {
     if (!state.current) return toast('当前没有播放的歌曲');
     await toggleLike(state.current, null);
     updateNpLikeBtn();
+  };
+  $('npDislikeBtn').onclick = async () => {
+    if (!state.current) return toast('当前没有播放的歌曲');
+    await toggleDislike(state.current, $('npDislikeBtn'));
+    updateNpDislikeBtn();
   };
   $('npMoreBtn').onclick = (e) => {
     e.stopPropagation();

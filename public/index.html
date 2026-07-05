@@ -79,10 +79,16 @@
 
     <!-- 播放器 -->
     <footer class="player">
-      <div class="np-cover" id="npCover" title="点击查看歌词">
-        <span class="np-cover-br">┐</span>
-        <span class="np-cover-bl">└</span>
-        <span class="np-cover-txt">词</span>
+      <div class="np-cover-wrap" id="npCoverWrap">
+        <div class="np-cover" id="npCover" title="点击查看歌词">
+          <span class="np-cover-br">┐</span>
+          <span class="np-cover-bl">└</span>
+          <span class="np-cover-txt">词</span>
+        </div>
+        <svg class="cover-progress-ring" viewBox="0 0 52 52">
+          <rect class="cover-progress-bg" x="3" y="3" width="46" height="46" rx="8" />
+          <rect class="cover-progress-fill" x="3" y="3" width="46" height="46" rx="8" id="coverProgressFill" />
+        </svg>
       </div>
       <div class="np">
         <div class="np-title-line" id="npTitle">未在播放</div>

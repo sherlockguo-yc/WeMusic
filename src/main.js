@@ -142,6 +142,7 @@ async function init() {
   });
   loadPrefsFromServer();
   loadLikes();
+  import('./ui.js').then(({ loadDislikedSongs }) => loadDislikedSongs());
   // 等待歌单加载完成后渲染视图（openDiscover 依赖 songIndex）
   await plPromise;
   const params = new URL(location.href).searchParams;

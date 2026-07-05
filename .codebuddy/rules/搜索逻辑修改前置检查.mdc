@@ -1,0 +1,12 @@
+# 搜索/匹配逻辑修改前置步骤
+
+修改搜索、匹配、候选评分等逻辑（如 `server/services/qqmusic.js` 的 `searchSongs`、`server/services/lyrics.js` 的 `searchLyricsCandidates`、`server/routes/play.js` 的 `scoreVideo`）前，按顺序完成以下检查：
+
+1. **构造最小复现场景**：用具体的关键词/歌曲名复现问题（如搜"外婆"只能找到澎湖湾版），确认问题稳定复现
+2. **分析根因而非表象**：
+   - 搜索结果少 → 是 API 返回少？还是被过滤掉了？还是排序把目标排到了后面？
+   - 候选质量差 → 是评分权重不合理？还是搜索 query 没覆盖关键变体？还是外部接口本身质量差？
+   - 假匹配 → 是哪个环节误识别了？smartbox？fullSearch？singer name matching？
+3. **先用 curl/脚本验证推测**，不要直接在代码中加 `if-else` 猜。例如怀疑 API 返回有问题 → 单独 curl 看响应
+4. **方案评估**：列出至少 2 个方案，对比优劣，选最优。避免围绕表面现象修修补补（如用阈值硬兜底而非解决根因）
+5. **测试 3 类歌曲**：热门歌（如晴天/周杰伦）、冷门歌（如 El Hombre）、短歌名/特殊字符

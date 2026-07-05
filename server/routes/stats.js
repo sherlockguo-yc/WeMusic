@@ -556,6 +556,12 @@ router.get('/recommend', async (req, res) => {
 
   const heardKeys = new Set([...songScores.keys()]);
 
+  // 加载用户不喜欢（disliked）的歌曲键，推荐时跳过
+  const dislikedRows = db.prepare(
+    'SELECT song_key FROM blocked_sources WHERE user_id=? AND source_type=?'
+  ).all(uid, 'song');
+  const dislikedKeys = new Set(dislikedRows.map(r => r.song_key));
+
   // ---- Step 4: 并行拉取 ----
   const tasks = [];
 
@@ -587,6 +593,9 @@ router.get('/recommend', async (req, res) => {
       // 已有负分信号（不喜欢的歌）：跳过
       const prevSignal = songScores.get(key);
       if (prevSignal && prevSignal.score < 0) continue;
+
+      // 用户标记为「不喜欢」的歌：跳过
+      if (dislikedKeys.has(key)) continue;
 
       let candidateScore = 0;
       if (task.type === 'artist') candidateScore += 2.0;
@@ -754,6 +763,38 @@ router.get('/blocked/full', (req, res) => {
     ORDER BY blocked_at DESC
   `).all(req.user.id, song, type || 'video');
   res.json({ list: rows });
+});
+
+// ============================================================
+// 不喜欢歌曲（歌曲级 dislike，非源屏蔽）
+// ============================================================
+// 查询用户所有不喜欢的歌曲键
+router.get('/disliked-songs', (req, res) => {
+  const rows = db.prepare(
+    'SELECT song_key FROM blocked_sources WHERE user_id=? AND source_type=?'
+  ).all(req.user.id, 'song');
+  res.json({ disliked: rows.map((r) => r.song_key) });
+});
+
+// 切换不喜欢（复用 blocked_sources 表，source_type='song'）
+router.post('/disliked-songs', (req, res) => {
+  const { song_key } = req.body || {};
+  if (!song_key) return res.status(400).json({ error: '缺少 song_key' });
+  const uid = req.user.id;
+  const existing = db.prepare(
+    'SELECT 1 FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=?'
+  ).get(uid, song_key, 'song');
+  if (existing) {
+    db.prepare(
+      'DELETE FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=?'
+    ).run(uid, song_key, 'song');
+    res.json({ disliked: false });
+  } else {
+    db.prepare(
+      'INSERT OR IGNORE INTO blocked_sources (user_id, song_key, source_type, source_id, blocked_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(uid, song_key, 'song', 'disliked', Date.now());
+    res.json({ disliked: true });
+  }
 });
 
 // 新增黑名单

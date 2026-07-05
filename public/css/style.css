@@ -507,9 +507,9 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .player {
   grid-area: player; border-top: 1px solid var(--border); background: var(--bg-soft);
   display: grid;
-  /* cover: 固定 46px | np: 60-180px 弹性 | controls: 按内容自适应 |
+  /* cover: 固定 52px（含 3px 环形进度条边距）| np: 60-180px 弹性 | controls: 按内容自适应 |
      progress: 弹性剩余空间（进度条在此列内居中） | status: 视频标题，60px 起，不抢占空间 | right: 按钮组按内容自适应 */
-  grid-template-columns: 46px minmax(60px, 150px) minmax(120px, auto) minmax(140px, 1fr) minmax(60px, 1fr) minmax(60px, auto);
+  grid-template-columns: 52px minmax(60px, 150px) minmax(120px, auto) minmax(140px, 1fr) minmax(60px, 1fr) minmax(60px, auto);
   grid-template-areas: "cover np controls progress status right";
   align-items: center; gap: 0 6px;
   padding: 10px 14px calc(10px + var(--safe-bottom)) 18px;
@@ -517,7 +517,7 @@ body.light .lp-bg-card-close { border-color: var(--border); }
   min-height: 72px;
   overflow: hidden; /* 高倍缩放时防止 grid 子元素溢出容器 */
 }
-.player .np-cover { grid-area: cover; }
+.player .np-cover-wrap { grid-area: cover; }
 .player .np { grid-area: np; min-width: 0; overflow: hidden; }
 .player .np .np-title-line { font-size: calc(var(--font-size) * 1.1); font-weight: 700; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .player .np .np-title-line.marquee {
@@ -556,13 +556,24 @@ body.light .lp-bg-card-close { border-color: var(--border); }
      与 status/right 列天然不重叠（grid 轨道边界由浏览器统一计算） */
 }
 .player .player-right { grid-area: right; }
-/* 封面 hover 效果保持不变 */
+/* 封面包装器：显式 52×52，内部 flex 居中封面，绝对定位承载进度条 SVG */
+.np-cover-wrap {
+  display: none;
+  position: relative;
+  width: 52px; height: 52px;
+}
+.np-cover-wrap.show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .player .np-cover {
   width: 46px; height: 46px; border-radius: 8px;
   background: linear-gradient(135deg, #2a3340, #1a1d26) center/cover no-repeat;
-  display: none; position: relative; cursor: pointer;
+  cursor: pointer;
+  flex-shrink: 0;
 }
-.player .np-cover.show { display: block; }
 .player .np-cover::after {
   content: ''; position: absolute; inset: 0; z-index: 2;
   background: rgba(0,0,0,.6); border-radius: 8px;
@@ -575,6 +586,28 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .player .np-cover:hover .np-cover-br,
 .player .np-cover:hover .np-cover-bl,
 .player .np-cover:hover .np-cover-txt { opacity: 1; }
+
+/* ---- 封面方形进度条 ---- */
+.cover-progress-ring {
+  position: absolute; top: 0; left: 0;
+  width: 52px; height: 52px;
+  z-index: 1;
+  pointer-events: none;
+}
+.cover-progress-bg {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2;
+}
+.cover-progress-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 170.3; /* 4*(46-16)+2*PI*8 ≈ 170.27 */
+  stroke-dashoffset: 170.3; /* 初始隐藏 */
+  transition: stroke-dashoffset 1s linear;
+}
+
 .player .controls .icon-btn { width: 38px; height: 38px; font-size: 15px; }
 
 /* 播放模式按钮 */
@@ -1515,6 +1548,9 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .song-like-btn { cursor: pointer; display: inline-flex; align-items: center; color: var(--text-dim); }
 .song-like-btn.liked-active, .like-btn.liked { color: #e05c5c; }
 #npLikeBtn.liked-active { color: #e05c5c; border-color: #e05c5c; }
+/* 不喜欢按钮 - 激活态：心形图标填充为灰色（由 JS 切换 fill 实现） */
+#npDislikeBtn.disliked-active,
+.np-act-btn.disliked-active { color: var(--text-dim); }
 /* 三点菜单按钮 */
 #npMoreBtn { font-size: 14px; letter-spacing: 1px; }
 
@@ -2342,7 +2378,9 @@ body.share-view .main { overflow: hidden; }
     min-height: auto;
     align-items: center;
   }
-  .player .np-cover { width: 44px; height: 44px; flex: 0 0 auto; }
+  .np-cover-wrap { width: 50px; height: 50px; flex: 0 0 auto; }
+  .np-cover-wrap .cover-progress-ring { width: 50px; height: 50px; }
+  .player .np-cover { width: 44px; height: 44px; }
   .player .np { flex: 1; min-width: 0; max-width: none; }
   .player .np .t { font-size: calc(var(--font-size) * 0.93); }
   .player .np .s { font-size: calc(var(--font-size) * 0.8); }

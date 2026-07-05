@@ -7,6 +7,11 @@ export const $ = (id) => document.getElementById(id);
 export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';  // 自动连播已暂停 → 点击恢复
 export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'; // 自动连播进行中 → 点击暂停
 
+// 不喜欢图标：空心（默认） / 实心（已不喜欢）
+// 实心态：心形用 currentColor 填充成灰色，斜线用固定深灰 #666 确保在填充上仍可见
+export const BROKEN_HEART_OUTLINE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
+export const BROKEN_HEART_FILLED  = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><line x1="3" y1="3" x2="21" y2="21" stroke="#6b6b6b"/></svg>';
+
 // 统一歌曲列表列头（避免 search.js / playlist-ui.js 重复定义）
 export const songColHeader = `<div class="song-row-head">
   <span class="h-idx">#</span>

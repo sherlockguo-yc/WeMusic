@@ -51,11 +51,23 @@ export function _flushLog(playedSec) {
 }
 
 // ---- 进度控制 ----
+// 圆角方形周长：4*(w-2r) + 2*PI*r = 4*(46-16) + 2*PI*8 ≈ 170.27
+const COVER_RING_CIRC = 4 * (46 - 2 * 8) + 2 * Math.PI * 8;
+
+function _updateCoverRing() {
+  const ring = $('coverProgressFill');
+  if (!ring || totalDur <= 0) return;
+  const progress = Math.min(1, elapsed / totalDur);
+  ring.style.strokeDashoffset = COVER_RING_CIRC * (1 - progress);
+}
+
 export function resetProgress(d) {
   elapsed = 0; totalDur = Number(d) || 0; timerPaused = false;
   $('curTime').textContent = '0:00';
   $('durTime').textContent = fmtDur(totalDur);
   $('seekBar').value = 0;
+  const ring = $('coverProgressFill');
+  if (ring) ring.style.strokeDashoffset = COVER_RING_CIRC;
 }
 
 export function startTimer(d) {
@@ -71,6 +83,7 @@ export function startTimer(d) {
     $('curTime').textContent = fmtDur(elapsed);
     if (totalDur > 0) {
       $('seekBar').value = Math.min(1000, Math.round((elapsed / totalDur) * 1000));
+      _updateCoverRing();
       if (elapsed >= totalDur + 1) autoAdvance();
     }
   }, 1000);
@@ -209,15 +222,16 @@ export function setPaneVisible(v) {
 
 // ---- 封面/高亮 ----
 export function updateNpCover(song) {
+  const wrap = $('npCoverWrap');
   const npc = $('npCover');
   const url = albumCover(song && song.album_mid, 150);
   if (url) {
     const img = new Image();
-    img.onload = () => { npc.style.backgroundImage = `url(${url})`; npc.classList.add('show'); };
-    img.onerror = () => { npc.classList.remove('show'); npc.style.backgroundImage = ''; };
+    img.onload = () => { npc.style.backgroundImage = `url(${url})`; wrap.classList.add('show'); };
+    img.onerror = () => { wrap.classList.remove('show'); npc.style.backgroundImage = ''; };
     img.src = url;
   } else {
-    npc.classList.remove('show');
+    wrap.classList.remove('show');
     npc.style.backgroundImage = '';
   }
 }
@@ -456,7 +470,7 @@ export async function playCurrent() {
   document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
   updateNpCover(song);
   updateMediaSession(song);
-  setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn }) => updateNpLikeBtn()), 0);
+  setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn, updateNpDislikeBtn }) => { updateNpLikeBtn(); updateNpDislikeBtn(); }), 0);
   resetProgress(song.duration);
 
   if (!song.bvid) {
@@ -646,6 +660,7 @@ function _startBgSync() {
     if (Math.abs(real - elapsed) >= 2) {
       console.log(`[bgSync] calibrate elapsed ${elapsed}s → ${real}s (bgAudio.currentTime)`);
       elapsed = real;
+      _updateCoverRing();
     }
     if (totalDur > 0 && elapsed >= totalDur - 1) {
       console.log(`[bgSync] elapsed ${elapsed}s >= dur-1=${totalDur-1}s — autoAdvance`);
@@ -740,7 +755,10 @@ function _onBiliMessage(e) {
   if (elapsed > delay + 1) {
     elapsed = Math.max(0, Math.round(elapsed - delay));
     $('curTime').textContent = fmtDur(elapsed);
-    if (totalDur > 0) $('seekBar').value = Math.min(1000, Math.round((elapsed / totalDur) * 1000));
+    if (totalDur > 0) {
+      $('seekBar').value = Math.min(1000, Math.round((elapsed / totalDur) * 1000));
+      _updateCoverRing();
+    }
   }
   _iframeStartCalibrated = true;
 }

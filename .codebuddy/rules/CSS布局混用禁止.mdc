@@ -47,19 +47,3 @@ grep -n 'position: absolute' public/css/style.css | head -20
 - 移动端 `@media (max-width: 720px)` 下 `.player` 切为 `flex; flex-wrap: wrap` 是**有意为之的独立布局模式**，不适用 desktop 的 grid 约束。
 - 垂直方向（如 `top: 50%; transform: translateY(-50%)` 垂直居中）可以单独用 absolute 调整，只要水平位置仍由 grid/flex 决定。
 
-<!--
-┌─ 决策上下文 ────────────────────────────┐
-│ 日期: 2026-07-04                         │
-│ 触发: 播放器底栏布局 bug 反复出现 2+ 次。   │
-│       第一次修复只把 .player-status 改成    │
-│       grid，但 .progress-center 仍是       │
-│       absolute，导致换个宽度又出现覆盖       │
-│ 方案A: 继续 Grid + absolute 混用，调像素值  │
-│ 方案B: 6 个子元素全部收编为 Grid 轨道       │
-│ 选择: B                                  │
-│ 理由: 两套算法同时运作，修一个坑必然冒另一个； │
-│       Grid 轨道间数学上不可能重叠           │
-│ 重评条件: 出现无法用 Grid 表达的复杂布局     │
-└──────────────────────────────────────────┘
--->
-
