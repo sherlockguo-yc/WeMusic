@@ -94,7 +94,9 @@ async function restoreView(view, data) {
       _popstateView = null;
     }
   }, 5000);
-  if (view === 'discover')    openDiscover();
+  if (view === 'admin' && data?.tab) import('./admin-panel.js').then(({ openAdminPanel }) => openAdminPanel(data.tab)).catch((e) => { console.error('[nav] admin restore fail:', e); _popstateView = null; });
+  else if (view === 'admin')   import('./admin-panel.js').then(({ openAdminPanel }) => openAdminPanel()).catch((e) => { console.error('[nav] admin restore fail:', e); _popstateView = null; });
+  else if (view === 'discover')    openDiscover();
   else if (view === 'search'  && data?.kw) { document.getElementById('searchInput').value = data.kw; import('./search.js').then(({ doSearch }) => doSearch()).catch((e) => { console.error('[nav] search restore fail:', e); _popstateView = null; }); }
   else if (view === 'artist'  && data?.mid) import('./search.js').then(({ openArtist }) => openArtist(data.mid, data.name)).catch((e) => { console.error('[nav] artist restore fail:', e); _popstateView = null; });
   else if (view === 'album'       && data?.mid) import('./search.js').then(({ openAlbum }) => openAlbum(data.mid, data.name)).catch((e) => { console.error('[nav] album restore fail:', e); _popstateView = null; });
@@ -134,9 +136,9 @@ async function init() {
   loadAvatar().then(() => {
     if (state.isAdmin) {
       $('adminTopBtn').style.display = '';
-      $('adminTopBtn').onclick = async () => {
-        const { openAdmin } = await import('./admin.js');
-        openAdmin();
+      $('adminTopBtn').onclick = () => {
+        history.pushState({ view: 'admin' }, '', '/admin');
+        import('./admin-panel.js').then(({ openAdminPanel }) => openAdminPanel());
       };
     }
   });
@@ -145,6 +147,13 @@ async function init() {
   import('./ui.js').then(({ loadDislikedSongs }) => loadDislikedSongs());
   // 等待歌单加载完成后渲染视图（openDiscover 依赖 songIndex）
   await plPromise;
+
+  // 检查是否在 /admin 路由
+  if (location.pathname === '/admin') {
+    import('./admin-panel.js').then(({ openAdminPanel }) => openAdminPanel());
+    return;
+  }
+
   const params = new URL(location.href).searchParams;
   const v = params.get('v');
   if (v) {

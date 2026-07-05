@@ -1,5 +1,5 @@
 // ---------------- 播放核心 ----------------
-import { $, fmtDur, esc, biliEmbed, albumCover, toast, PLAY_ICON, PAUSE_ICON } from './utils.js';
+import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, PLAY_ICON, PAUSE_ICON } from './utils.js';
 import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { clearSleep, sleepAfterSong } from './settings.js';
@@ -224,16 +224,38 @@ export function setPaneVisible(v) {
 export function updateNpCover(song) {
   const wrap = $('npCoverWrap');
   const npc = $('npCover');
-  const url = albumCover(song && song.album_mid, 150);
-  if (url) {
+  const albumUrl = albumCover(song && song.album_mid, 150);
+  const singerUrl = singerAvatar(song && song.singer_mid, 150);
+
+  // 清除旧状态
+  npc.style.backgroundImage = '';
+  npc.classList.remove('has-cover');
+
+  // 加载函数：成功设背景，失败走 fallback
+  function tryLoad(url, fallback) {
+    if (!url) return fallback();
     const img = new Image();
-    img.onload = () => { npc.style.backgroundImage = `url(${url})`; wrap.classList.add('show'); };
-    img.onerror = () => { wrap.classList.remove('show'); npc.style.backgroundImage = ''; };
+    img.onload = () => {
+      npc.style.backgroundImage = `url(${url})`;
+      npc.classList.add('has-cover');
+    };
+    img.onerror = () => {
+      npc.style.backgroundImage = '';
+      npc.classList.remove('has-cover');
+      fallback();
+    };
     img.src = url;
-  } else {
-    wrap.classList.remove('show');
-    npc.style.backgroundImage = '';
   }
+
+  // 始终显示封面区域（用户需要点击进入歌词详情页）
+  wrap.classList.add('show');
+
+  // 三级兜底：专辑封面 → 歌手头像 → 默认音符图标
+  tryLoad(albumUrl, () => {
+    tryLoad(singerUrl, () => {
+      // 默认音符图标已在 HTML 中，无 .has-cover 时自动可见
+    });
+  });
 }
 
 export function highlightPlaying() {

@@ -156,5 +156,58 @@ if (!userCols.includes('avatar')) {
 if (!userCols.includes('last_login_at')) {
   db.exec('ALTER TABLE users ADD COLUMN last_login_at INTEGER');
 }
+// ---- 管理功能：角色、归档、状态 ----
+if (!userCols.includes('role')) {
+  db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
+}
+if (!userCols.includes('archived_at')) {
+  db.exec('ALTER TABLE users ADD COLUMN archived_at INTEGER DEFAULT NULL');
+}
+if (!userCols.includes('status')) {
+  db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+}
+
+// ---- 管理功能：新表 ----
+db.exec(`
+  /* 操作审计日志 */
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    operator   TEXT NOT NULL,          -- 操作人用户名
+    target     TEXT,                   -- 操作目标（用户名/资源名）
+    action     TEXT NOT NULL,          -- 操作类型
+    detail     TEXT,                   -- 额外详情（JSON）
+    ip         TEXT,
+    created_at INTEGER NOT NULL
+  );
+
+  /* 敏感词库：管理员可增删 */
+  CREATE TABLE IF NOT EXISTS sensitive_words (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    word       TEXT UNIQUE NOT NULL,   -- 敏感词
+    category   TEXT DEFAULT 'other',   -- 分类：political/porn/violence/other
+    added_by   TEXT,                   -- 添加人
+    created_at INTEGER NOT NULL
+  );
+
+  /* 系统配置（功能开关/运行时参数） */
+  CREATE TABLE IF NOT EXISTS system_config (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,          -- JSON 序列化的值
+    updated_by TEXT,
+    updated_at INTEGER NOT NULL
+  );
+`);
+
+// ---- 初始化超级管理员：将 SUPER_ADMIN 环境变量中指定的用户 role 设为 super_admin ----
+import('./config.js').then(({ config: cfg }) => {
+  if (cfg.superAdmin) {
+    // 如果用户存在且还不是 super_admin，自动提升
+    const row = db.prepare("SELECT id, role FROM users WHERE username = ?").get(cfg.superAdmin);
+    if (row && row.role !== 'super_admin') {
+      db.prepare("UPDATE users SET role = 'super_admin' WHERE id = ?").run(row.id);
+      console.log(`[db] 已将 ${cfg.superAdmin} 提升为超级管理员`);
+    }
+  }
+}).catch(() => {});
 
 export default db;

@@ -574,6 +574,18 @@ body.light .lp-bg-card-close { border-color: var(--border); }
   cursor: pointer;
   flex-shrink: 0;
 }
+/* 兜底音符图标：无封面时居中显示，有封面时隐藏 */
+.np-cover-fb {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-dim);
+  z-index: 1;
+  pointer-events: none;
+}
+.player .np-cover.has-cover .np-cover-fb {
+  opacity: 0;
+}
 .player .np-cover::after {
   content: ''; position: absolute; inset: 0; z-index: 2;
   background: rgba(0,0,0,.6); border-radius: 8px;

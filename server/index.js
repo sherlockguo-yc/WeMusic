@@ -8,6 +8,7 @@ import musicRouter from './routes/music.js';
 import playlistRouter from './routes/playlist.js';
 import playRouter from './routes/play.js';
 import statsRouter from './routes/stats.js';
+import adminRouter from './routes/admin.js';
 import { searchLyricsCandidates } from './services/lyrics.js';
 
 const app = express();
@@ -65,6 +66,7 @@ app.use('/api/music', musicRouter);
 app.use('/api/playlists', playlistRouter);
 app.use('/api/play', playRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/admin', adminRouter);
 
 // 健康检查：只返回 ok，不暴露版本/环境等信息
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -132,6 +134,12 @@ app.get('/sw.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Cache-Control', 'no-store');
   res.sendFile('sw.js', { root: PUBLIC_DIR });
+});
+
+// 管理面板：独立路由 /admin，由前端 SPA 检测 pathname 渲染管理视图
+app.get('/admin', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.sendFile('index.html', { root: PUBLIC_DIR });
 });
 
 app.use(express.static(PUBLIC_DIR, {

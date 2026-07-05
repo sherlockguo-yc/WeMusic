@@ -114,6 +114,11 @@ export function albumCover(albumMid, size = 300) {
   return 'https:' + '//' + 'y.qq.com/music/photo_new/T002R' + size + 'x' + size + 'M000' + albumMid + '.jpg';
 }
 
+export function singerAvatar(mid, size = 150) {
+  if (!mid) return '';
+  return 'https://y.gtimg.cn/music/photo_new/T001R' + size + 'x' + size + 'M000' + mid + '.jpg';
+}
+
 export function playlistCoverHtml(mids = []) {
   const cells = [];
   for (let i = 0; i < 4; i++) {

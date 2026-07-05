@@ -15,7 +15,7 @@ export function authRequired(req, res, next) {
   }
   try {
     const decoded = jwt.verify(token, config.jwtSecret);
-    req.user = decoded; // { id, username }
+    req.user = { id: decoded.id, username: decoded.username };
     next();
   } catch {
     return res.status(401).json({ error: '登录已过期，请重新登录' });

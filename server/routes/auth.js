@@ -62,6 +62,10 @@ router.post('/login', (req, res) => {
   if (!valid) {
     return res.status(401).json({ error: '用户名或密码错误' });
   }
+  // 检查是否被归档
+  if (user.archived_at) {
+    return res.status(403).json({ error: '该账号已被归档，无法登录' });
+  }
   // 记录登录时间
   db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(Date.now(), user.id);
   const token = signToken({ id: user.id, username: user.username });
@@ -70,9 +74,9 @@ router.post('/login', (req, res) => {
 
 // 当前用户
 router.get('/me', authRequired, (req, res) => {
-  const u = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(req.user.id);
-  const isAdmin = config.adminUsers.length > 0 && config.adminUsers.includes(u?.username || '');
-  res.json({ user: { ...req.user, avatar: u?.avatar || null }, allowRegister: config.allowRegister, isAdmin });
+  const u = db.prepare('SELECT id, username, avatar, role FROM users WHERE id = ?').get(req.user.id);
+  const isAdmin = (u?.role && u.role !== 'user') || false;
+  res.json({ user: { ...req.user, avatar: u?.avatar || null, role: u?.role || 'user' }, allowRegister: config.allowRegister, isAdmin });
 });
 
 // 更新头像（base64 DataURL，限 300KB）
@@ -123,11 +127,13 @@ router.put('/session', authRequired, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- 管理员端点 ----
+// ---- 管理员端点（向后兼容，实际权限由 /api/admin 接管） ----
 function adminOnly(req, res, next) {
-  if (!config.adminUsers.includes(req.user.username)) {
+  const row = db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.id);
+  if (!row || row.role === 'user') {
     return res.status(403).json({ error: '需要管理员权限' });
   }
+  req.user.role = row.role;
   next();
 }
 
