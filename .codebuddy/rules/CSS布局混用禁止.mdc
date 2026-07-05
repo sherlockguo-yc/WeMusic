@@ -2,7 +2,7 @@
 description: 禁止在同一容器中混用 Grid/Flex 和 position:absolute 定位——始终用一种布局系统
 alwaysApply: true
 enabled: true
-updatedAt: 2026-07-04T08:12:00.000Z
+updatedAt: 2026-07-05T09:11:00.000Z
 provider: 
 ---
 
@@ -32,6 +32,10 @@ provider:
 2. **编码阶段**：给任何容器内元素写 `position: absolute` 之前，检查是否有**兄弟元素**在 grid/flex 流中。如果有，这是红灯信号。
 3. **修复 bug 阶段**：如果发现「A 覆盖 B」类的布局 bug，先检查容器内是否同时存在 grid/flex 子元素和 absolute 子元素。如果有，只调 `right`/`left` 像素值是治标不治本——必须让所有相关元素回到同一个布局系统中。
 4. **验证阶段**：改完不是看默认窗口截图。用 `getBoundingClientRect()` 抓取所有相关元素的边界，检查多档窗口宽度（720px～1920px）下两两之间 `right ≤ left`。
+5. **新增独立视图前**：必须先检查渲染目标的父容器布局（如 `<main>` 是否在 `.app` 的 Grid 中）。如果父容器有 Grid/Flex 约束，则子元素的 `width: 100vw` 无效。解决方案：
+   - 用 `position: fixed; inset: 0` 让视图浮在布局之上（适用于独立视图）
+   - 或将父容器设为 `display: block` 解除 grid 约束
+   - 禁止不检查父容器就直接设定子元素尺寸
 
 ### 快速检查命令
 
