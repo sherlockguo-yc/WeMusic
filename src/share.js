@@ -3,6 +3,7 @@ import { $, esc, fmtDur, toast } from './utils.js';
 import { state } from './state.js';
 import { lyricsCurrentSourceId } from './lyrics.js';
 import { Auth } from './api.js';
+import { Platform, isQQSource } from './platform.js';
 
 /**
  * 读取 localStorage 缓存的 song_mid → lyrics sourceId
@@ -31,8 +32,8 @@ function getLyricsSourceIdForSong(songMid) {
  */
 function sourceTypeOf(sourceId) {
   if (!sourceId) return null;
-  if (String(sourceId).startsWith('qq:')) return 'qqmusic';
-  return 'netease';
+  if (isQQSource(sourceId)) return Platform.QQ_MUSIC;
+  return Platform.NETEASE;
 }
 
 /**
@@ -115,7 +116,7 @@ export async function renderSharePage(data) {
   const albumImg = coverURL(t.album_mid || (meta && meta.album_mid));
 
   const lyricsLabel = t.lyricsSource
-    ? (t.lyricsSource === 'netease' ? '网易云音乐' : 'QQ 音乐')
+    ? (t.lyricsSource === Platform.NETEASE ? '网易云音乐' : 'QQ 音乐')
     : '';
   const byline = t.from ? `由 ${esc(t.from)} 分享` : '来自好友的分享';
 
@@ -237,7 +238,7 @@ export async function openShareModal(song) {
   const sourceId = getLyricsSourceIdForSong(song.song_mid);
   const lsrc = sourceTypeOf(sourceId);
   const lyricsLabel = lsrc
-    ? (lsrc === 'netease' ? '网易云音乐' : 'QQ 音乐')
+    ? (lsrc === Platform.NETEASE ? '网易云音乐' : 'QQ 音乐')
     : '无';
 
   const albumImg = coverURL(song.album_mid);

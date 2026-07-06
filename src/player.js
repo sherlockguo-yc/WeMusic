@@ -188,6 +188,7 @@ function autoAdvance() {
   const from = document.hidden ? 'bg-ended/sync' : 'timer';
   console.log(`[bg:advance] autoAdvance (from=${from}, elapsed=${elapsed}s, dur=${totalDur}s, hidden=${document.hidden})`);
   stopTimer();
+  _stopBgSync(); // 停止后台校准定时器，避免干扰下一首歌曲初始化
   _flushLog(totalDur || elapsed);
   if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
   if (state.playMode === 'single') { playCurrent(); return; }
@@ -720,10 +721,8 @@ function _startBgSync() {
       elapsed = real;
       _updateCoverRing();
     }
-    if (totalDur > 0 && elapsed >= totalDur - 1) {
-      console.log(`[bgSync] elapsed ${elapsed}s >= dur-1=${totalDur-1}s — autoAdvance`);
-      autoAdvance();
-    }
+    // autoAdvance 完全由 bgAudio.ended 事件触发，不在此主动切歌
+    // 避免 bgAudio.currentTime 瞬时跳变 / 流时长与元数据不一致时提前切断播放
   }, 4000);
   console.log('[bgSync] timer started (4s interval)');
 }

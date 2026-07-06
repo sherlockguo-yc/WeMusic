@@ -341,7 +341,7 @@ function openAddModal() {
     const some = contained > 0 && !all;
     const badge = all ? '<span class="add-pl-check all" title="全部已在此歌单"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'
       : some ? `<span class="add-pl-check some" title="${contained}/${pendingKeys.length} 首已在此歌单">•</span>` : '';
-    return `<div class="add-pl-row" data-id="${p.id}"><span>${esc(p.name)}</span><span class="add-pl-meta">${badge}<span class="count">${p.count} 首</span></span></div>`;
+    return `<div class="add-pl-row" data-id="${p.id}">${badge}<span class="add-pl-name">${esc(p.name)}</span><span class="add-pl-meta"><span class="count">${p.count} 首</span></span></div>`;
   }).join('') || '<div class="empty">还没有歌单，点下方新建</div>';
   $('addModal').classList.add('show');
   list.querySelectorAll('.add-pl-row').forEach((el) => { el.onclick = () => commitAdd(Number(el.dataset.id)); });

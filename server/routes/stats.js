@@ -8,6 +8,7 @@ import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, se
 import { getTopList, searchSongs, searchSongsForRecommend } from '../services/qqmusic.js';
 import { renderPosterPNG } from '../services/poster.js';
 import { POSTER_THEMES } from '../../shared/poster-template.js';
+import { decodeSourceId, Platform } from '../../shared/constants.js';
 
 const router = express.Router();
 router.use(authRequired);
@@ -663,14 +664,14 @@ router.get('/lyrics', async (req, res) => {
   try {
     // 1. 若指定了 sourceId，直接按该 id 拉取（不缓存，换源操作）
     if (sourceId) {
-      if (String(sourceId).startsWith('qq:')) {
-        const mid = String(sourceId).replace('qq:', '');
-        const raw = await qqFetchLyric(mid);
+      const { platform, id } = decodeSourceId(sourceId);
+      if (platform === Platform.QQ_MUSIC) {
+        const raw = await qqFetchLyric(id);
         if (!raw.trim()) return res.json({ lines: [], sourceId, error: '该歌曲暂无歌词' });
         return res.json({ lines: parseLrc(raw), sourceId, song: name, artist: singer });
       }
-      const result = await fetchLyricsById(Number(sourceId));
-      return res.json({ lines: result.lines, sourceId: Number(sourceId) });
+      const result = await fetchLyricsById(Number(id));
+      return res.json({ lines: result.lines, sourceId: Number(id) });
     }
 
     // 2. 检查缓存（同名同歌手 24h 内复用）

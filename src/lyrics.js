@@ -2,6 +2,7 @@
 import { $, esc, albumCover, toast, PLAY_ICON, PAUSE_ICON, fetchBlockedList, blockedSectionHtml, bindBlockedSection } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
+import { LyricsSource } from './platform.js';
 
 // 预加载 player 模块（避免在 setInterval 中重复 import，解决循环依赖）
 const _playerP = import('./player.js');
@@ -253,7 +254,7 @@ async function openLyricsSwitchModal(song) {
 
   list.innerHTML = lyricsCandidates.map((c, i) => {
     const isCurrent = c.id === lyricsCurrentSourceId;
-    const isQQ = c.source === 'qq';
+    const isQQ = c.source === LyricsSource.QQ;
     const platformLabel = isQQ ? 'QQ音乐' : '网易云';
     return `<div class="cand-row ${isCurrent ? 'current' : ''}" data-i="${i}">
       <span class="cand-rank">${i + 1}</span>

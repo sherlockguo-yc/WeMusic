@@ -1,3 +1,5 @@
+import { Platform } from '../../shared/constants.js';
+
 /**
  * QQ 音乐数据服务
  * 使用 QQ 音乐公开 Web 接口，仅供本地个人学习使用。
@@ -82,7 +84,7 @@ function normalizeSong(raw = {}) {
     duration: raw.interval || raw.duration || 0,
     hires,
     lossless,
-    source: 'qqmusic',
+    source: Platform.QQ_MUSIC,
   };
 }
 

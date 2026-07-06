@@ -10,6 +10,7 @@ import playRouter from './routes/play.js';
 import statsRouter from './routes/stats.js';
 import adminRouter from './routes/admin.js';
 import { searchLyricsCandidates } from './services/lyrics.js';
+import { shortNameToSourceType } from '../shared/constants.js';
 
 const app = express();
 
@@ -115,8 +116,8 @@ app.get('/api/share/lyrics', async (req, res) => {
       const c = candidates[0];
       return res.json({
         sourceId: String(c.id),
-        // 根据 candidate.source 判断实际来源（不要硬编码网易云）
-        sourceType: c.source === 'qq' ? 'qqmusic' : 'netease',
+        // 根据 candidate.source 判断实际来源
+        sourceType: shortNameToSourceType(c.source),
         name: c.name || '',
         artist: c.artist || '',
       });
