@@ -97,11 +97,17 @@ function _updateCoverRing() {
   ring.style.strokeDashoffset = COVER_RING_CIRC * (1 - progress);
 }
 
+function _updateSeekBarUI(elapsed, totalDur) {
+  const pct = totalDur > 0 ? Math.min(100, (elapsed / totalDur) * 100) : 0;
+  $('seekBar').value = totalDur > 0 ? Math.min(1000, Math.round((elapsed / totalDur) * 1000)) : 0;
+  $('seekBar').style.setProperty('--seek-pct', pct + '%');
+}
+
 export function resetProgress(d) {
   elapsed = 0; totalDur = Number(d) || 0; timerPaused = false;
   $('curTime').textContent = '0:00';
   $('durTime').textContent = fmtDur(totalDur);
-  $('seekBar').value = 0;
+  _updateSeekBarUI(0, totalDur);
   const ring = $('coverProgressFill');
   if (ring) ring.style.strokeDashoffset = COVER_RING_CIRC;
 }
@@ -118,7 +124,7 @@ export function startTimer(d) {
     elapsed++;
     $('curTime').textContent = fmtDur(elapsed);
     if (totalDur > 0) {
-      $('seekBar').value = Math.min(1000, Math.round((elapsed / totalDur) * 1000));
+      _updateSeekBarUI(elapsed, totalDur);
       _updateCoverRing();
       if (elapsed >= totalDur + 1) autoAdvance();
     }
@@ -813,7 +819,7 @@ function _onBiliMessage(e) {
     elapsed = Math.max(0, Math.round(elapsed - delay));
     $('curTime').textContent = fmtDur(elapsed);
     if (totalDur > 0) {
-      $('seekBar').value = Math.min(1000, Math.round((elapsed / totalDur) * 1000));
+      _updateSeekBarUI(elapsed, totalDur);
       _updateCoverRing();
     }
   }
@@ -967,7 +973,7 @@ export function initPlayer() {
       if (_bgPlaying && bgAudio.currentTime > 1) {
         elapsed = Math.round(bgAudio.currentTime);
         $('curTime').textContent = fmtDur(elapsed);
-        if (totalDur > 0) $('seekBar').value = Math.min(1000, Math.round((elapsed / totalDur) * 1000));
+        if (totalDur > 0) _updateSeekBarUI(elapsed, totalDur);
       }
 
       // 重建 iframe，带时间戳对齐进度

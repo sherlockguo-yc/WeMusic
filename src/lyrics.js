@@ -345,6 +345,7 @@ export function initLyrics() {
   };
   $('lpSeekBar').addEventListener('input', () => {
     $('seekBar').value = Number($('lpSeekBar').value);
+    $('seekBar').style.setProperty('--seek-pct', ($('seekBar').value / 10) + '%');
     $('seekBar').dispatchEvent(new Event('input'));
   });
 }
