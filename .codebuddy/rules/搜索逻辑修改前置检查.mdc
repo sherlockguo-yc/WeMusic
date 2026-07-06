@@ -1,3 +1,9 @@
+---
+description: 修改搜索/匹配/候选评分逻辑前的强制前置检查步骤
+alwaysApply: true
+enabled: true
+---
+
 # 搜索/匹配逻辑修改前置步骤
 
 修改搜索、匹配、候选评分等逻辑（如 `server/services/qqmusic.js` 的 `searchSongs`、`server/services/lyrics.js` 的 `searchLyricsCandidates`、`server/routes/play.js` 的 `scoreVideo`）前，按顺序完成以下检查：

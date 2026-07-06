@@ -6,7 +6,7 @@ updatedAt: 2026-07-05T09:11:00.000Z
 provider: 
 ---
 
-## 十二、CSS 布局：禁止 Grid/Flex 与 absolute 混用
+## CSS 布局：禁止 Grid/Flex 与 absolute 混用
 
 ### 核心原则
 
@@ -50,4 +50,16 @@ grep -n 'position: absolute' public/css/style.css | head -20
 - 子元素**内部**的装饰性 absolute（如按钮内的 SVG、封面 overlay、工具提示）不违反此规则——只要不影响兄弟元素间的位置计算。
 - 移动端 `@media (max-width: 720px)` 下 `.player` 切为 `flex; flex-wrap: wrap` 是**有意为之的独立布局模式**，不适用 desktop 的 grid 约束。
 - 垂直方向（如 `top: 50%; transform: translateY(-50%)` 垂直居中）可以单独用 absolute 调整，只要水平位置仍由 grid/flex 决定。
+
+### Chromium 空 inline-flex 容器高度 bug
+
+空内容的 `display: inline-flex` 元素在 Chromium 中作为 flex item 时会产生异常隐式高度（约 120px），**与 CSS 中设置的高度值完全无关**，是 Chromium 内核 bug。触发条件：元素是 flex item 且自身 `display: inline-flex` 且内容为空。
+
+**解决方案**：不要用空内容 + CSS 隐藏，改用独立的占位元素：
+
+```css
+.placeholder { display: inline-block; width: 16px; flex: 0 0 16px; height: 16px; align-self: center; }
+```
+
+已应用场景：`.add-pl-check-spacer`。
 
