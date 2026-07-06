@@ -284,7 +284,17 @@ function updateSleepHint() {
   const hint = $('sleepHint');
   if (!hint) return;
   if (sleepAfterSong) { hint.textContent = '将在当前歌曲播完后停止'; return; }
-  if (sleepTimeout) { hint.textContent = '定时已设置，播放中…'; return; }
+  if (sleepEndTime) {
+    const remain = Math.max(0, sleepEndTime - Date.now());
+    const m = Math.floor(remain / 60000);
+    const s = Math.floor((remain % 60000) / 1000);
+    if (m > 0) {
+      hint.textContent = `${m} 分 ${s} 秒后停止`;
+    } else {
+      hint.textContent = `${s} 秒后停止`;
+    }
+    return;
+  }
   hint.textContent = '';
 }
 
@@ -325,8 +335,12 @@ function updateSleepHint() {
 // ---------------- 定时关闭 ----------------
 let sleepTimeout = null;
 let sleepAfterSong = false;
+let sleepEndTime = 0;
+let sleepTick = null;
 function clearSleep() {
   if (sleepTimeout) { clearTimeout(sleepTimeout); sleepTimeout = null; }
+  if (sleepTick) { clearInterval(sleepTick); sleepTick = null; }
+  sleepEndTime = 0;
   sleepAfterSong = false;
 }
 function stopPlayback() {
@@ -345,11 +359,13 @@ function setSleep(v) {
     return;
   }
   const min = Number(v);
+  sleepEndTime = Date.now() + min * 60000;
   sleepTimeout = setTimeout(() => {
     stopPlayback();
     clearSleep();
     toast('定时已到，已停止播放');
   }, min * 60000);
+  sleepTick = setInterval(updateSleepHint, 1000);
   toast(`已设置 ${min} 分钟后停止`);
   updateSleepHint();
 }
