@@ -1,0 +1,52 @@
+## 新建文件前必查项目配置
+
+### 规则
+
+**在创建任何 `.js` 文件之前，必须先确认以下两项，避免因模块系统不匹配导致全部重写：**
+
+1. **读取 `package.json` 的 `"type"` 字段**：确认是 `"module"`（ESM，使用 `import`/`export`）还是 `"commonjs"`（CJS，使用 `require`/`module.exports`），新文件使用对应的模块系统。
+2. **读取 `vite.config.js` 的 `root` 字段**：如果要从前端 `src/` 导入其他目录（如 `shared/`），确认 Vite 的 `root` 是否允许跨目录引用。若 `root: 'src'`，则 `src/` 无法 `import` 项目根目录的文件，需要在前端目录内创建独立常量文件。
+
+### 背景（为什么会有这条规则）
+
+2026-07-06 引入平台抽象层时，Agent 先创建了 CJS 格式的 `shared/constants.js` 和 `lyrics-providers/*.js`（`module.exports`/`require`），后发现项目 `"type": "module"` 是 ESM 环境，全部 3 个文件需重写为 `export`/`import`。同一文件 `server/services/lyrics.js` 被写了 3 次（CJS → ESM+require → 纯ESM）。
+
+同时，Agent 试图从 `src/` 导入 `shared/constants.js`，但 Vite `root: 'src'` 使 `shared/` 不可达，需要创建独立的 `src/platform.js`。
+
+教训：花 20 秒读两个配置文件，能省 10 分钟返工。
+
+### 检查清单
+
+```bash
+# 1. 确认模块系统
+cat package.json | grep '"type"'
+
+# 2. 确认 Vite root
+cat vite.config.js | grep "root"
+```
+
+### 决策速查
+
+| package.json type | Vite root | 前端能 import shared/ 吗 | 新文件模块格式 |
+|-------------------|-----------|------------------------|-------------|
+| `"module"` | `'src'` | ❌ 不能，Vite 只处理 src 下 | ESM |
+| `"module"` | `'.'` | ✅ 可以 | ESM |
+| 无 type | `'src'` | ❌ 不能 | CJS（CommonJS） |
+| 无 type | `'.'` | ✅ 可以 | CJS |
+
+<!--
+┌─ 决策上下文 ────────────────────────────┐
+│ 日期: 2026-07-06                         │
+│ 触发: 引入平台抽象层时，未先查 package.json │
+│        的 "type" 和 vite.config.js 的     │
+│        root，导致 3 个文件全部重写为 ESM，  │
+│        且前端需额外创建 src/platform.js     │
+│ 方案A: 不设规则，靠 Agent 自觉           │
+│ 方案B: 设 Rule，强制新建前必查配置        │
+│ 方案C: 在 workspace rules 中追加         │
+│ 选择: B                                  │
+│ 理由: 这是明确可自动化检查的步骤，20秒     │
+│       能避免大量返工                      │
+│ 重评条件: 项目不再使用 Vite / 切换运行时  │
+└──────────────────────────────────────────┘
+-->
