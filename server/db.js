@@ -132,6 +132,16 @@ db.exec(`
     saved_at    INTEGER NOT NULL,
     PRIMARY KEY (user_id, album_mid)
   );
+
+  /* 源质量众包：记录每个源（视频/歌词）对每首歌被完整播放的次数 */
+  CREATE TABLE IF NOT EXISTS source_completions (
+    source_type TEXT NOT NULL,           -- 'video' | 'lyrics'
+    source_id   TEXT NOT NULL,           -- bvid（视频）| 网易云 songId / qq:mid（歌词）
+    song_key    TEXT NOT NULL,           -- name__singer
+    completions INTEGER DEFAULT 1,
+    last_updated INTEGER NOT NULL,
+    PRIMARY KEY (source_type, source_id, song_key)
+  );
 `);
 
 // ---- 迁移：为旧库补充字段 ----

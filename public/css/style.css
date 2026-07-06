@@ -731,6 +731,19 @@ input[type='range']::-moz-range-thumb {
 }
 .poster-gen-btn:active { transform: translateY(0); box-shadow: none; }
 
+/* 海报格式切换（桌面版 / 手机版） */
+.pfmt-btn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 12px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text-dim);
+  background: var(--bg-soft); border: 1.5px solid var(--border);
+  transition: background .15s, border-color .15s, color .15s;
+}
+.pfmt-btn:hover { background: var(--bg-card); border-color: var(--accent); }
+.pfmt-btn.active {
+  background: rgba(42,183,88,.1); border-color: var(--accent); color: var(--accent);
+}
+
 /* 添加到歌单列表 */
 .add-list { max-height: 50vh; overflow-y: auto; margin-bottom: 14px; }
 .add-pl-row {

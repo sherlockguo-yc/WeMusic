@@ -1,6 +1,6 @@
 // 内容审核 Tab（反馈 + 屏蔽源 + 敏感词库）
 import { api } from '../api.js';
-import { esc, toast } from '../utils.js';
+import { esc, toast, uiConfirm, fmtTime } from '../utils.js';
 
 let currentRole = 'moderator';
 let activeSubTab = 'feedback';
@@ -62,6 +62,8 @@ async function renderFeedback(wrap) {
 
     wrap.querySelectorAll('[data-action="del-fb"]').forEach((btn) => {
       btn.onclick = async () => {
+        const ok = await uiConfirm('确认删除此反馈？\n\n此操作不可恢复。');
+        if (!ok) return;
         await api(`/admin/feedback/${btn.dataset.id}`, { method: 'DELETE' });
         toast('已删除');
         loadSubTab();
@@ -142,10 +144,4 @@ async function renderSensitiveWords(wrap) {
 function typeLabel(t) {
   const map = { bug: 'Bug', feature: '需求', other: '其他' };
   return map[t] || t;
-}
-function fmtTime(ts) {
-  if (!ts) return '-';
-  const d = new Date(ts);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

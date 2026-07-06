@@ -16,16 +16,19 @@ export let playSeq = 0;
 let _logTimer = null;
 let _pendingSong = null;
 let _pendingDur = 0;
+let _pendingLyricsId = null; // 当前播放歌曲的默认歌词源 ID（预取，不依赖歌词面板）
 
 export function logPlay(song, dur) {
   if (!song) return;
   _flushLog(elapsed);
   if (_logTimer) clearTimeout(_logTimer);
-  _pendingSong = null;
+  _pendingSong = null; _pendingLyricsId = null;
   _logTimer = setTimeout(() => {
     _pendingSong = song;
     _pendingDur = dur || song.duration || 0;
   }, 3000);
+  // 预取默认歌词源 ID（不依赖歌词面板是否打开），确保完播时能统计歌词源
+  ensureLyricsSourceId(song);
 }
 
 // 页面关闭/刷新时上报最后一次播放日志
@@ -37,7 +40,8 @@ export function _flushLog(playedSec) {
   if (!_pendingSong) return;
   const song = _pendingSong;
   const dur = _pendingDur;
-  _pendingSong = null; _pendingDur = 0;
+  const lyricsSourceId = _pendingLyricsId;
+  _pendingSong = null; _pendingDur = 0; _pendingLyricsId = null;
   const sec = Math.max(0, Math.min(Math.round(playedSec), dur || 9999));
   if (sec < 5) return;
   api('/stats/log', {
@@ -46,8 +50,40 @@ export function _flushLog(playedSec) {
       song_mid: song.song_mid, name: song.name, singer: song.singer,
       album: song.album, album_mid: song.album_mid, duration: dur,
       played_sec: sec, bvid: song.bvid,
+      lyrics_source_id: lyricsSourceId || undefined,
     },
   }).catch(() => {});
+}
+
+/** 预取当前歌曲的默认歌词源 ID，写入 localStorage 缓存 + _pendingLyricsId */
+async function ensureLyricsSourceId(song) {
+  if (!song || !song.name) return;
+  // 先查 localStorage 缓存（lyrics.js 写入的 song_mid → sourceId 映射）
+  try {
+    const cache = JSON.parse(localStorage.getItem('wemusic_lyrics_src') || '{}');
+    if (song.song_mid && cache[song.song_mid]) {
+      _pendingLyricsId = cache[song.song_mid];
+      return;
+    }
+  } catch { /* ignored */ }
+  // 缓存未命中 → 调公开 API 拉取默认歌词源（无需登录）
+  try {
+    const params = new URLSearchParams();
+    params.set('n', song.name);
+    if (song.singer) params.set('a', song.singer);
+    const resp = await fetch(`/api/share/lyrics?${params.toString()}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data && data.sourceId) {
+      _pendingLyricsId = String(data.sourceId);
+      // 写入缓存，后续同一首歌命中 localStorage
+      try {
+        const cache = JSON.parse(localStorage.getItem('wemusic_lyrics_src') || '{}');
+        cache[song.song_mid] = data.sourceId;
+        localStorage.setItem('wemusic_lyrics_src', JSON.stringify(cache));
+      } catch { /* ignored */ }
+    }
+  } catch { /* 静默失败，不影响播放 */ }
 }
 
 // ---- 进度控制 ----

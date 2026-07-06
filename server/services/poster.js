@@ -10,7 +10,7 @@
  *   - 所有异常都会冒泡到调用方，由路由层转为 500
  */
 import puppeteer from 'puppeteer';
-import { posterHTMLPro, posterCSSPro } from '../../shared/poster-template.js';
+import { posterHTMLPro, posterCSSPro, posterHTMLMobile, posterCSSMobile, MOBILE_PAGE_COUNT, MOBILE_PAGE_HEIGHT } from '../../shared/poster-template.js';
 
 let browserPromise = null;
 let browserFailed = false;
@@ -54,39 +54,29 @@ function markBrowserBroken() {
  * 渲染海报为 PNG Buffer
  * @param {object} data 已格式化好的海报数据（见 shared/poster-template.js）
  * @param {string} themeKey 主题 key（mint/dark/sunset/ocean）
- * @returns {Promise<Buffer>}
+ * @param {'desktop'|'mobile'} format 海报格式，默认 desktop
+ * @returns {Promise<Buffer | Buffer[]>} desktop 返回单个 Buffer；mobile 返回 5 个 Buffer 数组
  */
-export async function renderPosterPNG(data, themeKey) {
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
-  * { margin:0; padding:0; }
-  html, body { background: transparent; }
-  ${posterCSSPro(themeKey)}
-</style></head>
-<body>${posterHTMLPro(data, themeKey)}</body></html>`;
+export async function renderPosterPNG(data, themeKey, format = 'desktop') {
+  if (format === 'mobile') {
+    return renderMobilePages(data, themeKey);
+  }
+  return renderDesktopPoster(data, themeKey);
+}
 
+/** 桌面版：单张 PNG */
+async function renderDesktopPoster(data, themeKey) {
+  const html = buildHTMLDoc(posterCSSPro(themeKey), posterHTMLPro(data, themeKey));
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
     await page.setViewport({ width: 690, height: 1500, deviceScaleFactor: 2 });
-    // setContent 走的是 setTimeout 注入 HTML，DOM 已构造但远程图片（封面）需额外等待
     await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    // 显式等待所有图片（包括 CSS 背景图）解码完成
-    await page.evaluate(async () => {
-      const imgs = Array.from(document.images);
-      await Promise.all(imgs.map((img) =>
-        img.complete ? Promise.resolve() : new Promise((resolve) => {
-          img.onload = img.onerror = resolve;
-          setTimeout(resolve, 8000); // 单张图最多等 8s
-        })
-      ));
-    });
+    await waitForImages(page);
     const el = await page.$('.wm-poster-pro');
     if (!el) throw new Error('海报渲染节点未找到');
-    const buffer = await el.screenshot({ type: 'png' });
-    return buffer;
+    return await el.screenshot({ type: 'png' });
   } catch (e) {
-    // 连接断开 / 协议错误 / 浏览器崩溃 → 重建实例，避免污染下次请求
     if (/Connection closed|Protocol error|Browser has been|Target closed|detached/i.test(e.message || '')) {
       markBrowserBroken();
     }
@@ -94,6 +84,65 @@ export async function renderPosterPNG(data, themeKey) {
   } finally {
     await page.close().catch(() => {});
   }
+}
+
+/** 手机版：5 张 PNG，每张一张完整手机屏幕 */
+async function renderMobilePages(data, themeKey) {
+  const pages = posterHTMLMobile(data, themeKey);
+  if (!Array.isArray(pages) || pages.length !== MOBILE_PAGE_COUNT) {
+    throw new Error(`手机版应返回 ${MOBILE_PAGE_COUNT} 页，实际 ${Array.isArray(pages) ? pages.length : '非数组'}`);
+  }
+  const html = buildHTMLDoc(posterCSSMobile(themeKey), pages.join('\n'));
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    // 一次性渲染所有页：高度 = N × 单页高度
+    await page.setViewport({
+      width: 430,
+      height: MOBILE_PAGE_HEIGHT * MOBILE_PAGE_COUNT,
+      deviceScaleFactor: 3,
+    });
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await waitForImages(page);
+    // 分别截每页
+    const buffers = [];
+    for (let i = 0; i < MOBILE_PAGE_COUNT; i++) {
+      const el = await page.$(`.wm-poster-mobile:nth-of-type(${i + 1})`);
+      if (!el) throw new Error(`第 ${i + 1} 页渲染节点未找到`);
+      const buf = await el.screenshot({ type: 'png' });
+      buffers.push(buf);
+    }
+    return buffers;
+  } catch (e) {
+    if (/Connection closed|Protocol error|Browser has been|Target closed|detached/i.test(e.message || '')) {
+      markBrowserBroken();
+    }
+    throw e;
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
+function buildHTMLDoc(css, bodyHTML) {
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  * { margin:0; padding:0; }
+  html, body { background: transparent; }
+  ${css}
+</style></head>
+<body>${bodyHTML}</body></html>`;
+}
+
+async function waitForImages(page) {
+  await page.evaluate(async () => {
+    const imgs = Array.from(document.images);
+    await Promise.all(imgs.map((img) =>
+      img.complete ? Promise.resolve() : new Promise((resolve) => {
+        img.onload = img.onerror = resolve;
+        setTimeout(resolve, 8000);
+      })
+    ));
+  });
 }
 
 // 进程退出时关闭浏览器实例

@@ -285,6 +285,14 @@ export function uiChoice(title, message, options, currentValue = null) {
   });
 }
 
+// 格式化时间戳为可读格式
+export function fmtTime(ts) {
+  if (!ts) return '-';
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // ---- 全局 tooltip：统一 stats.js / playlist-ui.js 两套实现 ----
 let _tipEl = null;
 

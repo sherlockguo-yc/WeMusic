@@ -3,6 +3,14 @@
 import { api } from '../api.js';
 import { esc } from '../utils.js';
 
+function fmtTotalDur(sec) {
+  if (!sec) return '0 小时';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h} 小时 ${m} 分`;
+  return `${m} 分钟`;
+}
+
 export async function renderOverview(container) {
   container.innerHTML = '<div class="loading">加载中...</div>';
 
@@ -12,14 +20,6 @@ export async function renderOverview(container) {
       api('/admin/play-trend'),
       api('/admin/top-songs'),
     ]);
-
-    const fmtDur = (sec) => {
-      if (!sec) return '0 小时';
-      const h = Math.floor(sec / 3600);
-      const m = Math.floor((sec % 3600) / 60);
-      if (h > 0) return `${h} 小时 ${m} 分`;
-      return `${m} 分钟`;
-    };
 
     container.innerHTML = `
       <div class="admin-section">
@@ -42,11 +42,11 @@ export async function renderOverview(container) {
             <div class="admin-card-label">歌单</div>
           </div>
           <div class="admin-card">
-            <div class="admin-card-value">${fmtDur(overview.totalSec)}</div>
+            <div class="admin-card-value">${fmtTotalDur(overview.totalSec)}</div>
             <div class="admin-card-label">总播放时长</div>
           </div>
           <div class="admin-card">
-            <div class="admin-card-value">${fmtDur(overview.todaySec)}</div>
+            <div class="admin-card-value">${fmtTotalDur(overview.todaySec)}</div>
             <div class="admin-card-label">今日播放</div>
           </div>
         </div>
@@ -57,7 +57,7 @@ export async function renderOverview(container) {
         <div class="admin-trend">
           ${trend.map((d) => `
             <div class="admin-trend-item">
-              <div class="admin-trend-bar" style="height:${Math.max(2, d.sec / Math.max(...trend.map(x => x.sec || 1)) * 100)}%"></div>
+              <div class="admin-trend-bar" style="height:${Math.max(2, d.sec / (Math.max(1, ...trend.map(x => x.sec || 0))) * 100)}%"></div>
               <span class="admin-trend-date">${d.date}</span>
               <span class="admin-trend-val">${d.sec ? Math.round(d.sec / 60) + '分' : '0'}</span>
             </div>

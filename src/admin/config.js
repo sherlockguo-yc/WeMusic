@@ -40,7 +40,7 @@ export async function renderConfig(container) {
       </div>
     `;
 
-    // 绑定自动保存
+    // 绑定自动保存（带防抖锁，防止快速连击状态错乱）
     KEYS.forEach(({ id, key }) => {
       const checkbox = container.querySelector(`#${id}`);
       const switchEl = container.querySelector(`#${id}Switch`);
@@ -48,16 +48,16 @@ export async function renderConfig(container) {
       if (!checkbox) return;
 
       let prevChecked = checkbox.checked;
+      let saving = false; // 防抖锁
 
-      // 点击整行区域（含开关）触发切换
       switchEl.onclick = async (e) => {
-        // 让浏览器先完成 checkbox 的勾选变化
+        if (saving) return; // 上一次保存未完成，忽略本次点击
         await new Promise((r) => setTimeout(r, 0));
         const nowChecked = checkbox.checked;
+        if (nowChecked === prevChecked) return;
 
-        if (nowChecked === prevChecked) return; // 没变化
-
-        status.textContent = '保存中…';
+        saving = true;
+        status.textContent = '…';
         status.className = 'config-status saving';
 
         try {
@@ -75,6 +75,7 @@ export async function renderConfig(container) {
           toast(e.message || '保存失败，已恢复');
           setTimeout(() => { status.textContent = ''; status.className = 'config-status'; }, 3000);
         }
+        saving = false;
       };
     });
   } catch (e) {

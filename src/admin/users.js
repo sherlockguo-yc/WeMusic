@@ -1,19 +1,22 @@
 // 用户管理 Tab（含归档用户）
 import { api } from '../api.js';
-import { esc, toast, uiConfirm, uiPrompt, uiChoice } from '../utils.js';
+import { esc, toast, uiConfirm, uiPrompt, uiChoice, fmtTime } from '../utils.js';
+import { refreshCachedRole } from '../admin-panel.js';
 
 let currentRole = 'viewer';
 let activeView = 'active'; // 'active' | 'archived'
+let currentPage = 1;
 
 export async function renderUsers(container, role) {
   currentRole = role;
   activeView = 'active';
+  currentPage = 1;
   container.innerHTML = `
     <div class="admin-section">
       <h2 class="admin-section-title">用户管理</h2>
       <div class="admin-tabs">
         <button class="admin-tab-btn active" data-view="active">活跃用户</button>
-        <button class="admin-tab-btn" data-view="archived">归档用户</button>
+        ${currentRole === 'super_admin' ? '<button class="admin-tab-btn" data-view="archived">归档用户</button>' : ''}
       </div>
       <div id="adminUserList" class="admin-table-wrap"></div>
       <div class="admin-pagination" id="adminUserPagination"></div>
@@ -25,6 +28,7 @@ export async function renderUsers(container, role) {
       container.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       activeView = btn.dataset.view;
+      currentPage = 1;
       loadPage(1);
     };
   });
@@ -39,6 +43,7 @@ async function loadPage(page) {
       renderArchivedUsers(users);
     } else {
       const data = await api(`/admin/users?page=${page}&limit=30`);
+      currentPage = page;
       renderActiveUsers(data);
       renderPagination(data);
     }
@@ -127,17 +132,17 @@ function bindActions(container) {
       const username = btn.dataset.username;
 
       if (action === 'archive') {
-        const ok = await uiConfirm(`确认归档用户「${username}」？\n\n归档后该用户将无法登录，但数据保留。可在「归档用户」页面恢复或彻底删除。`);
+        const ok = await uiConfirm(`确认归档用户「${username}」？\n\n归档后该用户将无法登录，但数据保留。`);
         if (!ok) return;
         await api(`/admin/users/${id}/archive`, { method: 'POST' });
         toast(`已归档 ${username}`);
-        loadPage(1);
+        loadPage(currentPage);
       } else if (action === 'restore') {
         const ok = await uiConfirm(`确认恢复用户「${username}」？`);
         if (!ok) return;
         await api(`/admin/users/${id}/restore`, { method: 'POST' });
         toast(`已恢复 ${username}`);
-        loadPage(1);
+        loadPage(currentPage);
       } else if (action === 'delete') {
         const ok = await uiConfirm(`确认彻底删除用户「${username}」？\n\n此操作不可恢复。`);
         if (!ok) return;
@@ -146,7 +151,7 @@ function bindActions(container) {
         try {
           await api(`/admin/users/${id}`, { method: 'DELETE', body: { confirmUsername: username } });
           toast(`已删除 ${username}`);
-          loadPage(1);
+          loadPage(currentPage);
         } catch (e) { toast(e.message || '删除失败'); }
       } else if (action === 'role') {
         const roleDefs = [
@@ -165,8 +170,10 @@ function bindActions(container) {
         );
         if (!newRole) return;
         await api(`/admin/users/${id}/role`, { method: 'PUT', body: { role: newRole } });
+        // 如果修改的是自己的角色，同步更新缓存和导航
+        refreshCachedRole();
         toast(`已更新 ${username} 角色为 ${roleLabel(newRole)}`);
-        loadPage(1);
+        loadPage(currentPage);
       }
     };
   });
@@ -179,10 +186,4 @@ function roleLabel(r) {
 function statusLabel(s) {
   const map = { active: '正常', warned: '已警告', banned: '已封禁' };
   return map[s] || s;
-}
-function fmtTime(ts) {
-  if (!ts) return '-';
-  const d = new Date(ts);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

@@ -5,6 +5,7 @@ import { authRequired } from '../middleware/auth.js';
 import { searchVideos, getAudioStream, fetchAudio } from '../services/bilibili.js';
 import { config } from '../config.js';
 import db from '../db.js';
+import { getCrowdCompletions, crowdBonus } from '../services/crowd.js';
 
 const router = express.Router();
 
@@ -167,9 +168,11 @@ export function nameSegments(name) {
   return out;
 }
 
-export function rank(videos, name, singer, expectDur) {
+export function rank(videos, name, singer, expectDur, crowdCompletions = null) {
   const parts = singerParts(singer);
   const segs = nameSegments(name);
+  // 默认空 Map 兼容单元测试、手动搜索等无众包数据的场景
+  const crowd = crowdCompletions || new Map();
   let scored = videos
     .filter((v) => !isExcluded(v.title))
     // 歌名相关度过滤：歌名中至少一个 ≥2 字符片段必须出现在标题里
@@ -183,7 +186,7 @@ export function rank(videos, name, singer, expectDur) {
       live: isLive(v.title),
       hq: HQ_KW.some((k) => (v.title || '').toLowerCase().includes(k.toLowerCase())),
       singerOk: matchSinger(v, parts),
-      score: scoreVideo(v, name, singer, expectDur),
+      score: scoreVideo(v, name, singer, expectDur) + crowdBonus(crowd.get(v.bvid), 5),
     }));
 
   // 歌手准确性优先级最高：只要有该歌手的版本，就只保留该歌手的，过滤掉原唱/他人翻唱
@@ -259,8 +262,10 @@ router.post('/resolve', authRequired, async (req, res) => {
 
     console.log(`[video:resolve] "${name}" / "${singerFirst}" — ${all.length} raw results (W1:${w1.filter(r=>r.status==='fulfilled').length}q), segs:${nameSegments(name).join('|')}`);
 
-    const ranked = rank(all, name, singer, duration);
-    console.log(`[video:resolve] after rank: ${ranked.length} scored, blocked:${getBlockedSet(req.user.id, songKey(name, singer), 'video').size}`);
+    const sk = songKey(name, singer);
+    const videoCompletions = getCrowdCompletions('video', sk);
+    const ranked = rank(all, name, singer, duration, videoCompletions);
+    console.log(`[video:resolve] after rank: ${ranked.length} scored (crowd:${videoCompletions.size} sources), blocked:${getBlockedSet(req.user.id, sk, 'video').size}`);
 
     // 过滤掉用户已拉黑的视频源
     const blocked = getBlockedSet(req.user.id, songKey(name, singer), 'video');
@@ -304,9 +309,11 @@ router.get('/search', authRequired, async (req, res) => {
       }
     }
     // 关键：rank 时只对【歌名】做片段过滤，避免歌手名片段绕过过滤
-    const ranked = rank(all, songName, songSinger, 0);
+    const sk = songKey(songName, songSinger);
+    const videoCompletions = getCrowdCompletions('video', sk);
+    const ranked = rank(all, songName, songSinger, 0, videoCompletions);
     // 过滤被拉黑的视频源
-    const blocked = getBlockedSet(req.user.id, songKey(songName, songSinger), 'video');
+    const blocked = getBlockedSet(req.user.id, sk, 'video');
     const clean = ranked.filter((v) => !blocked.has(v.bvid));
     res.json({ candidates: clean });
   } catch (e) {

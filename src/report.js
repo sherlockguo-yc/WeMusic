@@ -185,9 +185,13 @@ function buildReportHtml(data, periodType) {
     days: data.period.days,
     persona: { icon: persona.icon, label: persona.label, desc: persona.desc },
     insightText: insight.plain,
-    topSongs: data.topSongs.slice(0, 5).map((s) => ({ name: s.name, singer: s.singer, albumMid: s.album_mid || '' })),
-    topArtists: data.topArtists.slice(0, 6).map((a) => ({ name: a.singer })),
-    topAlbums: (data.topAlbums || []).map((a) => ({ name: a.album, singer: a.singer || '', albumMid: a.album_mid || '' })),
+    topSongs: data.topSongs.slice(0, 5).map((s) => ({
+      name: s.name, singer: s.singer, albumMid: s.album_mid || '', playCount: s.play_count || 0,
+    })),
+    topArtists: data.topArtists.slice(0, 6).map((a) => ({ name: a.singer, playCount: a.play_count || 0 })),
+    topAlbums: (data.topAlbums || []).map((a) => ({
+      name: a.album, singer: a.singer || '', albumMid: a.album_mid || '', playCount: a.play_count || 0,
+    })),
     generatedAt: new Date().toLocaleDateString('zh-CN'),
   };
 
@@ -200,6 +204,7 @@ function buildReportHtml(data, periodType) {
 
 let _posterData = null;
 let _posterTheme = 'mint';
+let _posterFormat = 'desktop';
 let _posterModalBound = false;
 
 function renderPosterThemeGrid() {
@@ -213,10 +218,27 @@ function renderPosterThemeGrid() {
   });
 }
 
+function renderPosterFormatToggle() {
+  const container = $('posterFormatToggle');
+  container.innerHTML = `
+    <button class="pfmt-btn${_posterFormat === 'desktop' ? ' active' : ''}" data-fmt="desktop">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+      桌面版
+    </button>
+    <button class="pfmt-btn${_posterFormat === 'mobile' ? ' active' : ''}" data-fmt="mobile">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"/><line x1="12" x2="12" y1="18" y2="18.01"/></svg>
+      手机版
+    </button>`;
+  container.querySelectorAll('.pfmt-btn').forEach((btn) => {
+    btn.onclick = () => { _posterFormat = btn.dataset.fmt; renderPosterFormatToggle(); };
+  });
+}
+
 function openPosterModal(posterData) {
   if (!posterData) return;
   _posterData = posterData;
   renderPosterThemeGrid();
+  renderPosterFormatToggle();
   $('posterModal').classList.add('show');
 }
 
@@ -232,29 +254,56 @@ function downloadUrl(url, filename) {
 // 服务端 Puppeteer 渲染（效果更精细，需等待网络请求）
 async function generatePosterServer() {
   if (!_posterData) return;
-  toast('正在请求服务端生成…');
+  const isMobile = _posterFormat === 'mobile';
+  const fmtLabel = isMobile ? '手机版（5张）' : '桌面版';
+  const btn = $('posterServerBtn');
+  if (btn) btn.disabled = true;
+  toast(`正在生成${fmtLabel}海报…`);
   try {
     const headers = { 'Content-Type': 'application/json' };
     if (Auth.token) headers.Authorization = `Bearer ${Auth.token}`;
     const resp = await fetch('/api/stats/poster', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ theme: _posterTheme, data: _posterData }),
+      body: JSON.stringify({ theme: _posterTheme, format: _posterFormat, data: _posterData }),
     });
     if (!resp.ok) {
       let msg = `请求失败 (${resp.status})`;
       try { msg = (await resp.json()).error || msg; } catch { /* ignore */ }
       throw new Error(msg);
     }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    downloadUrl(url, `wemusic-report-${Date.now()}.png`);
-    URL.revokeObjectURL(url);
-    toast('海报已生成，开始下载');
+    if (isMobile) {
+      // 手机版：解析 JSON，逐张下载 5 张图
+      const json = await resp.json();
+      const ts = Date.now();
+      for (let i = 0; i < json.pages.length; i++) {
+        const p = json.pages[i];
+        const url = URL.createObjectURL(await dataUrlToBlob(p.dataUrl));
+        downloadUrl(url, `wemusic-weekly-${i + 1}-${p.name}-${ts}.png`);
+        URL.revokeObjectURL(url);
+        // 错开下载，避免浏览器拦截
+        if (i < json.pages.length - 1) await new Promise((r) => setTimeout(r, 200));
+      }
+      toast(`已下载 ${json.pages.length} 张手机版海报`);
+    } else {
+      // 桌面版：单张 PNG
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      downloadUrl(url, `wemusic-report-desktop-${Date.now()}.png`);
+      URL.revokeObjectURL(url);
+      toast('海报已生成，开始下载');
+    }
     $('posterModal').classList.remove('show');
   } catch (e) {
     toast('服务端生成失败：' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
   }
+}
+
+async function dataUrlToBlob(dataUrl) {
+  const r = await fetch(dataUrl);
+  return r.blob();
 }
 
 function bindPosterModalOnce() {

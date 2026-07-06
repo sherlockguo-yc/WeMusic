@@ -41,7 +41,7 @@ router.put('/bvid/:songMid', (req, res) => {
 // 播放日志上报（前端每次播放时调用）
 // ============================================================
 router.post('/log', (req, res) => {
-  const { song_mid, name, singer, album, album_mid, duration, played_sec, bvid } = req.body || {};
+  const { song_mid, name, singer, album, album_mid, duration, played_sec, bvid, lyrics_source_id } = req.body || {};
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
   const dur = Math.min(Math.max(Number(duration) || 0, 0), 86400);   // 0~24h
   const sec = Math.min(Math.max(Number(played_sec) || 0, 0), dur);  // 不超过歌曲时长
@@ -52,8 +52,25 @@ router.post('/log', (req, res) => {
     req.user.id, song_mid || '', name, singer || '', album || '', album_mid || '',
     dur, sec, bvid || '', Date.now()
   );
+
+  // 众包完播统计：播放时长 ≥ 歌曲时长的 90% 视为完整播放
+  if (dur > 0 && sec >= dur * 0.9) {
+    const songKey = `${name}__${singer || ''}`;
+    const now = Date.now();
+    const upsert = db.prepare(`
+      INSERT INTO source_completions (source_type, source_id, song_key, completions, last_updated)
+      VALUES (?, ?, ?, 1, ?)
+      ON CONFLICT(source_type, source_id, song_key) DO UPDATE SET
+        completions = completions + 1, last_updated = excluded.last_updated
+    `);
+    if (bvid) upsert.run('video', bvid, songKey, now);
+    if (lyrics_source_id) upsert.run('lyrics', String(lyrics_source_id), songKey, now);
+  }
+
   res.json({ ok: true });
 });
+
+export { getCrowdCompletions } from '../services/crowd.js';
 
 // 最近播放历史（从 play_logs 查最近 100 首不重复歌曲，跨设备共享）
 router.get('/history', (req, res) => {
@@ -827,13 +844,27 @@ router.get('/poster/themes', (req, res) => {
 });
 
 router.post('/poster', async (req, res) => {
-  const { theme, data } = req.body || {};
+  const { theme, format, data } = req.body || {};
   if (!data) return res.status(400).json({ error: '缺少海报数据' });
   const themeKey = POSTER_THEMES[theme] ? theme : 'mint';
+  const fmt = format === 'mobile' ? 'mobile' : 'desktop';
   try {
-    const buffer = await renderPosterPNG(data, themeKey);
-    res.set('Content-Type', 'image/png');
-    res.send(buffer);
+    const result = await renderPosterPNG(data, themeKey, fmt);
+    if (fmt === 'mobile') {
+      // 手机版：返回 4 张图（base64）+ 元信息
+      const pageNames = ['cover', 'stats', 'albums', 'rankings'];
+      res.json({
+        format: 'mobile',
+        pages: result.map((buf, i) => ({
+          name: pageNames[i] || `page-${i + 1}`,
+          dataUrl: `data:image/png;base64,${buf.toString('base64')}`,
+        })),
+      });
+    } else {
+      // 桌面版：单张 PNG
+      res.set('Content-Type', 'image/png');
+      res.send(result);
+    }
   } catch (e) {
     res.status(500).json({ error: '海报生成失败：' + e.message });
   }

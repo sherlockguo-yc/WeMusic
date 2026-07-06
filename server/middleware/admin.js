@@ -5,6 +5,8 @@
 
 import db from '../db.js';
 
+const stmtRole = db.prepare('SELECT role FROM users WHERE id = ?');
+
 const ROLE_HIERARCHY = {
   super_admin: 4,
   admin: 3,
@@ -17,7 +19,7 @@ export function requireRole(...roles) {
   const minLevel = Math.min(...roles.map((r) => ROLE_HIERARCHY[r] || 0));
   return (req, res, next) => {
     // 从数据库查询角色（不从 JWT 取，确保角色变更即时生效）
-    const row = db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.id);
+    const row = stmtRole.get(req.user.id);
     const userRole = row?.role || 'user';
     const userLevel = ROLE_HIERARCHY[userRole] || 0;
     // 附加到 req.user 供后续使用

@@ -147,21 +147,28 @@ async function init() {
   loadPrefsFromServer();
   loadLikes();
   import('./ui.js').then(({ loadDislikedSongs }) => loadDislikedSongs());
-  // 等待歌单加载完成后渲染视图（openDiscover 依赖 songIndex）
-  await plPromise;
+
+  // 歌单加载失败不阻断后续渲染（避免因 API 故障导致整个页面白屏）
+  try { await plPromise; } catch (e) { console.error('[init] 歌单加载失败:', e.message); }
 
   // 检查是否在 /admin 路由
   if (location.pathname === '/admin') {
-    import('./admin-panel.js').then(({ openAdminPanel }) => openAdminPanel());
+    import('./admin-panel.js').then(({ openAdminPanel }) => openAdminPanel())
+      .catch(() => { $('main').innerHTML = '<div class="empty">管理面板加载失败，请刷新页面重试</div>'; });
     return;
   }
 
-  const params = new URL(location.href).searchParams;
-  const v = params.get('v');
-  if (v) {
-    try { restoreView(v, JSON.parse(params.get('d') || '{}')); } catch { openDiscover(); }
-  } else {
-    openDiscover();
+  try {
+    const params = new URL(location.href).searchParams;
+    const v = params.get('v');
+    if (v) {
+      try { restoreView(v, JSON.parse(params.get('d') || '{}')); } catch { openDiscover(); }
+    } else {
+      openDiscover();
+    }
+  } catch (e) {
+    console.error('[init] 视图渲染失败:', e.message);
+    $('main').innerHTML = '<div class="empty">加载失败，请刷新页面重试</div>';
   }
 }
 
@@ -171,4 +178,8 @@ async function loadLikes() {
   import('./ui.js').then(({ updateLikesCount, updateAlbumCount }) => { updateLikesCount(); updateAlbumCount(); });
 }
 
-init().catch((e) => console.error(e));
+init().catch((e) => {
+  console.error('[init] 致命错误:', e.message);
+  const main = document.getElementById('main');
+  if (main) main.innerHTML = '<div class="empty">加载失败，请刷新页面重试</div>';
+});

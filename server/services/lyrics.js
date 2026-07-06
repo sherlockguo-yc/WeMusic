@@ -8,6 +8,8 @@
  * 每步都做：歌名完全匹配 + 歌手包含匹配 → 歌名匹配 → 第一条
  */
 
+import { getCrowdCompletions, crowdBonus } from './crowd.js';
+
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const HQQ = { 'User-Agent': UA, Referer: 'https://y.qq.com/portal/player.html' };
 const H   = { 'User-Agent': UA, Referer: 'https://music.163.com/' };
@@ -152,10 +154,15 @@ async function searchQQCandidates(name, singer = '') {
   add(name); if (nameClean !== name) add(nameClean); if (bracketCN) add(bracketCN);
   const results = await Promise.allSettled(queries.map((q) => qqSearchSongs(q)));
   const seenMid = new Set(); const candidates = [];
+
+  // 众包完播加权
+  const crowd = getCrowdCompletions('lyrics', `${name}__${singerFirst || ''}`);
+
   for (const r of results) { if (r.status !== 'fulfilled') continue;
     for (const s of r.value) { if (!s.mid || seenMid.has(s.mid)) continue; seenMid.add(s.mid);
       const { quality } = scoreCandidate(s, { name, singerFirst });
-      candidates.push({ id: `qq:${s.mid}`, mid: s.mid, name: s.name, artist: s.singer, quality, source: 'qq' }); }
+      const bonus = crowdBonus(crowd.get(`qq:${s.mid}`), 0.5);
+      candidates.push({ id: `qq:${s.mid}`, mid: s.mid, name: s.name, artist: s.singer, quality: quality + bonus, source: 'qq' }); }
   }
   candidates.sort((a, b) => b.quality - a.quality);
   const topCandidates = candidates.filter((c) => c.quality >= 2).slice(0, 5);
@@ -256,6 +263,9 @@ export async function searchLyricsCandidates(name, singer = '') {
   const idSeen = new Set();
   const candidates = [];
 
+  // 众包完播加权（NE 候选在此应用，QQ 候选已在 searchQQCandidates 内部应用）
+  const crowd = getCrowdCompletions('lyrics', `${name}__${singerFirst || ''}`);
+
   if (neResults.status === 'fulfilled') {
     for (const r of neResults.value) {
       if (r.status !== 'fulfilled') continue;
@@ -265,7 +275,8 @@ export async function searchLyricsCandidates(name, singer = '') {
         idSeen.add(`ne:${sid}`);
         const artistText = (s.artists || []).map((a) => a.name).join(' / ');
         const { quality } = scoreCandidate(s, { name, singerFirst });
-        candidates.push({ id: s.id, name: s.name, artist: artistText, quality, source: 'ne' });
+        const bonus = crowdBonus(crowd.get(String(sid)), 0.5);
+        candidates.push({ id: s.id, name: s.name, artist: artistText, quality: quality + bonus, source: 'ne' });
       }
     }
   }
