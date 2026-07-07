@@ -102,8 +102,50 @@ router.get('/preferences', authRequired, (req, res) => {
 router.put('/preferences', authRequired, (req, res) => {
   const { data } = req.body || {};
   if (!data || typeof data !== 'object') return res.status(400).json({ error: '无效数据' });
+  // merge 现有数据，防止 syncPrefsToServer 全量覆盖时抹掉 customPalettes 等字段
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const existing = row ? JSON.parse(row.data) : {};
+  const merged = { ...existing, ...data };
   db.prepare('INSERT OR REPLACE INTO user_preferences (user_id, data, updated_at) VALUES (?, ?, ?)')
-    .run(req.user.id, JSON.stringify(data), Date.now());
+    .run(req.user.id, JSON.stringify(merged), Date.now());
+  res.json({ ok: true });
+});
+
+// ---- 自定义主题色 ----
+router.get('/custom-palettes', authRequired, (req, res) => {
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const prefs = row ? JSON.parse(row.data) : {};
+  res.json({ customPalettes: prefs.customPalettes || [] });
+});
+
+router.post('/custom-palettes', authRequired, (req, res) => {
+  const { name, color } = req.body || {};
+  if (!color || typeof color !== 'string' || !/^#[0-9a-fA-F]{3,6}$/.test(color)) {
+    return res.status(400).json({ error: '无效颜色' });
+  }
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const prefs = row ? JSON.parse(row.data) : {};
+  const list = prefs.customPalettes || [];
+  if (list.length >= 8) return res.status(400).json({ error: '已达上限（8个）' });
+  const id = Math.random().toString(36).slice(2, 10);
+  const entry = { id, name: String(name || '').slice(0, 20), color: color.toLowerCase(), createdAt: Date.now() };
+  list.push(entry);
+  prefs.customPalettes = list;
+  db.prepare('INSERT OR REPLACE INTO user_preferences (user_id, data, updated_at) VALUES (?, ?, ?)')
+    .run(req.user.id, JSON.stringify(prefs), Date.now());
+  res.json({ palette: entry });
+});
+
+router.delete('/custom-palettes/:id', authRequired, (req, res) => {
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const prefs = row ? JSON.parse(row.data) : {};
+  const list = prefs.customPalettes || [];
+  const idx = list.findIndex(p => p.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: '未找到' });
+  list.splice(idx, 1);
+  prefs.customPalettes = list;
+  db.prepare('INSERT OR REPLACE INTO user_preferences (user_id, data, updated_at) VALUES (?, ?, ?)')
+    .run(req.user.id, JSON.stringify(prefs), Date.now());
   res.json({ ok: true });
 });
 

@@ -23,11 +23,13 @@ provider:
 |--------|------|--------|-------------|
 | 1 | 视频标题覆盖「词」按钮 | `.player-status` 从 absolute 改为 grid 列 | 只改了一半：`.progress-center` 仍是 `position:absolute;left:50%` 独立居中，两个系统并存 |
 | 2 | 视频标题覆盖进度条时长 | 把 `.progress-center` 也收进 grid，彻底移除 absolute | **终于根治**——所有 6 个子元素都是同一 grid 的轨道 |
+| 3 | 进度条偏左 58px，未处于播放条视觉中心 | 仅加固了列内 flex 居中（无效），后改为 3 列 `1fr auto 1fr` grid | 6 列 grid 左右不对称（左侧 cover+np+controls 比右侧 status+right 宽），progress 列被挤到左边。**只有测量 `getBoundingClientRect()` 才能发现容器级偏移，静态 CSS 分析看不出来** |
 
-教训：只要还有**一个**子元素游离在 grid/flex 系统之外（用 absolute 独立定位），就还没有真正解决问题——它会在另一个尺寸下换个位置重新冲突。
+教训：只要还有**一个**子元素游离在 grid/flex 系统之外（用 absolute 独立定位），就还没有真正解决问题——它会在另一个尺寸下换个位置重新冲突。**且居中/对齐类问题必须用测量数据诊断，不能仅凭静态 CSS 分析。**
 
 ### 规则
 
+0. **诊断阶段（定位/居中/对齐问题强制前置步骤）**：在改动任何定位/居中/对齐相关 CSS 之前，**必须**先用脚本或 devtools 抓取目标元素及其父容器的 `getBoundingClientRect()`，对比 `centerX`/`centerY` 与容器的差值，确认偏移量和根因后再动手。**禁止**仅凭静态 CSS 阅读就下结论「这里已经 `justify-content: center` 了，应该没问题」——静态分析只能判断子元素在容器内的居中，无法判断容器本身在页面中的偏移。
 1. **设计阶段**：新增任何「和现有元素共享一行」的 UI 组件前，确认它是现有 grid 列的扩展、还是新增一条 track。**禁止**用 `position: absolute` 图省事"糊一个位置上去"。
 2. **编码阶段**：给任何容器内元素写 `position: absolute` 之前，检查是否有**兄弟元素**在 grid/flex 流中。如果有，这是红灯信号。
 3. **修复 bug 阶段**：如果发现「A 覆盖 B」类的布局 bug，先检查容器内是否同时存在 grid/flex 子元素和 absolute 子元素。如果有，只调 `right`/`left` 像素值是治标不治本——必须让所有相关元素回到同一个布局系统中。

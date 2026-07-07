@@ -37,6 +37,8 @@ export async function loadPrefsFromServer() {
     if (data.theme) { localStorage.setItem('wemusic_theme', data.theme); applyTheme(data.theme); }
     if (data.font) { localStorage.setItem('wemusic_font', data.font); applyFont(data.font); }
     if (data.fontSize) { localStorage.setItem('wemusic_font_size', data.fontSize); applyFontSize(data.fontSize); }
+    // 先加载自定义色板列表，再应用色板（因为可能是自定义颜色）
+    await loadCustomPalettes();
     if (data.palette) { localStorage.setItem('wemusic_palette', data.palette); applyPalette(data.palette); }
     if (data.vol) { localStorage.setItem('wemusic_vol', data.vol); }
   } catch { console.warn('偏好同步失败') }
@@ -76,12 +78,78 @@ const PALETTES = {
   indigo: '#295abc',
   gray:   '#7a8590',
 };
+
+// ---- 自定义主题色 ----
+let customPalettes = []; // [{id, name, color, createdAt}, ...]
+
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => {
+    const k = (n + h / 30) % 12;
+    return Math.round(255 * (l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)))
+      .toString(16).padStart(2, '0');
+  };
+  return '#' + f(0) + f(8) + f(4);
+}
+
+function hexToHsl(hex) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const r = parseInt(hex.slice(0, 2), 16) / 255;
+  const g = parseInt(hex.slice(2, 4), 16) / 255;
+  const b = parseInt(hex.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) / 6
+      : max === g ? ((b - r) / d + 2) / 6
+      : ((r - g) / d + 4) / 6;
+  }
+  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+
+function getColorByKey(key) {
+  if (PALETTES[key]) return PALETTES[key];
+  if (key && key.startsWith('custom_')) {
+    const cp = customPalettes.find(p => p.id === key.replace('custom_', ''));
+    if (cp) return cp.color;
+  }
+  return PALETTES.green;
+}
+
+export async function loadCustomPalettes() {
+  try {
+    const { customPalettes: list } = await api('/auth/custom-palettes');
+    customPalettes = Array.isArray(list) ? list : [];
+  } catch { customPalettes = []; }
+}
+
+async function saveCustomPaletteToServer(name, color) {
+  const { palette } = await api('/auth/custom-palettes', {
+    method: 'POST', body: { name, color }
+  });
+  customPalettes.push(palette);
+  return palette;
+}
+
+async function deleteCustomPaletteFromServer(id) {
+  await api('/auth/custom-palettes/' + id, { method: 'DELETE' });
+  customPalettes = customPalettes.filter(p => p.id !== id);
+}
+
 export function applyPalette(key) {
-  key = PALETTES[key] ? key : 'green';
-  const color = PALETTES[key];
+  const color = getColorByKey(key);
   document.documentElement.style.setProperty('--accent', color);
+  // 高亮系统预设色块
   document.querySelectorAll('.palette-opt').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === key);
+  });
+  // 高亮自定义色块
+  document.querySelectorAll('.custom-palette-swatch').forEach((b) => {
+    b.classList.toggle('active', b.dataset.id === key);
   });
 }
 applyPalette(localStorage.getItem('wemusic_palette') || 'green');
@@ -239,8 +307,214 @@ export async function uploadAvatar(file) {
   reader.readAsDataURL(file);
 }
 
-// ---- 设置面板 ----
-export function openSettings() {
+// ---- 自定义主题色 UI ----
+function selectPalette(key) {
+  localStorage.setItem('wemusic_palette', key);
+  applyPalette(key);
+  _dbSyncPrefs();
+  hideColorEditor();
+}
+
+function renderCustomPalettesUI(curPalette) {
+  const container = $('customPalettes');
+  const section = $('customPalettesSection');
+  const btn = $('addCustomPaletteBtn');
+  if (!container || !btn) return;
+  container.innerHTML = '';
+  const hasItems = customPalettes.length > 0;
+  if (section) section.style.display = hasItems ? '' : 'none';
+  if (!hasItems) { updateAddBtnState(); return; }
+  customPalettes.forEach(cp => {
+    const swatch = document.createElement('button');
+    swatch.className = 'custom-palette-swatch';
+    swatch.style.background = cp.color;
+    swatch.dataset.id = 'custom_' + cp.id;
+    swatch.title = cp.name || cp.color;
+    swatch.classList.toggle('active', 'custom_' + cp.id === curPalette);
+    swatch.onclick = () => selectPalette('custom_' + cp.id);
+
+    const del = document.createElement('span');
+    del.className = 'cp-delete';
+    del.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      const { uiConfirm } = await import('./ui.js');
+      const ok = await uiConfirm('删除自定义颜色「' + (cp.name || cp.color) + '」？');
+      if (!ok) return;
+      await deleteCustomPaletteFromServer(cp.id);
+      const cur = localStorage.getItem('wemusic_palette');
+      if (cur === 'custom_' + cp.id) {
+        localStorage.setItem('wemusic_palette', 'green');
+        applyPalette('green');
+        _dbSyncPrefs();
+      }
+      renderCustomPalettesUI(localStorage.getItem('wemusic_palette') || 'green');
+      updateAddBtnState();
+    };
+    swatch.appendChild(del);
+    container.appendChild(swatch);
+  });
+  updateAddBtnState();
+}
+
+function updateAddBtnState() {
+  const btn = $('addCustomPaletteBtn');
+  if (!btn) return;
+  const full = customPalettes.length >= 8;
+  btn.disabled = full;
+  btn.title = full ? '已达上限（8个）' : '';
+  // 移除旧 hint 再追加
+  const old = btn.parentElement?.querySelector('.cp-disabled-hint');
+  old?.remove();
+  if (full) {
+    const hint = document.createElement('span');
+    hint.className = 'cp-disabled-hint';
+    hint.textContent = '已达上限';
+    btn.parentElement?.appendChild(hint);
+  }
+}
+
+function hideColorEditor() {
+  const editor = $('customColorEditor');
+  if (editor) editor.style.display = 'none';
+}
+
+function setupCustomColorEditor() {
+  const editor = $('customColorEditor');
+  const hue = $('hueSlider');
+  const sat = $('satSlider');
+  const light = $('lightSlider');
+  const hueNum = $('hueNum');
+  const satNum = $('satNum');
+  const lightNum = $('lightNum');
+  const hex = $('hexInput');
+  const native = $('nativeColorPicker');
+  const preview = $('colorPreview');
+  const name = $('colorNameInput');
+  const saveBtn = $('saveColorBtn');
+  const cancelBtn = $('cancelColorBtn');
+  const addBtn = $('addCustomPaletteBtn');
+  if (!editor || !hue || !sat || !light || !hex || !native || !preview) return;
+
+  let updatingFromSliders = false;
+  let updatingFromHex = false;
+
+  function syncNums() {
+    if (hueNum) hueNum.value = hue.value;
+    if (satNum) satNum.value = sat.value;
+    if (lightNum) lightNum.value = light.value;
+  }
+
+  function syncPreview() {
+    const h = Number(hue.value), s = Number(sat.value), l = Number(light.value);
+    const color = hslToHex(h, s, l);
+    preview.style.background = color;
+    if (!updatingFromSliders) {
+      updatingFromSliders = true;
+      hex.value = color;
+      native.value = color;
+      syncNums();
+      updatingFromSliders = false;
+    }
+    // 动态更新 sat/light 滑块的渐变背景
+    const satColor = hslToHex(h, 100, 50);
+    sat.style.background = 'linear-gradient(to right, hsl(' + h + ',0%,' + l + '%), ' + satColor + ')';
+    light.style.background = 'linear-gradient(to right, #000, ' + hslToHex(h, s, 50) + ', #fff)';
+    // 实时预览主题色
+    document.documentElement.style.setProperty('--accent', color);
+  }
+
+  function syncSliders(hexColor) {
+    if (updatingFromHex) return;
+    const hsl = hexToHsl(hexColor);
+    updatingFromHex = true;
+    hue.value = hsl.h; sat.value = hsl.s; light.value = hsl.l;
+    syncNums();
+    updatingFromHex = false;
+    syncPreview();
+  }
+
+  hue.oninput = syncPreview;
+  sat.oninput = syncPreview;
+  light.oninput = syncPreview;
+
+  // 数值输入框同步
+  const updateFromNum = (slider, num, min, max) => {
+    let val = parseInt(num.value, 10);
+    if (isNaN(val)) return;
+    val = Math.max(min, Math.min(max, val));
+    if (val !== Number(num.value)) num.value = val;
+    slider.value = val;
+    syncPreview();
+  };
+  if (hueNum) hueNum.oninput = () => updateFromNum(hue, hueNum, 0, 360);
+  if (satNum) satNum.oninput = () => updateFromNum(sat, satNum, 0, 100);
+  if (lightNum) lightNum.oninput = () => updateFromNum(light, lightNum, 0, 100);
+
+  // HEX 输入
+  hex.oninput = () => {
+    const val = hex.value.trim();
+    if (/^#[0-9a-fA-F]{3,6}$/.test(val)) {
+      // 展开 #abc → #aabbcc
+      let c = val.replace('#', '');
+      if (c.length === 3) c = c.split('').map(ch => ch + ch).join('');
+      syncSliders('#' + c);
+    }
+  };
+  hex.onblur = () => {
+    const val = hex.value.trim();
+    if (/^#[0-9a-fA-F]{3,6}$/.test(val)) {
+      let c = val.replace('#', '');
+      if (c.length === 3) c = c.split('').map(ch => ch + ch).join('');
+      hex.value = '#' + c;
+    }
+  };
+
+  // 原生取色器
+  native.oninput = () => { syncSliders(native.value); hex.value = native.value; };
+
+  // 打开编辑器
+  if (addBtn) {
+    addBtn.onclick = () => {
+      if (customPalettes.length >= 8) return;
+      editor.style.display = 'block';
+      const cur = localStorage.getItem('wemusic_palette') || 'green';
+      const color = getColorByKey(cur);
+      const hsl = hexToHsl(color);
+      hue.value = hsl.h; sat.value = hsl.s; light.value = hsl.l;
+      syncNums();
+      hex.value = color; native.value = color;
+      syncPreview();
+      name.value = '';
+    };
+  }
+
+  // 保存
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      const color = hex.value.trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) { toast('请输入有效的颜色值'); return; }
+      try {
+        const palette = await saveCustomPaletteToServer(name.value.trim(), color);
+        selectPalette('custom_' + palette.id);
+        hideColorEditor();
+        renderCustomPalettesUI(localStorage.getItem('wemusic_palette') || 'green');
+      } catch (e) { toast('保存失败：' + e.message); }
+    };
+  }
+
+  // 取消
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      hideColorEditor();
+      // 恢复原来的主题色
+      const cur = localStorage.getItem('wemusic_palette') || 'green';
+      applyPalette(cur);
+    };
+  }
+}
+export async function openSettings() {
+  hideColorEditor();
   $('settingsUser').textContent = Auth.user?.username || '';
   renderAvatar(Auth.user?.avatar || null);
   const avatarPreview = $('avatarPreview');
@@ -271,8 +545,23 @@ export function openSettings() {
   const curPalette = localStorage.getItem('wemusic_palette') || 'green';
   document.querySelectorAll('.palette-opt').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === curPalette);
-    b.onclick = () => { localStorage.setItem('wemusic_palette', b.dataset.palette); applyPalette(b.dataset.palette); _dbSyncPrefs(); };
+    b.onclick = () => { selectPalette(b.dataset.palette); };
   });
+
+  // 渲染自定义色板（仅登录用户）
+  if (Auth.user) {
+    await loadCustomPalettes();
+    renderCustomPalettesUI(curPalette);
+    setupCustomColorEditor();
+  } else {
+    const container = $('customPalettes');
+    const section = $('customPalettesSection');
+    const btn = $('addCustomPaletteBtn');
+    if (container) container.innerHTML = '';
+    if (section) section.style.display = 'none';
+    if (btn) btn.style.display = 'none';
+  }
+
   updateSleepHint();
 
   // 定时停止按钮
