@@ -253,7 +253,7 @@ async function openLyricsSwitchModal(song) {
   const blockedList = await fetchBlockedList(api, songKey, 'lyrics');
 
   list.innerHTML = lyricsCandidates.map((c, i) => {
-    const isCurrent = c.id === lyricsCurrentSourceId;
+    const isCurrent = String(c.id) === String(lyricsCurrentSourceId);
     const isQQ = c.source === LyricsSource.QQ;
     const platformLabel = isQQ ? 'QQ音乐' : '网易云';
     return `<div class="cand-row ${isCurrent ? 'current' : ''}" data-i="${i}">

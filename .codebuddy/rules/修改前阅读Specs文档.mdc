@@ -1,0 +1,32 @@
+---
+description: 修改已有模块前强制检查 docs/specs/ 中是否有对应文档
+alwaysApply: true
+enabled: true
+---
+
+# 修改前阅读 Specs 文档
+
+## 规则
+
+修改任何已有模块（`src/player.js`、`server/services/bilibili.js`、`server/routes/play.js` 等）的行为或架构前，**必须先检查 `docs/specs/` 目录中是否有对应文档**。
+
+对应关系：
+- `src/player.js` → `docs/specs/后台播放.md`
+- `server/services/bilibili.js` / `server/routes/play.js` → `docs/specs/候选选择.md`
+- `src/lyrics.js` / `server/services/lyrics.js` → 歌词相关 specs
+- 不确定时 → `ls docs/specs/` 查看完整列表，用文件名和内容判断
+
+## 理由
+
+这些 specs 文档记录了：
+- 已知缺陷和待修复项（避免 Agent 从零分析已记录的问题）
+- 修复历史（避免 Agent 重复尝试已失败的方案）
+- 架构决策和边界条件（避免 Agent 的方案与已有设计冲突）
+
+即使文档没有完全覆盖当前问题，先读一遍能节省多轮代码搜索和分析的时间。
+
+## 例外
+
+- 纯 UI/CSS 修改（不涉及模块行为逻辑）
+- 纯新增功能，不修改已有模块行为
+- Specs 中没有对应文档
