@@ -599,13 +599,37 @@ bgAudio.addEventListener('ended', () => {
     autoAdvance();
   }
 });
-// 后台诊断日志：监听 bgAudio 各种状态事件
+// 后台诊断日志：监听 bgAudio 各种状态事件 —— 附带恢复逻辑
+// 流中断时 <audio> 不会触发 ended，而是 stalled + 静默停止，必须主动恢复
+let _bgStalledTimer = null;
 bgAudio.addEventListener('error', () => {
   const err = bgAudio.error;
   console.warn(`[bgAudio] ERROR code=${err?.code} message="${err?.message}" src=${bgAudio.src?.slice(0,60)}`);
+  // 后台播放中流错误 → 直接切歌（无法恢复）
+  if (_bgPlaying) {
+    console.warn(`[bgAudio] ERROR during bg play — auto advance`);
+    _bgPlaying = false;
+    autoAdvance();
+  }
 });
 bgAudio.addEventListener('stalled', () => {
-  console.warn(`[bgAudio] STALLED currentTime=${bgAudio.currentTime?.toFixed(1)}s readyState=${bgAudio.readyState}`);
+  const ct = bgAudio.currentTime?.toFixed(1) || '?';
+  console.warn(`[bgAudio] STALLED currentTime=${ct}s readyState=${bgAudio.readyState}`);
+  // 后台播放中卡住 → 等 3 秒，如果还没恢复就切歌
+  if (_bgPlaying && !_bgStalledTimer) {
+    _bgStalledTimer = setTimeout(() => {
+      _bgStalledTimer = null;
+      if (!_bgPlaying) return;
+      const ct2 = bgAudio.currentTime?.toFixed(1) || '?';
+      console.warn(`[bgAudio] STALLED 3s+ at ${ct2}s — auto advance`);
+      _bgPlaying = false;
+      autoAdvance();
+    }, 3000);
+  }
+});
+bgAudio.addEventListener('playing', () => {
+  // 恢复播放时清除 stalled 定时器
+  if (_bgStalledTimer) { clearTimeout(_bgStalledTimer); _bgStalledTimer = null; }
 });
 bgAudio.addEventListener('waiting', () => {
   console.log(`[bgAudio] waiting (buffering) currentTime=${bgAudio.currentTime?.toFixed(1)}s`);
@@ -695,6 +719,7 @@ let _bgHealthCheckId = null;
 function _bgStop() {
   _stopBgSync();
   if (_bgHealthCheckId) { clearTimeout(_bgHealthCheckId); _bgHealthCheckId = null; }
+  if (_bgStalledTimer) { clearTimeout(_bgStalledTimer); _bgStalledTimer = null; }
   if (!_bgBvid) return;
   console.log(`[bg:state] stop bvid=${_bgBvid}`);
   bgAudio.pause();
@@ -706,8 +731,10 @@ function _bgStop() {
 
 // 后台时每 4 秒用 bgAudio.currentTime 校准 elapsed（消除 setInterval 节流漂移）
 let _bgSyncTimer = null;
+let _bgLastCurrentTime = 0; // 上一次检测的 currentTime，用于停滞检测
 function _startBgSync() {
   _stopBgSync();
+  _bgLastCurrentTime = bgAudio.currentTime || 0;
   _bgSyncTimer = setInterval(() => {
     // 恢复检查：后台应该播放但 bgAudio 停了 → 尝试重启
     if (_bgPlaying && bgAudio.paused && !timerPaused) {
@@ -718,15 +745,29 @@ function _startBgSync() {
       }).catch((e) => {
         console.warn(`[bgSync] restart FAILED: ${e.name} — ${e.message?.slice(0,60)}`);
       });
+      _bgLastCurrentTime = bgAudio.currentTime || 0;
       return;
     }
-    if (!_bgPlaying || bgAudio.paused || !bgAudio.currentTime) return;
+    if (!_bgPlaying || bgAudio.paused || !bgAudio.currentTime) {
+      _bgLastCurrentTime = bgAudio.currentTime || 0;
+      return;
+    }
     const real = Math.round(bgAudio.currentTime);
     if (Math.abs(real - elapsed) >= 2) {
       console.log(`[bgSync] calibrate elapsed ${elapsed}s → ${real}s (bgAudio.currentTime)`);
       elapsed = real;
       _updateCoverRing();
     }
+    // 停滞检测：currentTime 连续 2 轮没变化（8s+）且已播放过半 → 流已死，切歌
+    if (_bgLastCurrentTime > 0 && Math.abs(bgAudio.currentTime - _bgLastCurrentTime) < 0.5) {
+      const pct = totalDur > 0 ? Math.round(real / totalDur * 100) : 0;
+      console.warn(`[bgSync] STALL DETECTED — currentTime stuck at ${real}s (~${pct}%), dur=${totalDur}s — auto advance`);
+      _bgPlaying = false;
+      _bgLastCurrentTime = 0;
+      autoAdvance();
+      return;
+    }
+    _bgLastCurrentTime = bgAudio.currentTime;
     // autoAdvance 完全由 bgAudio.ended 事件触发，不在此主动切歌
     // 避免 bgAudio.currentTime 瞬时跳变 / 流时长与元数据不一致时提前切断播放
   }, 4000);

@@ -338,18 +338,29 @@ function renderCustomPalettesUI(curPalette) {
     del.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
     del.onclick = async (e) => {
       e.stopPropagation();
-      const { uiConfirm } = await import('./ui.js');
-      const ok = await uiConfirm('删除自定义颜色「' + (cp.name || cp.color) + '」？');
-      if (!ok) return;
-      await deleteCustomPaletteFromServer(cp.id);
-      const cur = localStorage.getItem('wemusic_palette');
-      if (cur === 'custom_' + cp.id) {
-        localStorage.setItem('wemusic_palette', 'green');
-        applyPalette('green');
-        _dbSyncPrefs();
+      console.log('[delete] 点击删除 ×，id=', cp.id, 'color=', cp.color);
+      try {
+        const { uiConfirm } = await import('./utils.js');
+        const ok = await uiConfirm('删除自定义颜色「' + (cp.name || cp.color) + '」？');
+        console.log('[delete] uiConfirm 结果=', ok);
+        if (!ok) return;
+        console.log('[delete] 调用 deleteCustomPaletteFromServer...');
+        await deleteCustomPaletteFromServer(cp.id);
+        console.log('[delete] 删除成功，剩余=', customPalettes.length, '个');
+        const cur = localStorage.getItem('wemusic_palette');
+        if (cur === 'custom_' + cp.id) {
+          console.log('[delete] 当前使用的颜色被删除，回退到 green');
+          localStorage.setItem('wemusic_palette', 'green');
+          applyPalette('green');
+          _dbSyncPrefs();
+        }
+        renderCustomPalettesUI(localStorage.getItem('wemusic_palette') || 'green');
+        updateAddBtnState();
+        console.log('[delete] UI 重新渲染完成');
+      } catch (err) {
+        console.error('[delete] 删除失败:', err);
+        toast('删除失败：' + err.message);
       }
-      renderCustomPalettesUI(localStorage.getItem('wemusic_palette') || 'green');
-      updateAddBtnState();
     };
     swatch.appendChild(del);
     container.appendChild(swatch);

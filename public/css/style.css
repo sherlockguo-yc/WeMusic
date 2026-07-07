@@ -898,8 +898,8 @@ input[type='range']::-moz-range-thumb {
 .custom-palette-swatch:hover .cp-delete { display: flex; }
 .custom-palette-swatch.active { border-color: #fff; box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 4px currentColor; }
 .cp-delete {
-  display: none; position: absolute; top: -6px; right: -6px;
-  width: 16px; height: 16px; border-radius: 50%;
+  display: none; position: absolute; top: -2px; right: -2px;
+  width: 18px; height: 18px; border-radius: 50%;
   background: var(--danger); color: #fff; align-items: center; justify-content: center;
   font-size: 11px; line-height: 1; cursor: pointer; z-index: 2;
 }
@@ -1832,6 +1832,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .modal-mask.show { display: flex; }
 /* 子级弹窗（从设置等面板里触发的弹窗）需要更高层级 */
 #mobileQRModal { z-index: 150; }
+#promptModal { z-index: 150; }
 .modal {
   width: 100%; max-width: 560px; max-height: 80vh; overflow-y: auto;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px;
