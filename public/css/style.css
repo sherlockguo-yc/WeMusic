@@ -550,8 +550,13 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 .player .player-status .badge { color: var(--accent); display: inline-flex; align-items: center; gap: 3px; vertical-align: middle; }
 .player-right {
   grid-area: right;
-  display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
   flex-shrink: 0; min-width: 0; overflow: hidden;
+}
+/* 按钮组：紧凑排列，整体靠右（space-between 把它推到 .player-right 右端） */
+.player-right-btns {
+  display: flex; align-items: center; gap: 6px;
+  flex-shrink: 0;
 }
 .player-right .btn { flex-shrink: 0; }
 .np-actions { display: flex; gap: 8px; margin-top: 1px; }
