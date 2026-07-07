@@ -1,5 +1,5 @@
 // ---------------- 通用 UI：右键菜单、换源、喜欢、弹幕 ----------------
-import { $, esc, fmtDur, fmtPlay, toast, fetchBlockedList, blockedSectionHtml, bindBlockedSection, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED } from './utils.js';
+import { $, esc, fmtDur, fmtPlay, toast, fetchBlockedList, blockedSectionHtml, bindBlockedSection, saveBlockedMeta, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 
@@ -88,7 +88,7 @@ export async function openCandModal() {
   list.innerHTML = candidates.map((c, i) => {
     const isCurrent = c.bvid && c.bvid === currentBvid;
     return `
-    <div class="cand-row ${c.live ? 'live' : ''}${isCurrent ? ' current' : ''}" data-i="${i}">
+    <div class="cand-row ${c.live ? 'live' : ''}${isCurrent ? ' current' : ''}" data-bvid="${esc(c.bvid)}" data-i="${i}">
       <span class="cand-rank">${i + 1}</span>
       <div class="ct">
         <div class="title">${esc(c.title)}</div>
@@ -99,9 +99,13 @@ export async function openCandModal() {
     </div>`;
   }).join('') + blockedSectionHtml(blockedList, 'cand');
 
+  // 辅助：按 bvid 从 candidates 查找（替代不稳定数组下标）
+  const findByBvid = (bvid) => candidates.find(c => c.bvid === bvid);
+
   list.querySelectorAll('.cand-row').forEach((row) => {
     row.onclick = () => {
-      const c = candidates[Number(row.dataset.i)];
+      const c = findByBvid(row.dataset.bvid);
+      if (!c) return;
       state.current.bvid = c.bvid; state.current._biliTitle = c.title;
       state.current._biliDur = c.duration || state.current.duration;
       import('./player.js').then(({ cacheBvid, resetProgress, startVideo }) => {
@@ -114,10 +118,13 @@ export async function openCandModal() {
     // 屏蔽按钮
     row.querySelector('.cand-block-btn').onclick = async (e) => {
       e.stopPropagation();
-      const c = candidates[Number(row.dataset.i)];
+      const targetBvid = row.dataset.bvid;
+      const c = findByBvid(targetBvid);
+      if (!c) return;
       try {
         await api('/stats/blocked', { method: 'POST', body: { song: songKey, type: 'video', sourceId: c.bvid } });
-        candidates = candidates.filter((_, j) => j !== Number(row.dataset.i));
+        saveBlockedMeta(c.bvid, { name: c.title, artist: c.author, source: 'bili' });
+        candidates = candidates.filter(c => c.bvid !== targetBvid);
         state.current._candidates = candidates;
         row.remove();
         toast('已屏蔽，刷新后不再出现');

@@ -2,7 +2,7 @@
 description: 禁止在同一容器中混用 Grid/Flex 和 position:absolute 定位——始终用一种布局系统
 alwaysApply: true
 enabled: true
-updatedAt: 2026-07-05T09:11:00.000Z
+updatedAt: 2026-07-07T14:28:00.000Z
 provider: 
 ---
 
@@ -24,8 +24,10 @@ provider:
 | 1 | 视频标题覆盖「词」按钮 | `.player-status` 从 absolute 改为 grid 列 | 只改了一半：`.progress-center` 仍是 `position:absolute;left:50%` 独立居中，两个系统并存 |
 | 2 | 视频标题覆盖进度条时长 | 把 `.progress-center` 也收进 grid，彻底移除 absolute | **终于根治**——所有 6 个子元素都是同一 grid 的轨道 |
 | 3 | 进度条偏左 58px，未处于播放条视觉中心 | 仅加固了列内 flex 居中（无效），后改为 3 列 `1fr auto 1fr` grid | 6 列 grid 左右不对称（左侧 cover+np+controls 比右侧 status+right 宽），progress 列被挤到左边。**只有测量 `getBoundingClientRect()` 才能发现容器级偏移，静态 CSS 分析看不出来** |
+| 4 | 视频标题不滚动（溢出检测失效） | `.player-status` 的 `flex: 0 0 auto` → `flex: 0 1 auto` | 从 6 列 grid 转 3 列时，`.player-status` 从 grid item 变为 flex item，但 `flex-shrink: 0` 被**无脑搬运**过来。在新上下文中它阻止了容器缩小 → `parent.clientWidth` 始终 ≥ `inner.scrollWidth` → `checkMarquee()` 溢出检测永不触发。教训：**布局重构时不能只搬运 CSS 属性——必须逐条审查每个属性的语义在新上下文中是否仍然正确。** |
+| 5 | 浮窗视频标题不滚动 | `setVpTitle()` 单帧 rAF → 双帧 rAF + `clientWidth>0` 守卫 | 视频浮窗从 `display:none` → `display:flex` 时，浏览器需要两帧才能完成 flex 布局计算。`setVpTitle()` 仅用单帧 `requestAnimationFrame` 检测溢出，读到 `clientWidth=0` → `overflow=0` → 滚动永不启动。对比 `checkMarquee()` 一直用双帧 rAF 正常工作。教训：**`display:none→flex` 的元素溢出检测必须双帧 rAF，单帧在不同时机下表现不一致。** |
 
-教训：只要还有**一个**子元素游离在 grid/flex 系统之外（用 absolute 独立定位），就还没有真正解决问题——它会在另一个尺寸下换个位置重新冲突。**且居中/对齐类问题必须用测量数据诊断，不能仅凭静态 CSS 分析。**
+教训：只要还有**一个**子元素游离在 grid/flex 系统之外（用 absolute 独立定位），就还没有真正解决问题——它会在另一个尺寸下换个位置重新冲突。**且居中/对齐类问题必须用测量数据诊断，不能仅凭静态 CSS 分析。** **布局重构时不能只搬运 CSS 属性——同一个属性（如 `flex`）在 grid item 和 flex item 上的语义完全不同，必须逐条重新审查而非直接复制旧值。**
 
 ### 规则
 
@@ -46,6 +48,20 @@ provider:
 grep -n 'position: absolute' public/css/style.css | head -20
 # 如果看到 .player 子元素的 absolute，说明又有人在开历史倒车
 ```
+
+### 滚动功能回归检查（2026-07-07 新增）
+
+修改 `.player` 或其子元素的 `flex`/`grid`/`overflow`/`position`/`min-width` 属性后，**必须**测试以下功能回归：
+
+1. **超长视频标题能否自动左右滚动** — 触发条件：`.player-status` 的 `flex-shrink` 必须 > 0，否则 `parent.clientWidth` 永不低于 `inner.scrollWidth`，`checkMarquee()` 的溢出检测永不触发
+2. **进度条是否居中** — `getBoundingClientRect()` 测量 centerX 偏差 ≤ 3px
+3. **各按钮不互相覆盖** — 检查 `.player-right` 内的按钮在窄窗口下是否可见
+
+**特别禁止**：给 `.player-status` 设置 `flex-shrink: 0`（等价于 `flex: 0 0 auto` 或 `flex: 1 0 auto` 等 `flex-shrink=0` 的任何简写）。这是 `text-overflow: ellipsis` 之外的第二类「无声破坏滚动」的 CSS 属性。
+
+**特别禁止 2**：新增滚动检测代码使用单帧 `requestAnimationFrame`。`display: none` → `display: flex` 的元素需要两帧完成布局计算，单帧会在某些时机读到 `clientWidth=0` 导致溢出检测失败。所有文本滚动的溢出检测必须统一使用双帧 rAF（参考 `checkMarquee()` 的实现）。
+
+**回顾教训**：项目中有 2 个不同的溢出检测函数（`checkMarquee` 用双帧 rAF，`setVpTitle` 用单帧 rAF），这是技术债务——同一类功能不该有两种不同实现。2026-07-07 已将 `setVpTitle` 统一为双帧 rAF。
 
 ### 例外
 

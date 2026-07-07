@@ -658,33 +658,79 @@ router.get('/recommend', async (req, res) => {
 // ============================================================
 // 歌词查询（网易云音乐，支持 candidates + 换源 + 按 sourceId 精确拉取）
 // ============================================================
+
+/**
+ * 按候选对象（来自 searchLyricsCandidates）拉取歌词原文 + LRC 行
+ * 用于「主 sourceId 被屏蔽时」从候选中选替代源
+ * @returns {Promise<{lines: Array, raw: string} | null>}
+ */
+async function fetchLyricsForCandidate(c) {
+  try {
+    const { platform, id } = decodeSourceId(String(c.id));
+    if (platform === Platform.QQ_MUSIC) {
+      const raw = await qqFetchLyric(id);
+      if (!raw.trim()) return null;
+      return { raw, lines: parseLrc(raw) };
+    }
+    const r = await fetchLyricsById(Number(id));
+    return { raw: r.raw, lines: r.lines };
+  } catch {
+    return null;
+  }
+}
+
 router.get('/lyrics', async (req, res) => {
   const { name, singer, sourceId } = req.query;
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
+  const cacheKey = `${name}__${singer || ''}`;
+  const getBlockedIds = () => db.prepare(
+    'SELECT source_id FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=?'
+  ).all(req.user.id, cacheKey, 'lyrics').map((r) => String(r.source_id));
+
   try {
     // 1. 若指定了 sourceId，直接按该 id 拉取（不缓存，换源操作）
+    //    但若该 sourceId 已被屏蔽，fall through 到正常流程（让系统选最优非屏蔽源）
     if (sourceId) {
-      const { platform, id } = decodeSourceId(sourceId);
-      if (platform === Platform.QQ_MUSIC) {
-        const raw = await qqFetchLyric(id);
-        if (!raw.trim()) return res.json({ lines: [], sourceId, error: '该歌曲暂无歌词' });
-        return res.json({ lines: parseLrc(raw), sourceId, song: name, artist: singer });
+      const blockedIds = getBlockedIds();
+      if (!blockedIds.includes(String(sourceId))) {
+        const { platform, id } = decodeSourceId(sourceId);
+        if (platform === Platform.QQ_MUSIC) {
+          const raw = await qqFetchLyric(id);
+          if (!raw.trim()) return res.json({ lines: [], sourceId, error: '该歌曲暂无歌词' });
+          return res.json({ lines: parseLrc(raw), sourceId, song: name, artist: singer });
+        }
+        const result = await fetchLyricsById(Number(id));
+        return res.json({ lines: result.lines, sourceId: Number(id) });
       }
-      const result = await fetchLyricsById(Number(id));
-      return res.json({ lines: result.lines, sourceId: Number(id) });
+      console.log(`[lyrics:route] sourceId=${sourceId} is blocked, falling through to auto-pick`);
     }
 
     // 2. 检查缓存（同名同歌手 24h 内复用）
-    const cacheKey = `${name}__${singer || ''}`;
+    const blockedIds = getBlockedIds();
     const cached = getLyricCache(cacheKey);
     if (cached) {
       console.log(`[lyrics:route] cache HIT for "${cacheKey}", candidates:${cached.candidates?.length || 0}`);
       const resp = { ...cached };
       // 过滤掉被拉黑的歌词源
-      const blockedIds = db.prepare(
-        'SELECT source_id FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=?'
-      ).all(req.user.id, cacheKey, 'lyrics').map((r) => String(r.source_id));
       if (resp.candidates) resp.candidates = resp.candidates.filter((c) => !blockedIds.includes(String(c.id)));
+      // 若主 sourceId 被屏蔽，从 cleanCandidates 中取最优替代并重新拉取歌词
+      if (resp.sourceId && blockedIds.includes(String(resp.sourceId))) {
+        const replacement = resp.candidates?.[0];
+        if (replacement) {
+          const replaced = await fetchLyricsForCandidate(replacement);
+          if (replaced) {
+            resp.sourceId = String(replacement.id);
+            resp.song = replacement.name;
+            resp.artist = replacement.artist;
+            resp.lines = replaced.lines;
+            if (replaced.raw !== undefined) resp.raw = replaced.raw;
+          } else {
+            resp.sourceId = null; resp.lines = []; resp.error = '当前源已屏蔽，请选择其他版本';
+          }
+        } else {
+          resp.sourceId = null; resp.lines = []; resp.error = '当前源已屏蔽，请选择其他版本';
+        }
+      }
       return res.json(resp);
     }
     console.log(`[lyrics:route] cache MISS for "${cacheKey}" — fetching fresh`);
@@ -696,14 +742,37 @@ router.get('/lyrics', async (req, res) => {
     ]);
 
     // 过滤掉被拉黑的歌词源
-    const blockedIds = db.prepare(
-      'SELECT source_id FROM blocked_sources WHERE user_id=? AND song_key=? AND source_type=?'
-    ).all(req.user.id, cacheKey, 'lyrics').map((r) => String(r.source_id));
     const cleanCandidates = candidates.filter((c) => !blockedIds.includes(String(c.id)));
 
-    const result = main
-      ? { ...main, candidates: cleanCandidates }
-      : { lines: [], candidates: cleanCandidates, error: '未找到匹配歌词' };
+    // 若主结果被屏蔽，从 cleanCandidates 中取最优替代并重新拉取歌词
+    let finalMain = main;
+    if (main && blockedIds.includes(String(main.sourceId))) {
+      const replacement = cleanCandidates[0];
+      if (replacement) {
+        const replaced = await fetchLyricsForCandidate(replacement);
+        if (replaced) {
+          finalMain = {
+            song: replacement.name,
+            artist: replacement.artist,
+            sourceId: String(replacement.id),
+            raw: replaced.raw || '',
+            lines: replaced.lines,
+          };
+        } else {
+          finalMain = null;
+        }
+      } else {
+        finalMain = null;
+      }
+    }
+
+    const result = finalMain
+      ? { ...finalMain, candidates: cleanCandidates }
+      : {
+          lines: [],
+          candidates: cleanCandidates,
+          error: cleanCandidates.length ? '当前源已屏蔽，请选择其他版本' : '未找到匹配歌词',
+        };
     setLyricCache(cacheKey, result);
     res.json(result);
   } catch (e) {

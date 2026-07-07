@@ -216,12 +216,23 @@ export function setVpTitle(title) {
   const text = title || 'Bilibili 播放';
   el.innerHTML = `<span class="vp-title-inner">${text}</span>`;
   const inner = el.querySelector('.vp-title-inner');
+  // 清理旧动画：旧的 inner 已被 innerHTML 销毁，但 _mId 可能残留
   if (inner._mId) { cancelAnimationFrame(inner._mId); inner._mId = 0; }
   inner.classList.remove('scrolling');
   inner.style.transform = '';
+  el.style.textOverflow = ''; // 恢复 ellipsis（由 CSS 控制）
+  // 必须双帧 rAF：视频浮窗可能从 display:none 变为 display:flex，
+  // 浏览器需要两帧才能完成 flex 布局计算。单帧会读到 clientWidth=0。
   requestAnimationFrame(() => {
-    const overflow = inner.scrollWidth - el.clientWidth;
-    if (overflow > 4) { inner.classList.add('scrolling'); startMarquee(inner, overflow + 8); }
+    requestAnimationFrame(() => {
+      if (el.clientWidth <= 0) return; // 浮窗未显示，不启动滚动
+      const overflow = inner.scrollWidth - el.clientWidth;
+      if (overflow > 4) {
+        inner.classList.add('scrolling');
+        el.style.textOverflow = 'clip'; // 滚动时禁止 ellipsis 截断
+        startMarquee(inner, overflow + 8);
+      }
+    });
   });
 }
 

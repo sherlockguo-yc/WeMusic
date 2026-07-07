@@ -1,5 +1,5 @@
 // ---------------- 歌词全屏页（含换源支持） ----------------
-import { $, esc, albumCover, toast, PLAY_ICON, PAUSE_ICON, fetchBlockedList, blockedSectionHtml, bindBlockedSection } from './utils.js';
+import { $, esc, albumCover, toast, PLAY_ICON, PAUSE_ICON, fetchBlockedList, blockedSectionHtml, bindBlockedSection, saveBlockedMeta } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 import { LyricsSource } from './platform.js';
@@ -238,6 +238,8 @@ async function openLyricsSwitchModal(song) {
     try {
       const data = await api(`/stats/lyrics?name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}`);
       lyricsCandidates = data.candidates || [];
+      // 同时记录主 sourceId（如果响应里有），确保"当前"标记能正确显示
+      if (data.sourceId) lyricsCurrentSourceId = String(data.sourceId);
     } catch { toast('获取候选列表失败'); return; }
   }
 
@@ -256,7 +258,7 @@ async function openLyricsSwitchModal(song) {
     const isCurrent = String(c.id) === String(lyricsCurrentSourceId);
     const isQQ = c.source === LyricsSource.QQ;
     const platformLabel = isQQ ? 'QQ音乐' : '网易云';
-    return `<div class="cand-row ${isCurrent ? 'current' : ''}" data-i="${i}">
+    return `<div class="cand-row ${isCurrent ? 'current' : ''}" data-id="${esc(String(c.id))}" data-i="${i}">
       <span class="cand-rank">${i + 1}</span>
       <div class="ct">
         <div class="title">
@@ -275,9 +277,13 @@ async function openLyricsSwitchModal(song) {
   // 关闭时恢复标题
   const restoreTitle = () => { modal.querySelector('h3').textContent = '选择播放资源（Bilibili）'; };
 
+  // 辅助函数：按 data-id 从 candidates 数组查找候选（替代不稳定数组下标）
+  const findById = (id) => lyricsCandidates.find(c => String(c.id) === String(id));
+
   list.querySelectorAll('.cand-row').forEach((row) => {
     row.onclick = async () => {
-      const c = lyricsCandidates[Number(row.dataset.i)];
+      const c = findById(row.dataset.id);
+      if (!c) return;
       modal.classList.remove('show');
       restoreTitle();
       try {
@@ -290,10 +296,21 @@ async function openLyricsSwitchModal(song) {
     };
     row.querySelector('.cand-block-btn')?.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const c = lyricsCandidates[Number(row.dataset.i)];
+      const targetId = row.dataset.id;
+      const c = findById(targetId);
+      if (!c) return;
       try {
         await api('/stats/blocked', { method: 'POST', body: { song: songKey, type: 'lyrics', sourceId: String(c.id) } });
-        lyricsCandidates = lyricsCandidates.filter((_, j) => j !== Number(row.dataset.i));
+        // 缓存被屏蔽源的展示信息，让 blocked-section 能显示歌名/歌手而非 raw ID
+        saveBlockedMeta(c.id, { name: c.name, artist: c.artist, source: c.source });
+        lyricsCandidates = lyricsCandidates.filter(c => String(c.id) !== String(targetId));
+        // 如果被屏蔽的源就是当前选中的源，同时清理 localStorage 缓存，避免下次刷新又加载到被屏蔽的源
+        if (song.song_mid && String(lyricsCurrentSourceId) === String(c.id)) {
+          const cache = getSourceCache();
+          delete cache[song.song_mid];
+          localStorage.setItem('wemusic_lyrics_src', JSON.stringify(cache));
+          lyricsCurrentSourceId = null;
+        }
         row.remove();
         toast('已屏蔽，刷新后不再出现');
       } catch (err) { toast('屏蔽失败：' + err.message); }

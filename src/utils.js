@@ -330,10 +330,32 @@ export async function fetchBlockedList(api, songKey, type) {
   } catch { console.warn('获取屏蔽列表失败'); return []; }
 }
 
+// localStorage key 存储被屏蔽源的展示元信息：sourceId → { name, artist, source }
+const BLOCKED_META_KEY = 'wemusic_blocked_meta';
+
+/** 获取被屏蔽源元信息缓存 */
+export function getBlockedMeta() {
+  try { return JSON.parse(localStorage.getItem(BLOCKED_META_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+/** 保存被屏蔽源的展示信息到 localStorage */
+export function saveBlockedMeta(sourceId, meta) {
+  const all = getBlockedMeta();
+  all[String(sourceId)] = meta;
+  // 限制缓存大小，保留最近 200 条
+  const entries = Object.entries(all);
+  if (entries.length > 200) {
+    for (let i = 0; i < entries.length - 200; i++) delete all[entries[i][0]];
+  }
+  localStorage.setItem(BLOCKED_META_KEY, JSON.stringify(all));
+}
+
 /** 已屏蔽源 HTML 片段（typePrefix: 'cand' 或 'candLyrics'） */
 export function blockedSectionHtml(blockedList, typePrefix = 'cand') {
   if (!blockedList.length) return '';
   const idKey = typePrefix === 'cand' ? 'bvid' : 'source_id';
+  const meta = getBlockedMeta();
   return `
     <div class="cand-blocked-section">
       <button class="cand-blocked-toggle" id="${typePrefix}BlockedToggle">
@@ -341,13 +363,21 @@ export function blockedSectionHtml(blockedList, typePrefix = 'cand') {
         已屏蔽的源（${blockedList.length}）
       </button>
       <div class="cand-blocked-list" id="${typePrefix}BlockedList" style="display:none">
-        ${blockedList.map(b => `
+        ${blockedList.map(b => {
+          const m = meta[String(b.source_id)];
+          const hasMeta = m && m.name;
+          const isQQ = m && m.source === 'qq';
+          const isBili = m && m.source === 'bili';
+          const platformLabel = isQQ ? 'QQ音乐' : isBili ? 'B站' : '网易云';
+          return `
           <div class="cand-blocked-row" data-${idKey}="${esc(b.source_id)}">
-            <span class="cand-blocked-id">${esc(b.source_id)}</span>
+            <div class="cand-blocked-info">
+              ${hasMeta ? `<span class="cand-blocked-name">${esc(m.name)}</span><span class="cand-blocked-detail"><span class="cand-source-tag${isQQ ? ' qq' : ''}">${esc(platformLabel)}</span> ${esc(m.artist || '未知')}</span>` : `<span class="cand-blocked-id">${esc(b.source_id)}</span>`}
+            </div>
             <span class="cand-blocked-time">${new Date(b.blocked_at).toLocaleDateString()}</span>
             <button class="cand-unblock-btn" title="取消屏蔽"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 9 8 9"/></svg> 恢复</button>
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
 }
