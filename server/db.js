@@ -177,6 +177,13 @@ if (!userCols.includes('status')) {
   db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
 }
 
+// blocked_sources 展示元信息（name/artist/source_label）— 之前只存了 source_id，
+// 旧数据回显为 raw id；重新屏蔽一次或服务端补齐后即可用元信息显示
+const blockedCols = db.prepare('PRAGMA table_info(blocked_sources)').all().map((c) => c.name);
+if (!blockedCols.includes('name')) db.exec('ALTER TABLE blocked_sources ADD COLUMN name TEXT');
+if (!blockedCols.includes('artist')) db.exec('ALTER TABLE blocked_sources ADD COLUMN artist TEXT');
+if (!blockedCols.includes('source_label')) db.exec('ALTER TABLE blocked_sources ADD COLUMN source_label TEXT');
+
 // ---- 管理功能：新表 ----
 db.exec(`
   /* 操作审计日志 */

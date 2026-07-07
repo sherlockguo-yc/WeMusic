@@ -841,14 +841,36 @@ router.get('/blocked', (req, res) => {
 });
 
 // 获取某首歌的完整屏蔽记录（含 metadata 便于展示）
-router.get('/blocked/full', (req, res) => {
-  const { song, type } = req.query;
+router.get('/blocked/full', async (req, res) => {
+  const { song, type, name, singer } = req.query;
   if (!song) return res.json({ list: [] });
+  const sourceType = type || 'video';
   const rows = db.prepare(`
-    SELECT source_id, source_type, blocked_at FROM blocked_sources
+    SELECT source_id, source_type, blocked_at, name, artist, source_label FROM blocked_sources
     WHERE user_id=? AND song_key=? AND source_type=?
     ORDER BY blocked_at DESC
-  `).all(req.user.id, song, type || 'video');
+  `).all(req.user.id, song, sourceType);
+
+  // 旧数据回填：歌词类屏蔽若 DB 里没有 name/artist，每次拉取时尝试从搜索候选中补全
+  // （一次性 cost，对用户透明的迁移；找到后写回 DB，下次直接命中）
+  if (sourceType === 'lyrics' && name && rows.some((r) => !r.name)) {
+    try {
+      const candidates = await searchLyricsCandidates(name, singer || '');
+      const byId = new Map(candidates.map((c) => [String(c.id), c]));
+      const upd = db.prepare(
+        'UPDATE blocked_sources SET name=?, artist=?, source_label=? WHERE user_id=? AND song_key=? AND source_type=? AND source_id=?'
+      );
+      for (const r of rows) {
+        if (r.name) continue;
+        const c = byId.get(String(r.source_id));
+        if (!c) continue;
+        const label = String(c.id).startsWith('qq:') ? 'QQ音乐' : '网易云';
+        upd.run(c.name || null, c.artist || null, label, req.user.id, song, sourceType, r.source_id);
+        r.name = c.name; r.artist = c.artist; r.source_label = label;
+      }
+    } catch (e) { console.warn('[blocked/full] lyrics backfill failed:', e.message); }
+  }
+
   res.json({ list: rows });
 });
 
@@ -886,12 +908,12 @@ router.post('/disliked-songs', (req, res) => {
 
 // 新增黑名单
 router.post('/blocked', (req, res) => {
-  const { song, type, sourceId } = req.body || {};
+  const { song, type, sourceId, name, artist, sourceLabel } = req.body || {};
   if (!song || !sourceId) return res.status(400).json({ error: '缺少参数' });
   db.prepare(`
-    INSERT OR IGNORE INTO blocked_sources (user_id, song_key, source_type, source_id, blocked_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(req.user.id, song, type || 'video', String(sourceId), Date.now());
+    INSERT OR IGNORE INTO blocked_sources (user_id, song_key, source_type, source_id, blocked_at, name, artist, source_label)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(req.user.id, song, type || 'video', String(sourceId), Date.now(), name || null, artist || null, sourceLabel || null);
   res.json({ ok: true });
 });
 

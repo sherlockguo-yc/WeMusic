@@ -67,16 +67,31 @@ export function applyFont(key) {
 applyFont(localStorage.getItem('wemusic_font') || 'default');
 
 const PALETTES = {
-  green:  '#2ab758',
-  blue:   '#298bbc',
-  red:    '#bc2929',
-  orange: '#bc6729',
-  yellow: '#bc9729',
-  pink:   '#bc294e',
-  purple: '#5a29bc',
-  teal:   '#29bca4',
-  indigo: '#295abc',
-  gray:   '#7a8590',
+  green:            '#2ab758',
+  'klein-blue':     '#002FA7',
+  burgundy:         '#800020',
+  'mummy-brown':    '#8F4B28',
+  'prussian-blue':  '#003153',
+  'bondi-blue':     '#0095B6',
+  'titian-red':     '#B05923',
+  'matte-haze-blue':'#4A4E69',
+  'cream-oat':      '#F2E9E4',
+  'deep-business-blue': '#003366',
+  'tech-blue':      '#0066CC',
+  'matte-gold':     '#D4AF37',
+  charcoal:         '#222222',
+  'deep-gray':      '#444444',
+  'page-gray':      '#F5F5F5',
+  'deep-moss':      '#2D5546',
+  'wine-red':       '#660033',
+  'lake-gray-blue': '#7E8D98',
+  'bean-green':     '#9CAF88',
+  'dusty-rose':     '#D4B0B5',
+  'camel-gray':     '#B5A89C',
+  'cream-base':     '#F2EFE4',
+  'caramel-brown':  '#B67162',
+  taupe:            '#C89F94',
+  'deep-purple-gray':'#4B4453',
 };
 
 // ---- 自定义主题色 ----
@@ -144,7 +159,7 @@ export function applyPalette(key) {
   const color = getColorByKey(key);
   document.documentElement.style.setProperty('--accent', color);
   // 高亮系统预设色块
-  document.querySelectorAll('.palette-opt').forEach((b) => {
+  document.querySelectorAll('.palette-item').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === key);
   });
   // 高亮自定义色块
@@ -554,7 +569,7 @@ export async function openSettings() {
     b.onclick = () => { localStorage.setItem('wemusic_font_size', b.dataset.size); applyFontSize(b.dataset.size); _dbSyncPrefs(); };
   });
   const curPalette = localStorage.getItem('wemusic_palette') || 'green';
-  document.querySelectorAll('.palette-opt').forEach((b) => {
+  document.querySelectorAll('.palette-item').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === curPalette);
     b.onclick = () => { selectPalette(b.dataset.palette); };
   });

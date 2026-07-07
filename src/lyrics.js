@@ -252,7 +252,7 @@ async function openLyricsSwitchModal(song) {
   const songKey = `${song.name}__${song.singer || ''}`;
 
   // 拉取已屏蔽的歌词源
-  const blockedList = await fetchBlockedList(api, songKey, 'lyrics');
+  const blockedList = await fetchBlockedList(api, songKey, 'lyrics', { name: song.name, singer: song.singer });
 
   list.innerHTML = lyricsCandidates.map((c, i) => {
     const isCurrent = String(c.id) === String(lyricsCurrentSourceId);
@@ -300,8 +300,12 @@ async function openLyricsSwitchModal(song) {
       const c = findById(targetId);
       if (!c) return;
       try {
-        await api('/stats/blocked', { method: 'POST', body: { song: songKey, type: 'lyrics', sourceId: String(c.id) } });
-        // 缓存被屏蔽源的展示信息，让 blocked-section 能显示歌名/歌手而非 raw ID
+        const sourceLabel = c.source === LyricsSource.QQ ? 'QQ音乐' : '网易云';
+        await api('/stats/blocked', { method: 'POST', body: {
+          song: songKey, type: 'lyrics', sourceId: String(c.id),
+          name: c.name, artist: c.artist, sourceLabel,
+        } });
+        // 缓存被屏蔽源的展示信息（兜底，主要靠服务端存储）
         saveBlockedMeta(c.id, { name: c.name, artist: c.artist, source: c.source });
         lyricsCandidates = lyricsCandidates.filter(c => String(c.id) !== String(targetId));
         // 如果被屏蔽的源就是当前选中的源，同时清理 localStorage 缓存，避免下次刷新又加载到被屏蔽的源
@@ -312,6 +316,12 @@ async function openLyricsSwitchModal(song) {
           lyricsCurrentSourceId = null;
         }
         row.remove();
+        // 立即刷新底部「已屏蔽的源」区域
+        const oldBlocked = list.querySelector('.cand-blocked-section');
+        if (oldBlocked) oldBlocked.remove();
+        const newBlocked = await fetchBlockedList(api, songKey, 'lyrics', { name: song.name, singer: song.singer });
+        list.insertAdjacentHTML('beforeend', blockedSectionHtml(newBlocked, 'candLyrics'));
+        bindBlockedSection(list, api, songKey, 'lyrics', 'candLyrics');
         toast('已屏蔽，刷新后不再出现');
       } catch (err) { toast('屏蔽失败：' + err.message); }
     });

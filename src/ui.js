@@ -122,11 +122,20 @@ export async function openCandModal() {
       const c = findByBvid(targetBvid);
       if (!c) return;
       try {
-        await api('/stats/blocked', { method: 'POST', body: { song: songKey, type: 'video', sourceId: c.bvid } });
+        await api('/stats/blocked', { method: 'POST', body: {
+          song: songKey, type: 'video', sourceId: c.bvid,
+          name: c.title, artist: c.author, sourceLabel: 'B站',
+        } });
         saveBlockedMeta(c.bvid, { name: c.title, artist: c.author, source: 'bili' });
         candidates = candidates.filter(c => c.bvid !== targetBvid);
         state.current._candidates = candidates;
         row.remove();
+        // 立即刷新底部「已屏蔽的源」区域
+        const oldBlocked = list.querySelector('.cand-blocked-section');
+        if (oldBlocked) oldBlocked.remove();
+        const newBlocked = await fetchBlockedList(api, songKey, 'video');
+        list.insertAdjacentHTML('beforeend', blockedSectionHtml(newBlocked, 'cand'));
+        bindBlockedSection(list, api, songKey, 'video', 'cand');
         toast('已屏蔽，刷新后不再出现');
       } catch (err) { toast('屏蔽失败：' + err.message); }
     };

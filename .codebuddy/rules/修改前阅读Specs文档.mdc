@@ -13,7 +13,11 @@ enabled: true
 对应关系：
 - `src/player.js` → `docs/specs/后台播放.md`
 - `server/services/bilibili.js` / `server/routes/play.js` → `docs/specs/候选选择.md`
-- `src/lyrics.js` / `server/services/lyrics.js` → 歌词相关 specs
+- `src/lyrics.js` / `server/services/lyrics.js` → `docs/specs/候选选择.md`（歌词候选 + 屏蔽弹窗）
+- `src/ui.js` → `docs/specs/候选选择.md`（视频换源弹窗 + 视频屏蔽按钮）
+- `src/utils.js` → 涉及屏蔽展示（`blockedSectionHtml` / `fetchBlockedList` / `saveBlockedMeta`）时 → `docs/specs/候选选择.md`
+- `server/routes/stats.js` → 涉及 `/stats/blocked` / `/stats/lyrics` 屏蔽过滤 → `docs/specs/候选选择.md`
+- `server/db.js` → 涉及 `blocked_sources` 表 → `docs/specs/候选选择.md`
 - 不确定时 → `ls docs/specs/` 查看完整列表，用文件名和内容判断
 
 ## 理由

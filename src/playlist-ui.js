@@ -221,7 +221,7 @@ function playAll(songs, context, playlistId, shuffle = false) {
 
 export function renderSongList(container, songs, opts = {}) {
   if (_indexDirty) { _indexDirty = false; buildSongIndex().then(() => refreshAllBookmarks()).catch(() => {}); }
-  const { showAdd = false, showDelete = false, playlistId = null, context = null } = opts;
+  const { showAdd = false, showDelete = false, playlistId = null, context = null, showCover = false } = opts;
   container.innerHTML = songs.map((s, i) => {
     const inPls = songInPlaylists(s);
     const bookmark = (!showDelete && inPls.size > 0)
@@ -238,10 +238,18 @@ export function renderSongList(container, songs, opts = {}) {
       ? `<button class="np-act-btn song-like-btn${isLiked ? ' liked-active' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" data-act="like">${heartSVG}</button>
          <button class="np-act-btn${isDisliked ? ' disliked-active' : ''}" title="${isDisliked ? '取消不喜欢' : '不喜欢'}" data-act="dislike">${brokenHeartSVG}</button>`
       : '';
+    // 封面（仅 showCover 模式）
+    let coverHtml = '';
+    if (showCover) {
+      const coverUrl = s.album_mid ? albumCover(s.album_mid, 150) : '';
+      coverHtml = coverUrl
+        ? `<img class="song-cover-sm" src="${coverUrl}" loading="lazy" onerror="this.style.display='none'" />`
+        : `<div class="song-cover-ph-sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>`;
+    }
     return `
     <div class="song-row" data-i="${i}">
       <span class="idx">${i + 1}</span>
-      <span class="name">${esc(s.name)}</span>
+      <span class="name${showCover ? ' name-with-cover' : ''}">${coverHtml}<span class="name-text">${esc(s.name)}</span></span>
       <span class="singer">${esc(s.singer)}</span>
       <span class="album">${esc(s.album)}</span>
       ${bookmark}

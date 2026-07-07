@@ -72,7 +72,7 @@ async function loadDiscoverTab(tab) {
       // 推荐说明 tooltip（立即出现，不走 title 属性延迟）
       const recHelp = container.querySelector('.rec-help');
       if (recHelp) setTooltip(recHelp, recHelp.dataset.tipText);
-      renderSongList($('discoverList'), data.songs, { showAdd: true });
+      renderSongList($('discoverList'), data.songs, { showAdd: true, showCover: true });
     } else {
       const topId = tab.replace('chart-', '');
       const data = await api(`/stats/chart/${topId}`);

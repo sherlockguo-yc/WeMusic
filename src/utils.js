@@ -322,10 +322,16 @@ export function setTooltip(el, html) {
 
 // ---- 候选弹窗共享逻辑（ui.js / lyrics.js 共用） ----
 
-/** 拉取已屏蔽源列表 */
-export async function fetchBlockedList(api, songKey, type) {
+/** 拉取已屏蔽源列表（歌词类型会带上 name/singer 以便服务端做旧数据元信息回填） */
+export async function fetchBlockedList(api, songKey, type, extra) {
   try {
-    const r = await api(`/stats/blocked/full?song=${encodeURIComponent(songKey)}&type=${type}`);
+    const params = new URLSearchParams({ song: songKey, type });
+    // lyrics 类型：传歌名+歌手触发服务端回填；video 类型：暂不传
+    if (type === 'lyrics' && extra) {
+      if (extra.name) params.set('name', extra.name);
+      if (extra.singer) params.set('singer', extra.singer);
+    }
+    const r = await api(`/stats/blocked/full?${params.toString()}`);
     return r.list || [];
   } catch { console.warn('获取屏蔽列表失败'); return []; }
 }
@@ -355,7 +361,7 @@ export function saveBlockedMeta(sourceId, meta) {
 export function blockedSectionHtml(blockedList, typePrefix = 'cand') {
   if (!blockedList.length) return '';
   const idKey = typePrefix === 'cand' ? 'bvid' : 'source_id';
-  const meta = getBlockedMeta();
+  const localMeta = getBlockedMeta();  // 兜底：旧数据没有服务端元信息时用
   return `
     <div class="cand-blocked-section">
       <button class="cand-blocked-toggle" id="${typePrefix}BlockedToggle">
@@ -364,15 +370,24 @@ export function blockedSectionHtml(blockedList, typePrefix = 'cand') {
       </button>
       <div class="cand-blocked-list" id="${typePrefix}BlockedList" style="display:none">
         ${blockedList.map(b => {
-          const m = meta[String(b.source_id)];
-          const hasMeta = m && m.name;
-          const isQQ = m && m.source === 'qq';
-          const isBili = m && m.source === 'bili';
-          const platformLabel = isQQ ? 'QQ音乐' : isBili ? 'B站' : '网易云';
+          // 优先用服务端存的元信息（DB 永久保存），再用 localStorage 兜底
+          const hasServerMeta = b.name;
+          const hasLocalMeta = !hasServerMeta && localMeta[String(b.source_id)]?.name;
+          const name = b.name || (localMeta[String(b.source_id)]?.name);
+          const artist = b.artist || (localMeta[String(b.source_id)]?.artist);
+          const serverLabel = b.source_label;
+          const localSource = localMeta[String(b.source_id)]?.source;
+          const platformLabel = serverLabel || (localSource === 'qq' ? 'QQ音乐' : localSource === 'bili' ? 'B站' : '网易云');
+          const isQQ = platformLabel === 'QQ音乐';
+          const isBili = platformLabel === 'B站';
+          const isQQClass = isQQ ? ' qq' : '';
           return `
           <div class="cand-blocked-row" data-${idKey}="${esc(b.source_id)}">
             <div class="cand-blocked-info">
-              ${hasMeta ? `<span class="cand-blocked-name">${esc(m.name)}</span><span class="cand-blocked-detail"><span class="cand-source-tag${isQQ ? ' qq' : ''}">${esc(platformLabel)}</span> ${esc(m.artist || '未知')}</span>` : `<span class="cand-blocked-id">${esc(b.source_id)}</span>`}
+              ${(hasServerMeta || hasLocalMeta) ? `
+                <span class="cand-blocked-name">${esc(name)}</span>
+                <span class="cand-blocked-detail"><span class="cand-source-tag${isQQClass}">${esc(platformLabel)}</span> ${esc(artist || '未知')}</span>
+              ` : `<span class="cand-blocked-id">${esc(b.source_id)}</span>`}
             </div>
             <span class="cand-blocked-time">${new Date(b.blocked_at).toLocaleDateString()}</span>
             <button class="cand-unblock-btn" title="取消屏蔽"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 9 8 9"/></svg> 恢复</button>
