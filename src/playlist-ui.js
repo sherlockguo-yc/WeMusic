@@ -241,10 +241,15 @@ export function renderSongList(container, songs, opts = {}) {
     // 封面（仅 showCover 模式）
     let coverHtml = '';
     if (showCover) {
-      const coverUrl = s.album_mid ? albumCover(s.album_mid, 150) : '';
-      coverHtml = coverUrl
-        ? `<img class="song-cover-sm" src="${coverUrl}" loading="lazy" onerror="this.style.display='none'" />`
-        : `<div class="song-cover-ph-sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>`;
+      const phSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+      const ph = `<span class="song-cover-ph-sm">${phSvg}</span>`;
+      if (s.album_mid) {
+        const coverUrl = albumCover(s.album_mid, 150);
+        // onerror 用 outerHTML 替换为默认图标，避免 404 时留空
+        coverHtml = `<img class="song-cover-sm" src="${coverUrl}" loading="lazy" data-fb="${esc(ph)}" onerror="this.outerHTML=this.dataset.fb" />`;
+      } else {
+        coverHtml = ph;
+      }
     }
     return `
     <div class="song-row" data-i="${i}">
