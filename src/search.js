@@ -68,8 +68,9 @@ export async function doSearch() {
     const totalNote = isSingerResult ? `已加载 ${data.songs.length} / ${data.total || '?'} 首` : `${data.songs.length} 首`;
     let html = `<div class="view-title">搜索：${esc(keyword)}</div>`;
     if (isSingerResult) {
+      const singerPh = '<div class="singer-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>';
       html += `<div class="singer-card">
-        <img class="singer-avatar" src="${singerAvatar(data.singer.mid)}" onerror="this.style.display='none'" />
+        <img class="singer-avatar" src="${singerAvatar(data.singer.mid)}" data-fb="${esc(singerPh)}" onerror="this.outerHTML=this.dataset.fb" />
         <div class="info"><h3>${esc(data.singer.name)}</h3><p>共 ${data.total} 首歌曲${data.album_count ? ' · ' + data.album_count + ' 张专辑' : ''}</p></div>
         <button class="btn green" id="openArtistBtn">进入歌手页</button>
       </div>`;
@@ -159,9 +160,10 @@ export async function openArtist(mid, name) {
     const singerName = data.singer?.name || name;
     const singerSub = `共 ${data.total || 0} 首歌曲 · ${data.albums.length} 张专辑`;
 
+    const artistPh = '<div class="artist-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>';
     main.innerHTML = `
       <div class="artist-header">
-        <img class="artist-avatar" src="${singerAvatar(mid)}" onerror="this.style.display='none'" />
+        <img class="artist-avatar" src="${singerAvatar(mid)}" data-fb="${esc(artistPh)}" onerror="this.outerHTML=this.dataset.fb" />
         <div class="artist-info">
           <h2 class="artist-name">${esc(singerName)}</h2>
           <p class="artist-sub">${singerSub}</p>
@@ -240,7 +242,8 @@ export async function openAlbum(mid, name) {
       : `<button class="btn sm" id="albumSaveBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 收藏专辑</button>`;
 
     const coverUrl = albumCover(mid, 500);
-    const coverHtml = `<img class="album-detail-cover" src="${coverUrl}" alt="" ${coverUrl ? 'onerror="this.style.display=\'none\'"' : ''} />`;
+    const albumPh = '<div class="album-detail-cover" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>';
+    const coverHtml = `<img class="album-detail-cover" src="${coverUrl}" alt="" data-fb="${esc(albumPh)}" onerror="this.outerHTML=this.dataset.fb" />`;
     const descText = data.desc ? data.desc.split(/\n\n+/).filter((p, i, arr) => i === 0 || arr[i-1].trim().slice(0,30) !== p.trim().slice(0,30)).join('\n\n') : '';
 
     main.innerHTML = `

@@ -47,6 +47,15 @@ export function isLive(title = '') {
   return LIVE_KW.some((k) => t.includes(k.toLowerCase()));
 }
 
+/** 歌名是否暗示用户想要现场版（如 "XXX (Live)"、"XXX 现场版"） */
+export function songNameSuggestsLive(name = '') {
+  if (!name) return false;
+  // 只保留最可能出现在歌名中的现场版关键词，避免假匹配
+  const SONG_LIVE_KW = ['live', '现场', '演唱会', '现场版'];
+  const t = name.toLowerCase();
+  return SONG_LIVE_KW.some((k) => t.includes(k.toLowerCase()));
+}
+
 // 是否应被直接过滤（含「伴奏」等）
 export function isExcluded(title = '') {
   const t = title.toLowerCase();
@@ -195,9 +204,19 @@ export function rank(videos, name, singer, expectDur, crowdCompletions = null) {
     if (matched.length) scored = matched;
   }
 
+  // 歌名暗示现场版：现场版不但不受惩罚，反而获得提权加分（+30）
+  // 因为这类歌曲（如 "XXX (Live)"）的现场版就是正确答案
+  const nameSuggestsLive = songNameSuggestsLive(name);
+  if (nameSuggestsLive) {
+    scored = scored.map((v) => ({
+      ...v,
+      score: v.live ? v.score + 30 : v.score,
+    }));
+  }
+
   // 其次：非现场优先，再按综合分（高音质 + 高播放量 + 时长接近）
   scored.sort((a, b) => {
-    if (a.live !== b.live) return a.live ? 1 : -1;
+    if (!nameSuggestsLive && a.live !== b.live) return a.live ? 1 : -1;
     return b.score - a.score;
   });
   return scored;
@@ -274,7 +293,9 @@ router.post('/resolve', authRequired, async (req, res) => {
       return res.status(404).json({ error: '所有候选视频均已被屏蔽，如需解除请刷新页面后重新搜索' });
     }
     // best 也应该从干净列表里选，避免自动播放到已拉黑的源
-    const best = clean.find((v) => !v.live) || clean[0];
+    // 歌名含 live 关键词时（如 "XXX (Live)"），现场版反而是正确答案，不强制选非现场
+    const nameImpliesLive = songNameSuggestsLive(name);
+    const best = nameImpliesLive ? clean[0] : (clean.find((v) => !v.live) || clean[0]);
     const top5 = clean.slice(0, 5).map((v) => `[${v.score}] ${v.title.slice(0,40)} live:${v.live}`).join(' | ');
     console.log(`[video:resolve] top5 after clean: ${top5}`);
     res.json({ best, candidates: clean.slice(0, 25) });

@@ -125,8 +125,9 @@ function buildReportHtml(data, periodType) {
           <div class="wr-card-hd"><span class="wr-card-icon i-song"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>Top 歌曲</div>
           <ol class="wr-list wr-top-songs">${data.topSongs.slice(0, 5).map((s, i) => {
             const coverUrl = s.album_mid ? albumCover(s.album_mid, 150) : '';
+            const wrSongPh = '<div class="wr-song-cover" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>';
             return `<li>
-              ${coverUrl ? `<img class="wr-song-cover" src="${coverUrl}" loading="lazy" onerror="this.style.display='none'" />` : ''}
+              ${coverUrl ? `<img class="wr-song-cover" src="${coverUrl}" loading="lazy" data-fb="${esc(wrSongPh)}" onerror="this.outerHTML=this.dataset.fb" />` : ''}
               ${rankBadge(i)}
               <div class="wr-li-info">
                 <div class="wr-li-name">${esc(s.name)}</div>
@@ -142,7 +143,9 @@ function buildReportHtml(data, periodType) {
         </div>
         <div class="wr-card albums">
           <div class="wr-card-hd"><span class="wr-card-icon i-album"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span>最爱专辑</div>
-          <div class="wr-album-grid">${data.topAlbums.length ? data.topAlbums.map((a, i) => `<div class="wr-album-item"><img src="${albumCover(a.album_mid, 300)}" onerror="this.style.display='none'" /><div class="wr-album-info"><div class="wr-album-name">${esc(a.album)}</div><div class="wr-album-singer">${esc(a.singer || '')}</div><span>${a.play_count}次</span></div></div>`).join('') : '<div class="wr-empty">暂无数据</div>'}</div>
+          <div class="wr-album-grid">${data.topAlbums.length ? data.topAlbums.map((a, i) => {
+            const wrAlbumPh = '<div style="width:100%;aspect-ratio:1;border-radius:8px;background:var(--bg-soft);display:flex;align-items:center;justify-content:center;color:var(--text-dim);box-shadow:0 2px 8px rgba(0,0,0,.15)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>';
+            return `<div class="wr-album-item"><img src="${albumCover(a.album_mid, 300)}" data-fb="${esc(wrAlbumPh)}" onerror="this.outerHTML=this.dataset.fb" /><div class="wr-album-info"><div class="wr-album-name">${esc(a.album)}</div><div class="wr-album-singer">${esc(a.singer || '')}</div><span>${a.play_count}次</span></div></div>`;}).join('') : '<div class="wr-empty">暂无数据</div>'}</div>
         </div>
         <div class="wr-card habit">
           <div class="wr-card-hd"><span class="wr-card-icon i-habit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>播放习惯<span class="wr-persona"><span class="wr-persona-icon">${persona.icon}</span>${esc(persona.label)}</span></div>

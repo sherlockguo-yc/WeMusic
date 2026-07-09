@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   songKey, isLive, isExcluded, singerParts, matchSinger,
-  scoreVideo, nameSegments, rank,
+  scoreVideo, nameSegments, rank, songNameSuggestsLive,
 } from '../../server/routes/play.js';
 
 // helper
@@ -25,6 +25,14 @@ describe('isLive — 现场版检测', () => {
   it('"演唱会" → true', () => { expect(isLive('演唱会录音')).toBe(true); });
   it('普通标题 → false', () => { expect(isLive('晴天 - 周杰伦')).toBe(false); });
   it('空标题 → false', () => { expect(isLive('')).toBe(false); });
+});
+
+describe('songNameSuggestsLive — 歌名是否暗示现场版', () => {
+  it('歌名含 Live → true', () => { expect(songNameSuggestsLive('晴天 (Live)')).toBe(true); });
+  it('歌名含 现场版 → true', () => { expect(songNameSuggestsLive('小美满 现场版')).toBe(true); });
+  it('歌名含 演唱会 → true', () => { expect(songNameSuggestsLive('十年 演唱会')).toBe(true); });
+  it('普通歌名 → false', () => { expect(songNameSuggestsLive('晴天')).toBe(false); });
+  it('空歌名 → false', () => { expect(songNameSuggestsLive('')).toBe(false); });
 });
 
 describe('isExcluded — 黑名单过滤', () => {
@@ -153,5 +161,24 @@ describe('rank — 综合排序', () => {
     const v2 = mkVideo('晴天 官方 MV', '官方频道', 1e6, 200);
     const r = rank([v1, v2], '晴天', '', 200);
     expect(r[0].score).toBeGreaterThan(r[1].score);
+  });
+
+  it('歌名含 Live 时现场版获 +30 提权：同条件下碾压 studio 版', () => {
+    // 这首歌就叫 "晴天 (Live)"，现场版就是正确答案
+    // 两个视频基础条件相同（同歌手、同播放、同时长），仅 live 标记不同
+    // 现场版应获得 +30 提权，排到最前
+    const live = mkVideo('晴天 Live', '周杰伦', 1e5, 200);
+    const studio = mkVideo('晴天', '周杰伦', 1e5, 200);
+    const r = rank([studio, live], '晴天 (Live)', '周杰伦', 200);
+    expect(r[0].live).toBe(true);
+    expect(r[0].score).toBeGreaterThan(r[1].score);
+  });
+
+  it('普通歌名仍然非现场优先（原有行为不变）', () => {
+    const live = mkVideo('晴天 现场版', '', 1e6, 200);
+    const studio = mkVideo('晴天 MV', '', 1e5, 200);
+    const r = rank([live, studio], '晴天', '', 200);
+    expect(r[0].live).toBe(false);
+    expect(r[1].live).toBe(true);
   });
 });

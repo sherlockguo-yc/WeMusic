@@ -1,0 +1,56 @@
+# 图片加载失败必须 fallback
+
+## 核心原则
+
+**任何外链图片（专辑封面、歌手头像等）加载失败时，必须 fallback 到默认占位元素，禁止仅隐藏图片导致留空。**
+
+## 正确模式
+
+用 `data-fb` 存储默认占位 HTML，`onerror` 触发时用 `outerHTML` 替换：
+
+```js
+const ph = `<span class="song-cover-ph-sm"><svg>...</svg></span>`;
+const html = `<img class="cover" src="${url}" loading="lazy"
+  data-fb="${esc(ph)}"
+  onerror="this.outerHTML=this.dataset.fb" />`;
+```
+
+## 错误模式
+
+```js
+// ❌ 禁止：图片消失留空，用户看到空白区域
+onerror="this.style.display='none'"
+onerror="this.style.visibility='hidden'"
+```
+
+## 已修复位置（全部 8 处，2026-07-08）
+
+| 文件 | 元素 |
+|------|------|
+| `playlist-ui.js` | `renderSongList()` 列表面板 |
+| `utils.js` | `playlistCoverHtml` 歌单封面 |
+| `search.js:72` | 歌手搜索结果头像 |
+| `search.js:164` | 歌手详情页头像 |
+| `search.js:243` | 专辑详情页封面 |
+| `albums.js` | 收藏专辑卡片封面 |
+| `share.js` | 分享落地页封面 |
+| `report.js` | 周报 Top 歌曲/最爱专辑封面 |
+
+## 例外
+
+- `player.js` `updateNpCover` 已有独立的三级兜底（专辑 → 歌手 → 默认），不依赖 inline onerror，不需要修改。
+
+<!--
+┌─ 决策上下文 ────────────────────────────┐
+│ 日期: 2026-07-08                         │
+│ 触发: 为你推荐中多首歌曲封面 y.qq.com     │
+│       404 后留空，无默认图标显示           │
+│ 方案A: onerror 时插入隐藏的额外 div 兄弟  │
+│ 方案B: onerror 时 outerHTML 替换为默认图标│
+│ 选择: B                                  │
+│ 理由: 不增加 DOM 节点数，替换前后尺寸一致  │
+│       （28×28），flex 布局不跳动           │
+│ 重评条件: 如果出现「替换前后布局错位」     │
+│           的 bug，考虑方案 A              │
+└──────────────────────────────────────────┘
+-->

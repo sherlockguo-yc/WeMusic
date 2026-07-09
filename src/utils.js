@@ -121,12 +121,13 @@ export function singerAvatar(mid, size = 150) {
 
 export function playlistCoverHtml(mids = []) {
   const cells = [];
+  const ph = '<div class="ph"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>';
   for (let i = 0; i < 4; i++) {
     const mid = mids[i];
     cells.push(
       mid
-        ? `<img src="${albumCover(mid, 150)}" loading="lazy" onerror="this.style.visibility='hidden'" />`
-        : '<div class="ph"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>'
+        ? `<img src="${albumCover(mid, 150)}" loading="lazy" data-fb="${esc(ph)}" onerror="this.outerHTML=this.dataset.fb" />`
+        : ph
     );
   }
   return `<div class="pl-grid-cover">${cells.join('')}</div>`;

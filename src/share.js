@@ -119,6 +119,7 @@ export async function renderSharePage(data) {
     ? (t.lyricsSource === Platform.NETEASE ? '网易云音乐' : 'QQ 音乐')
     : '';
   const byline = t.from ? `由 ${esc(t.from)} 分享` : '来自好友的分享';
+  const shareCoverPh = '<div class="share-page-cover-fb"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>';
 
   $('main').innerHTML = `
     <div class="share-page">
@@ -133,10 +134,8 @@ export async function renderSharePage(data) {
 
         <div class="share-page-cover">
           ${albumImg
-            ? `<img src="${esc(albumImg)}" alt="" onerror="this.style.display='none'" />`
-            : `<div class="share-page-cover-fb">
-                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-               </div>`}
+            ? `<img src="${esc(albumImg)}" alt="" data-fb="${esc(shareCoverPh)}" onerror="this.outerHTML=this.dataset.fb" />`
+            : shareCoverPh}
         </div>
 
         <div class="share-page-info">
