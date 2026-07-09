@@ -2,6 +2,7 @@
 import { api } from '../api.js';
 import { esc, toast, uiConfirm, uiPrompt, uiChoice, fmtTime } from '../utils.js';
 import { refreshCachedRole } from '../admin-panel.js';
+import { state } from '../state.js';
 
 let currentRole = 'viewer';
 let activeView = 'active'; // 'active' | 'archived'
@@ -171,7 +172,7 @@ function bindActions(container) {
         if (!newRole) return;
         await api(`/admin/users/${id}/role`, { method: 'PUT', body: { role: newRole } });
         // 如果修改的是自己的角色，同步更新缓存和导航
-        refreshCachedRole();
+        if (state.user && state.user.username === username) refreshCachedRole(newRole);
         toast(`已更新 ${username} 角色为 ${roleLabel(newRole)}`);
         loadPage(currentPage);
       }

@@ -152,9 +152,19 @@ function cleanupCurrentTab() {
 }
 
 // 供外部模块调用：更新缓存的角色（角色修改操作后调用）
-export function refreshCachedRole(newRole) {
-  if (newRole) cachedRole = newRole;
-  else cachedRole = null; // 强制重新查询
+export async function refreshCachedRole(newRole) {
+  if (newRole) {
+    cachedRole = newRole;
+  } else {
+    // 无参数时重新从服务端获取角色，避免 cachedRole 被置为 null 后 renderNav 渲染空白侧栏
+    try {
+      const me = await api('/admin/me');
+      cachedRole = me.role;
+    } catch {
+      // 获取失败时保持现状，不破坏导航
+      return;
+    }
+  }
   renderNav();
 }
 
