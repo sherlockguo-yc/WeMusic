@@ -24,7 +24,8 @@
     "test:all": "npm run test:unit && npm run test:api && npm run test:e2e",
     "e2e": "node scripts/e2e.js",
     "check-deps": "node scripts/check-deps.js",
-    "codegraph": "node scripts/codegraph.js"
+    "codegraph": "node scripts/codegraph.js",
+    "admin:promote": "node scripts/promote-admin.js"
   },
   "keywords": [
     "music",

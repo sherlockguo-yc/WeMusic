@@ -47,9 +47,8 @@ function runDeploy() {
     if (stdout) console.log(stdout.trim());
     if (stderr) console.warn(stderr.trim());
 
-    // 重启主服务 (使用 pm2 reload 或直接发信号)
-    // 如果你的服务器用 pm2 管理，取消下一行注释:
-    // exec('pm2 reload wemusic 2>&1', { cwd: ROOT_DIR });
+    // 重启主服务：优先用 pm2，否则用 build-restart 脚本
+    exec('pm2 reload wemusic 2>&1 || pm2 restart wemusic 2>&1 || node scripts/build-restart.js 2>&1', { cwd: ROOT_DIR });
   });
 }
 

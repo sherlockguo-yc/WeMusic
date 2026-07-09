@@ -215,14 +215,16 @@ db.exec(`
   );
 `);
 
-// ---- 初始化超级管理员：将 SUPER_ADMIN 环境变量中指定的用户 role 设为 super_admin ----
+// ---- 初始化超级管理员：将 superAdmins 列表中的用户 role 设为 super_admin ----
 import('./config.js').then(({ config: cfg }) => {
-  if (cfg.superAdmin) {
-    // 如果用户存在且还不是 super_admin，自动提升
-    const row = db.prepare("SELECT id, role FROM users WHERE username = ?").get(cfg.superAdmin);
-    if (row && row.role !== 'super_admin') {
-      db.prepare("UPDATE users SET role = 'super_admin' WHERE id = ?").run(row.id);
-      console.log(`[db] 已将 ${cfg.superAdmin} 提升为超级管理员`);
+  const names = cfg.superAdmins;
+  if (names && names.length) {
+    for (const name of names) {
+      const row = db.prepare("SELECT id, role FROM users WHERE username = ?").get(name);
+      if (row && row.role !== 'super_admin') {
+        db.prepare("UPDATE users SET role = 'super_admin' WHERE id = ?").run(row.id);
+        console.log(`[db] 已将 ${name} 提升为超级管理员`);
+      }
     }
   }
 }).catch(() => {});
