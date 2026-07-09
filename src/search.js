@@ -1,14 +1,11 @@
 // ---------------- 搜索、歌手页、专辑页 ----------------
-import { $, esc, fmtDur, albumCover, toast, songColHeader } from './utils.js';
+import { $, esc, fmtDur, albumCover, singerAvatar, toast, songColHeader } from './utils.js';
 import { heartOutline, heartFilled } from './ui.js';
 import { api } from './api.js';
 import { state } from './state.js';
 import { renderSongList, listToolsHtml, bindListTools, addSongs, songInPlaylists } from './playlist-ui.js';
 // 动态导入避免与 main.js 的循环依赖
 const _navPush = (view, data) => import('./main.js').then(m => m.navPush(view, data));
-
-// 歌手头像 URL
-const singerAvatar = (mid) => `https://y.gtimg.cn/music/photo_new/T001R300x300M000${mid}.jpg`;
 
 
 
@@ -70,7 +67,7 @@ export async function doSearch() {
     if (isSingerResult) {
       const singerPh = '<div class="singer-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>';
       html += `<div class="singer-card">
-        <img class="singer-avatar" src="${singerAvatar(data.singer.mid)}" data-fb="${esc(singerPh)}" onerror="this.outerHTML=this.dataset.fb" />
+        <img class="singer-avatar" src="${singerAvatar(data.singer.mid, 300)}" data-fb="${esc(singerPh)}" onerror="this.outerHTML=this.dataset.fb" />
         <div class="info"><h3>${esc(data.singer.name)}</h3><p>共 ${data.total} 首歌曲${data.album_count ? ' · ' + data.album_count + ' 张专辑' : ''}</p></div>
         <button class="btn green" id="openArtistBtn">进入歌手页</button>
       </div>`;
@@ -145,6 +142,11 @@ function appendLoadMore(main, container, songBuf, singer, total) {
 }
 
 let _artistTab = 'songs'; // 记住上次在专辑页点了哪个 tab
+let _lbPhotos = [];       // lightbox 图片列表（模块级，跨歌手页共享）
+let _lbIdx = 0;           // lightbox 当前索引
+let _lbTimer = null;      // lightbox 自动播放定时器
+let _lbPlaying = false;   // 是否正在自动播放
+let _lbLayerA = true;     // 双图层切换：当前活跃的是 A 还是 B
 
 export async function openArtist(mid, name) {
   state.view = 'artist';
@@ -163,7 +165,7 @@ export async function openArtist(mid, name) {
     const artistPh = '<div class="artist-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>';
     main.innerHTML = `
       <div class="artist-header">
-        <img class="artist-avatar" src="${singerAvatar(mid)}" data-fb="${esc(artistPh)}" onerror="this.outerHTML=this.dataset.fb" />
+        <img class="artist-avatar" src="${singerAvatar(mid, 300)}" data-fb="${esc(artistPh)}" onerror="this.outerHTML=this.dataset.fb" />
         <div class="artist-info">
           <h2 class="artist-name">${esc(singerName)}</h2>
           <p class="artist-sub">${singerSub}</p>
@@ -172,6 +174,7 @@ export async function openArtist(mid, name) {
       <div class="artist-tabs">
         <button class="artist-tab${_artistTab === 'songs' ? ' active' : ''}" data-tab="songs">歌曲（${totalNote}）</button>
         <button class="artist-tab${_artistTab === 'albums' ? ' active' : ''}" data-tab="albums">专辑（${data.albums.length}）</button>
+        <button class="artist-tab${_artistTab === 'photos' ? ' active' : ''}" data-tab="photos">写真（${data.albums.length}）</button>
       </div>
       <div class="artist-tab-content" id="artistTabContent">
         <div class="artist-pane" id="artistSongsPane" style="display:${_artistTab === 'songs' ? 'block' : 'none'}">
@@ -180,6 +183,9 @@ export async function openArtist(mid, name) {
         </div>
         <div class="artist-pane" id="artistAlbumsPane" style="display:${_artistTab === 'albums' ? 'block' : 'none'}">
           <div class="album-grid" id="artistAlbums"></div>
+        </div>
+        <div class="artist-pane" id="artistPhotosPane" style="display:${_artistTab === 'photos' ? 'block' : 'none'}">
+          <div class="photo-gallery" id="artistPhotos"></div>
         </div>
       </div>`;
 
@@ -200,17 +206,150 @@ export async function openArtist(mid, name) {
       </div>`).join('') || '<div class="empty">暂无专辑</div>';
     grid.querySelectorAll('.album-card').forEach((el) => { el.onclick = () => openAlbum(el.dataset.mid, el.dataset.name); });
 
+    // 写真面板
+    const photosContainer = $('artistPhotos');
+    const allPhotos = [
+      { src: singerAvatar(mid, 800), label: singerName, isSinger: true },
+      ...data.albums.map((a) => ({
+        src: albumCover(a.album_mid, 800),
+        label: a.name,
+        albumMid: a.album_mid,
+      })),
+    ];
+    photosContainer.innerHTML = allPhotos.map((p, i) => `
+      <div class="photo-item${p.isSinger ? ' photo-hero' : ''}" data-idx="${i}">
+        <img src="${esc(p.src)}" loading="lazy"
+          onerror="this.closest('.photo-item').remove()"
+          title="${esc(p.label)}" />
+      </div>`).join('') || '<div class="empty">暂无写真</div>';
+
+    // Lightbox（DOM 只创建一次，状态在模块级）
+    function ensureLightbox() {
+      if (document.getElementById('photoLightbox')) return;
+      const mask = document.createElement('div');
+      mask.id = 'photoLightbox';
+      mask.className = 'lightbox-mask';
+      mask.innerHTML = `
+        <button class="lightbox-close"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="lightbox-prev"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <div class="lightbox-img-wrap">
+          <img class="lightbox-img lightbox-img-a" src="" alt="" />
+          <img class="lightbox-img lightbox-img-b" src="" alt="" />
+        </div>
+        <div class="lightbox-label"></div>
+        <div class="lightbox-counter"></div>
+        <button class="lightbox-play" title="自动播放"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+        <button class="lightbox-next"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>`;
+      document.body.appendChild(mask);
+      mask.addEventListener('click', (e) => { if (e.target === mask) closeLightbox(); });
+      mask.querySelector('.lightbox-close').onclick = closeLightbox;
+      mask.querySelector('.lightbox-prev').onclick = () => { pauseAuto(); _lbIdx = _lbIdx <= 0 ? _lbPhotos.length - 1 : _lbIdx - 1; showLightbox(); };
+      mask.querySelector('.lightbox-next').onclick = () => { pauseAuto(); _lbIdx = _lbIdx >= _lbPhotos.length - 1 ? 0 : _lbIdx + 1; showLightbox(); };
+      mask.querySelector('.lightbox-play').onclick = togglePlay;
+    }
+    function showLightbox(isFirst) {
+      const mask = document.getElementById('photoLightbox');
+      const p = _lbPhotos[_lbIdx];
+      mask.querySelector('.lightbox-label').textContent = p.label || '';
+      mask.querySelector('.lightbox-counter').textContent = `${_lbIdx + 1} / ${_lbPhotos.length}`;
+      updatePlayBtn();
+
+      const active = mask.querySelector(_lbLayerA ? '.lightbox-img-a' : '.lightbox-img-b');
+      const inactive = mask.querySelector(_lbLayerA ? '.lightbox-img-b' : '.lightbox-img-a');
+
+      if (isFirst) {
+        // 首次打开：直接显示，不做过渡
+        active.src = p.src;
+        active.classList.add('on');
+        inactive.classList.remove('on');
+        return;
+      }
+      // 双图层 cross-fade：下一张在图加载到后台，加载完后交叉淡入淡出
+      inactive.src = p.src;
+      const done = () => {
+        inactive.classList.add('on');
+        active.classList.remove('on');
+        _lbLayerA = !_lbLayerA;
+      };
+      if (inactive.complete) { done(); }
+      else { inactive.onload = done; inactive.onerror = () => { done(); }; }
+    }
+    function openLightbox() {
+      _lbPlaying = false;
+      clearTimeout(_lbTimer);
+      showLightbox(true);
+      document.getElementById('photoLightbox').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox() {
+      _lbPlaying = false;
+      clearTimeout(_lbTimer);
+      const mask = document.getElementById('photoLightbox');
+      if (mask) mask.classList.remove('show');
+      document.body.style.overflow = '';
+    }
+    function togglePlay() {
+      _lbPlaying = !_lbPlaying;
+      updatePlayBtn();
+      if (_lbPlaying) autoNext();
+      else clearTimeout(_lbTimer);
+    }
+    function autoNext() {
+      if (!_lbPlaying) return;
+      _lbTimer = setTimeout(() => {
+        _lbIdx = _lbIdx >= _lbPhotos.length - 1 ? 0 : _lbIdx + 1;
+        showLightbox();
+        autoNext();
+      }, 6000);
+    }
+    function pauseAuto() {
+      if (_lbPlaying) { _lbPlaying = false; clearTimeout(_lbTimer); updatePlayBtn(); }
+    }
+    function updatePlayBtn() {
+      const btn = document.querySelector('#photoLightbox .lightbox-play');
+      if (!btn) return;
+      btn.innerHTML = _lbPlaying
+        ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
+        : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    }
+    ensureLightbox();
+    // 键盘导航（只绑定一次）
+    if (!document._lbKeyBound) {
+      document._lbKeyBound = true;
+      document.addEventListener('keydown', (e) => {
+        const mask = document.getElementById('photoLightbox');
+        if (!mask || !mask.classList.contains('show')) return;
+        if (e.key === 'Escape') closeLightbox();
+        else if (e.key === 'ArrowLeft') { pauseAuto(); _lbIdx = _lbIdx <= 0 ? _lbPhotos.length - 1 : _lbIdx - 1; showLightbox(); }
+        else if (e.key === 'ArrowRight') { pauseAuto(); _lbIdx = _lbIdx >= _lbPhotos.length - 1 ? 0 : _lbIdx + 1; showLightbox(); }
+      });
+    }
+
+    // 点击画廊中的图片 → 打开 lightbox
+    photosContainer.querySelectorAll('.photo-item').forEach((el) => {
+      el.onclick = () => {
+        const container = el.closest('#artistPhotos');
+        const items = [...container.querySelectorAll('.photo-item')];
+        _lbPhotos = items.map((it) => ({
+          src: it.querySelector('img').src,
+          label: it.querySelector('img').title || '',
+        }));
+        _lbIdx = items.indexOf(el);
+        openLightbox();
+      };
+    });
+
     // Tab 切换
     main.querySelectorAll('.artist-tab').forEach((btn) => {
       btn.onclick = () => {
         _artistTab = btn.dataset.tab;
         main.querySelectorAll('.artist-tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
-        const isSongs = btn.dataset.tab === 'songs';
-        $('artistSongsPane').style.display = isSongs ? 'block' : 'none';
-        $('artistAlbumsPane').style.display = isSongs ? 'none' : 'block';
+        $('artistSongsPane').style.display = btn.dataset.tab === 'songs' ? 'block' : 'none';
+        $('artistAlbumsPane').style.display = btn.dataset.tab === 'albums' ? 'block' : 'none';
+        $('artistPhotosPane').style.display = btn.dataset.tab === 'photos' ? 'block' : 'none';
         const loadMore = document.getElementById('loadMoreWrap');
-        if (loadMore) loadMore.style.display = isSongs ? '' : 'none';
+        if (loadMore) loadMore.style.display = btn.dataset.tab === 'songs' ? '' : 'none';
       };
     });
 
