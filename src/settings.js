@@ -568,6 +568,18 @@ export async function openSettings() {
     b.classList.toggle('active', b.dataset.size === curFontSize);
     b.onclick = () => { localStorage.setItem('wemusic_font_size', b.dataset.size); applyFontSize(b.dataset.size); _dbSyncPrefs(); };
   });
+
+  // 音量标准化开关
+  const normToggle = $('volNormToggle');
+  if (normToggle) {
+    normToggle.checked = localStorage.getItem('wemusic_volume_normalize') === '1';
+    normToggle.onchange = () => {
+      localStorage.setItem('wemusic_volume_normalize', normToggle.checked ? '1' : '0');
+      // 立即生效：通知 player.js 重新应用归一化
+      window.dispatchEvent(new CustomEvent('volume_normalize_changed'));
+    };
+  }
+
   const curPalette = localStorage.getItem('wemusic_palette') || 'green';
   document.querySelectorAll('.palette-item').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === curPalette);

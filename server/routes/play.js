@@ -1,13 +1,107 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import fs from 'node:fs';
 import { Readable } from 'node:stream';
+import { execFile } from 'node:child_process';
 import { authRequired } from '../middleware/auth.js';
-import { searchVideos, getAudioStream, fetchAudio } from '../services/bilibili.js';
+import { searchVideos, getAudioStream, fetchAudio, getVideoPages } from '../services/bilibili.js';
 import { config } from '../config.js';
 import db from '../db.js';
 import { getCrowdCompletions, crowdBonus } from '../services/crowd.js';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 const router = express.Router();
+const ffmpegPath = ffmpegInstaller.path;
+
+// 启动时检查 ffmpeg 是否可用
+try {
+  fs.accessSync(ffmpegPath, fs.constants.X_OK);
+  console.log(`[gain] ffmpeg ready: ${ffmpegPath}`);
+} catch {
+  console.warn('[gain] ⚠️  ffmpeg 不可用！音量归一化分析将无法运行。运行 npm install 重新安装依赖。');
+}
+
+// ---- 音量归一化：串行分析队列 ----
+const GAIN_TARGET = -23; // LUFS（EBU R128 广播标准）
+const GAIN_MIN = 0.3;
+const GAIN_MAX = 3.0;
+
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+function calcGain(lufs) {
+  return clamp(10 ** ((GAIN_TARGET - lufs) / 20), GAIN_MIN, GAIN_MAX);
+}
+
+let _gainQueue = Promise.resolve();
+
+// 启动时清理残留临时文件
+try {
+  const tmpFiles = fs.readdirSync('/tmp').filter((f) => f.startsWith('wemusic_gain_'));
+  for (const f of tmpFiles) {
+    try { fs.unlinkSync(`/tmp/${f}`); } catch {}
+  }
+  if (tmpFiles.length) console.log(`[gain] cleaned ${tmpFiles.length} leftover temp file(s)`);
+} catch {}
+
+function enqueueAnalysis(bvid, cid, streamUrl) {
+  _gainQueue = _gainQueue.then(() => runAnalysis(bvid, cid, streamUrl));
+}
+
+async function runAnalysis(bvid, cid, streamUrl) {
+  const tempPath = `/tmp/wemusic_gain_${bvid}_${cid}_${Date.now()}.mp4`;
+  try {
+    console.log(`[gain] downloading bvid=${bvid} cid=${cid}`);
+    const resp = await fetch(streamUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        Referer: `https://www.bilibili.com/video/${bvid}`,
+      },
+    });
+    if (!resp.ok) throw new Error(`download status ${resp.status}`);
+    if (!resp.body) throw new Error('empty body');
+
+    const writer = fs.createWriteStream(tempPath);
+    const body = Readable.fromWeb(resp.body);
+    await new Promise((resolve, reject) => {
+      body.pipe(writer);
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+      body.on('error', reject);
+    });
+    console.log(`[gain] downloaded ${(fs.statSync(tempPath).size / 1024 / 1024).toFixed(1)}MB bvid=${bvid}`);
+
+    // ffmpeg EBU R128 integrated loudness（ebur128 分析完成后 exit code≠0，但 stderr 中有结果）
+    const stderr = await new Promise((resolve, reject) => {
+      execFile(ffmpegPath, [
+        '-i', tempPath,
+        '-af', 'ebur128=video=0',
+        '-f', 'null', '-',
+      ], { timeout: 120000 }, (err, stdout, stderr) => {
+        // ebur128 滤镜完成后 ffmpeg 会以非零码退出，这是正常的——不 reject
+        if (err && !stderr) reject(new Error(`ffmpeg: ${err.message}`));
+        else resolve(stderr || '');
+      });
+    });
+
+    // 从 stderr 中解析 "Integrated loudness" 部分
+    const match = stderr.match(/I:\s*(-?[\d.]+)\s*LUFS/);
+    if (!match) throw new Error(`could not parse LUFS (stderr len=${stderr.length})`);
+
+    const lufs = parseFloat(match[1]);
+    if (isNaN(lufs)) throw new Error(`invalid LUFS: ${match[1]}`);
+
+    const gain = calcGain(lufs);
+    db.prepare('UPDATE gain_cache SET gain_lufs=?, gain_mult=?, status=?, updated_at=? WHERE bvid=? AND cid=?')
+      .run(Math.round(lufs * 100) / 100, Math.round(gain * 10000) / 10000, 'complete', Date.now(), bvid, cid);
+    console.log(`[gain] done bvid=${bvid} cid=${cid} lufs=${lufs} gain=${gain.toFixed(4)}`);
+  } catch (e) {
+    console.warn(`[gain] FAILED bvid=${bvid} cid=${cid}: ${e.message}`);
+    db.prepare('UPDATE gain_cache SET status=?, updated_at=? WHERE bvid=? AND cid=?')
+      .run('failed', Date.now(), bvid, cid);
+  } finally {
+    try { fs.unlinkSync(tempPath); } catch {}
+  }
+}
 
 // 查询某首歌 + 类型被拉黑的源 ID 集合
 function getBlockedSet(userId, songKey, type) {
@@ -347,6 +441,8 @@ router.get('/search', authRequired, async (req, res) => {
  * <audio> 标签无法携带 Authorization 头，故通过查询参数传递 token。
  * 未传 token 时允许访问（兼容直接访问），但建议前端传参以防滥用。
  * GET /api/play/stream?bvid=BVxxx[&cid=xxx][&token=xxx]
+ *
+ * 同时触发音量归一化分析：DB 中无此 bvid+cid 的 gain → 后台异步下载完整文件 → ffprobe 分析
  */
 router.get('/stream', async (req, res) => {
   const { bvid, cid, token } = req.query;
@@ -364,6 +460,7 @@ router.get('/stream', async (req, res) => {
   console.log(`[bg:stream] request bvid=${bvid} range=${req.headers.range || 'none'} user=${userId || 'anon'}`);
   try {
     const stream = await getAudioStream(bvid, cid ? Number(cid) : undefined);
+    const resolvedCid = stream.cid;
     const range = req.headers.range;
     const upstream = await fetchAudio(stream.url, bvid, range);
 
@@ -378,12 +475,75 @@ router.get('/stream', async (req, res) => {
       console.warn(`[bg:stream] FAILED bvid=${bvid} status=${upstream.status}`);
       return res.status(502).send('音频拉取失败');
     }
+
+    // 音量归一化：DB 中无此 bvid+cid 的 gain → 触发后台异步分析
+    const row = db.prepare('SELECT status FROM gain_cache WHERE bvid = ? AND cid = ?').get(bvid, resolvedCid);
+    if (!row || row.status === 'failed') {
+      const now = Date.now();
+      db.prepare('INSERT OR REPLACE INTO gain_cache (bvid, cid, gain_mult, status, created_at, updated_at) VALUES (?, ?, 1.0, ?, ?, ?)')
+        .run(bvid, resolvedCid, 'pending', now, now);
+      // 异步分析，不阻塞客户端播放。注意：分析使用独立的 B站 fetch（无 Range），与客户端 stream 互不影响
+      enqueueAnalysis(bvid, resolvedCid, stream.url);
+    }
+
     console.log(`[bg:stream] piping bvid=${bvid} status=${upstream.status} size=${upstream.headers.get('content-length') || '?'}`);
     pipeAudio(upstream, res, stream.mime);
   } catch (e) {
     console.warn(`[bg:stream] ERROR bvid=${bvid}: ${e.message}`);
     res.status(502).send(e.message);
   }
+});
+
+/**
+ * 查询音量归一化 gain。
+ * GET /api/gain?bvid=BVxxx
+ * → { gain: 0.47, status: "complete" }  // 已有分析结果
+ * → { gain: null, status: "pending" }     // 分析中
+ * → { gain: null, status: null }          // 无记录
+ */
+router.get('/gain', async (req, res) => {
+  const { bvid } = req.query;
+  if (!bvid) return res.json({ gain: null, status: null });
+
+  // 从 bvid 解析 cid（服务端自动取第一 P）
+  let cid = 0;
+  try {
+    const pages = await getVideoPages(bvid);
+    cid = pages[0]?.cid || 0;
+  } catch { /* 不阻塞：cid 为 0 也能查 */ }
+
+  const row = db.prepare('SELECT gain_mult, status FROM gain_cache WHERE bvid = ? AND cid = ?').get(bvid, cid);
+  if (!row) return res.json({ gain: null, status: null });
+  if (row.status === 'complete') return res.json({ gain: row.gain_mult, status: row.status });
+  return res.json({ gain: null, status: row.status });
+});
+
+/**
+ * 列出所有已分析的 gain 记录。
+ * GET /api/play/gains
+ */
+router.get('/gains', (req, res) => {
+  const rows = db.prepare(`
+    SELECT bvid, cid, gain_lufs, gain_mult, status, created_at, updated_at
+    FROM gain_cache ORDER BY updated_at DESC
+  `).all();
+  const now = Date.now();
+  const latest = rows[0]; // 最新一条
+  const counts = { complete: 0, pending: 0, failed: 0 };
+  for (const r of rows) counts[r.status] = (counts[r.status] || 0) + 1;
+  const fmtTime = (ts) => new Date(ts).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+  res.json({
+    total: rows.length,
+    counts,
+    latest: latest
+      ? { bvid: latest.bvid, cid: latest.cid, lufs: latest.gain_lufs, gain: latest.gain_mult, status: latest.status, updated: fmtTime(latest.updated_at) }
+      : null,
+    items: rows.map((r) => ({
+      bvid: r.bvid, cid: r.cid,
+      lufs: r.gain_lufs, gain: r.gain_mult, status: r.status,
+      updated: fmtTime(r.updated_at),
+    })),
+  });
 });
 
 function pipeAudio(upstream, res, mime) {

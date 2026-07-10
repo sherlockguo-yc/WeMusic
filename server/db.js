@@ -56,6 +56,18 @@ db.exec(`
     updated_at  INTEGER NOT NULL
   );
 
+  /* 音量归一化 gain 缓存：按 bvid+cid 存储 EBU R128 分析结果 */
+  CREATE TABLE IF NOT EXISTS gain_cache (
+    bvid        TEXT NOT NULL,
+    cid         INTEGER NOT NULL DEFAULT 0,
+    gain_lufs   REAL,                   -- 原始 LUFS 值（如 -16.5），failed 状态可能为 NULL
+    gain_mult   REAL NOT NULL DEFAULT 1.0, -- 增益倍率（已 clamp(0.3, 3.0)）
+    status      TEXT DEFAULT 'pending',    -- pending / complete / failed
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL,
+    PRIMARY KEY (bvid, cid)
+  );
+
   /* 播放日志：记录每次播放 */
   CREATE TABLE IF NOT EXISTS play_logs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

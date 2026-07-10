@@ -660,15 +660,62 @@ bgAudio.addEventListener('play', () => {
 let _pendingMount = null;   // { bvid, title }：回前台时需要挂载的 iframe
 let _bgVolume = 0.8;        // WeMusic 自维护音量（0~1），持久化
 
+// ---- 音量归一化：AudioContext + GainNode ----
+let _audioCtx = null;
+let _gainNode = null;
+let _normGain = 1.0;         // 服务端查询到的归一化 gain，默认 1.0（无归一化）
+let _volBtn = null;          // 音量按钮 DOM 引用（用于 tooltip 显示 gain）
+
+function _initAudioCtx() {
+  if (_audioCtx) return;
+  _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = _audioCtx.createMediaElementSource(bgAudio);
+  _gainNode = _audioCtx.createGain();
+  source.connect(_gainNode);
+  _gainNode.connect(_audioCtx.destination);
+  const resume = () => {
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    document.removeEventListener('click', resume);
+    document.removeEventListener('keydown', resume);
+  };
+  document.addEventListener('click', resume);
+  document.addEventListener('keydown', resume);
+}
+
+async function _fetchGain(bvid) {
+  try {
+    const r = await api(`/play/gain?bvid=${encodeURIComponent(bvid)}`);
+    if (r.gain != null && typeof r.gain === 'number') {
+      _normGain = r.gain;
+      _applyNormVol();
+    }
+  } catch { /* gain API 不可用时不影响播放 */ }
+}
+
+function _applyNormVol() {
+  if (!_gainNode) return;
+  const skipNorm = localStorage.getItem('wemusic_volume_normalize') !== '1';
+  const effectiveGain = skipNorm ? _bgVolume : (_normGain * _bgVolume);
+  _gainNode.gain.value = effectiveGain;
+  // 更新音量按钮 tooltip，显示归一化增益
+  if (_volBtn) {
+    const normInfo = skipNorm ? '归一化已关闭'
+      : (_normGain !== 1.0 ? `增益 ${_normGain.toFixed(2)}x` : '增益 1.00x（无缓存）');
+    _volBtn.title = document.hidden ? `后台音量 | ${normInfo}` : `后台音量 | ${normInfo}（前台请在视频内调节）`;
+  }
+}
+
 // 前台静音预缓冲：加载 src 但不 play，切后台时可立即接续
 function _bgPreload(bvid) {
   if (_bgBvid === bvid) return;
   console.log(`[bg:state] preload bvid=${bvid} (was ${_bgBvid || 'none'})`);
   _bgBvid = bvid;
   _bgPlaying = false;
+  // 异步查询 gain（不阻塞播放）
+  _fetchGain(bvid);
   bgAudio.src = `/api/play/stream?bvid=${bvid}&token=${encodeURIComponent(Auth.token)}`;
   bgAudio.muted = true;
-  bgAudio.volume = _bgVolume;
+  bgAudio.volume = 1.0; // 始终 1.0，实际音量由 GainNode 控制
   bgAudio.load();
 }
 
@@ -676,7 +723,7 @@ function _bgPreload(bvid) {
 function _bgUnmuteAndPlay(seekSec) {
   console.log(`[bg:state] unmute+play seekSec=${seekSec}s bvid=${_bgBvid}`);
   bgAudio.muted = false;
-  bgAudio.volume = _bgVolume;
+  bgAudio.volume = 1.0; // 始终 1.0，实际音量由 GainNode 控制
   _bgPlaying = true;
 
   // 重试 play() 直到成功或达到上限（后台 src 刚换完，数据可能还没加载好）
@@ -789,6 +836,7 @@ function _stopBgSync() {
 }
 
 // 通过 postMessage 控制 B 站 iframe 音量（官方支持的消息协议）
+// 注意：不在此处乘归一化增益。前台 iframe 无法可靠控制音量，归一化仅对后台 bgAudio 生效。
 function _setIframeVolume(vol) {
   const iframe = $('videoContainer').querySelector('iframe');
   if (!iframe) return;
@@ -885,15 +933,24 @@ export function initPlayer() {
   // 监听 B 站 iframe postMessage，检测视频真实启动时刻，校正计时器
   window.addEventListener('message', _onBiliMessage);
 
-  // 音量控件：控制后台 bgAudio 的音量（前台 iframe 音量需在 B 站播放器内调节）
+  // 初始化 AudioContext（音量归一化用，createMediaElementSource 只能调一次）
+  _initAudioCtx();
+
+  // 设置面板切换归一化开关 → 立即生效
+  window.addEventListener('volume_normalize_changed', () => _applyNormVol());
+
+  // 音量控件：通过 GainNode 控制实际输出音量（前台 iframe 音量需在 B 站播放器内调节）
   _bgVolume = Number(localStorage.getItem('wemusic_vol') || 0.8);
   const volBar = $('volBar');
   const volBtn = $('volBtn');
+  _volBtn = volBtn; // 保存引用供 _applyNormVol 更新 tooltip
   const volOnIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19 11,5"/><path d="M15.5 8.5a4.5 4.5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>`;
   const volOffIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19 11,5"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></svg>`;
   const _applyVol = () => {
-    bgAudio.volume = _bgVolume;
+    // 音量由 GainNode 统一控制：bgAudio.volume 始终 1.0
+    bgAudio.volume = 1.0;
     bgAudio.muted = (_bgVolume === 0);
+    _applyNormVol();
     const pct = Math.round(_bgVolume * 100);
     volBar.value = pct;
     volBar.style.setProperty('--vol-fill', pct + '%');
@@ -901,7 +958,7 @@ export function initPlayer() {
     volBar.style.setProperty('--vol-thumb-bg', pct === 0 ? 'transparent' : 'var(--accent)');
     volBar.style.setProperty('--vol-thumb-border', pct === 0 ? 'transparent' : 'var(--accent)');
     volBtn.innerHTML = _bgVolume === 0 ? volOffIcon : volOnIcon;
-    volBtn.title = document.hidden ? '后台音量' : '后台音量（前台请在视频内调节）';
+    // tooltip 由 _applyNormVol 统一设置（含 gain 信息）
   };
   _applyVol();
   volBar.oninput = () => {
