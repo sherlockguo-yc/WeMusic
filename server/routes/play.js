@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { execFile } from 'node:child_process';
 import { authRequired } from '../middleware/auth.js';
-import { searchVideos, getAudioStream, fetchAudio, getVideoPages } from '../services/bilibili.js';
+import { searchVideos, getAudioStream, fetchAudio, getVideoPages, getVideoTitle } from '../services/bilibili.js';
 import { config } from '../config.js';
 import db from '../db.js';
 import { getCrowdCompletions, crowdBonus } from '../services/crowd.js';
@@ -83,17 +83,22 @@ async function runAnalysis(bvid, cid, streamUrl) {
       });
     });
 
-    // 从 stderr 中解析 "Integrated loudness" 部分
-    const match = stderr.match(/I:\s*(-?[\d.]+)\s*LUFS/);
+    // 从 Summary 部分匹配 Integrated loudness 的 I: 值（不是逐帧的实时值）
+    const match = stderr.match(/Integrated loudness:\s*\n\s*I:\s*(-?[\d.]+)\s*LUFS/);
     if (!match) throw new Error(`could not parse LUFS (stderr len=${stderr.length})`);
 
     const lufs = parseFloat(match[1]);
     if (isNaN(lufs)) throw new Error(`invalid LUFS: ${match[1]}`);
 
     const gain = calcGain(lufs);
-    db.prepare('UPDATE gain_cache SET gain_lufs=?, gain_mult=?, status=?, updated_at=? WHERE bvid=? AND cid=?')
-      .run(Math.round(lufs * 100) / 100, Math.round(gain * 10000) / 10000, 'complete', Date.now(), bvid, cid);
-    console.log(`[gain] done bvid=${bvid} cid=${cid} lufs=${lufs} gain=${gain.toFixed(4)}`);
+
+    // 尝试获取视频标题
+    let title = '';
+    try { title = await getVideoTitle(bvid); } catch {}
+
+    db.prepare('UPDATE gain_cache SET gain_lufs=?, gain_mult=?, title=?, status=?, updated_at=? WHERE bvid=? AND cid=?')
+      .run(Math.round(lufs * 100) / 100, Math.round(gain * 10000) / 10000, title, 'complete', Date.now(), bvid, cid);
+    console.log(`[gain] done bvid=${bvid} cid=${cid} title="${title.slice(0,40)}" lufs=${lufs} gain=${gain.toFixed(4)}`);
   } catch (e) {
     console.warn(`[gain] FAILED bvid=${bvid} cid=${cid}: ${e.message}`);
     db.prepare('UPDATE gain_cache SET status=?, updated_at=? WHERE bvid=? AND cid=?')
@@ -524,7 +529,7 @@ router.get('/gain', async (req, res) => {
  */
 router.get('/gains', (req, res) => {
   const rows = db.prepare(`
-    SELECT bvid, cid, gain_lufs, gain_mult, status, created_at, updated_at
+    SELECT bvid, cid, title, gain_lufs, gain_mult, status, created_at, updated_at
     FROM gain_cache ORDER BY updated_at DESC
   `).all();
   const now = Date.now();
@@ -536,10 +541,10 @@ router.get('/gains', (req, res) => {
     total: rows.length,
     counts,
     latest: latest
-      ? { bvid: latest.bvid, cid: latest.cid, lufs: latest.gain_lufs, gain: latest.gain_mult, status: latest.status, updated: fmtTime(latest.updated_at) }
+      ? { bvid: latest.bvid, cid: latest.cid, title: latest.title, lufs: latest.gain_lufs, gain: latest.gain_mult, status: latest.status, updated: fmtTime(latest.updated_at) }
       : null,
     items: rows.map((r) => ({
-      bvid: r.bvid, cid: r.cid,
+      bvid: r.bvid, cid: r.cid, title: r.title,
       lufs: r.gain_lufs, gain: r.gain_mult, status: r.status,
       updated: fmtTime(r.updated_at),
     })),

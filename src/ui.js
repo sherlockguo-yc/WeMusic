@@ -13,6 +13,8 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
   const menu = $('ctxMenu');
   const inPlaylist = context === 'playlist';
   const items = [
+    { label: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg> 下一首播放', act: 'enqueue' },
+    { sep: true },
     { label: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 添加到歌单', act: 'add' },
     { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> 分享', act: 'share', dim: !song.song_mid, dimTip: '该歌曲不支持分享' },
     { sep: true },
@@ -37,7 +39,8 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
       if (el.classList.contains('dim')) { closeCtxMenu(); toast(el.dataset.dimTip || '暂不可用'); return; }
       closeCtxMenu();
       const act = el.dataset.act;
-      if (act === 'add') import('./playlist-ui.js').then(({ addSongs }) => addSongs([song]));
+      if (act === 'enqueue') import('./queue.js').then(({ enqueueNext }) => enqueueNext(song));
+      else if (act === 'add') import('./playlist-ui.js').then(({ addSongs }) => addSongs([song]));
       else if (act === 'share') import('./share.js').then(({ openShareModal }) => openShareModal(song));
       else if (act === 'del') import('./playlist-ui.js').then(({ deleteSong }) => deleteSong(playlistId, song.id, row));
       else if (act === 'copy') copyBiliLink(song);

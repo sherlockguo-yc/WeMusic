@@ -171,6 +171,12 @@ if (!plCols.includes('desc')) {
   db.exec("ALTER TABLE playlists ADD COLUMN desc TEXT DEFAULT ''");
 }
 
+// gain_cache 迁移：添加 title 列
+const gainCols = db.prepare('PRAGMA table_info(gain_cache)').all().map((c) => c.name);
+if (!gainCols.includes('title')) {
+  db.exec("ALTER TABLE gain_cache ADD COLUMN title TEXT DEFAULT ''");
+}
+
 const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
 if (!userCols.includes('avatar')) {
   db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');

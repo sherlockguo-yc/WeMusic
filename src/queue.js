@@ -5,6 +5,36 @@ import { state } from './state.js';
 
 export let activeTab = 'queue';
 
+// ---- 下一首播放 ----
+export function enqueueNext(song) {
+  if (state.queueIndex >= 0) {
+    state.queue.splice(state.queueIndex + 1, 0, song);
+    toast(`「${song.name}」将下一首播放`);
+  } else {
+    state.queue.push(song);
+    toast(`「${song.name}」已添加到播放队列`);
+  }
+  import('./player.js').then(({ saveSession }) => saveSession());
+  renderQueue();
+  updateQueueBadge();
+  pulseQueueBtn();
+}
+
+export function updateQueueBadge() {
+  const badge = document.getElementById('queueBadge');
+  if (!badge) return;
+  const count = state.queue.length;
+  badge.textContent = count > 99 ? '99+' : count;
+  badge.style.display = count > 0 ? '' : 'none';
+}
+
+export function pulseQueueBtn() {
+  const btn = $('queueBtn');
+  if (!btn) return;
+  btn.classList.add('pulse');
+  setTimeout(() => btn.classList.remove('pulse'), 500);
+}
+
 let _histCache = null; // 缓存最近播放列表
 
 export async function loadHistory() {

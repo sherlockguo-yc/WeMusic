@@ -614,12 +614,14 @@ body.light .lp-bg-card-close { border-color: var(--border); }
   padding: 10px 14px calc(10px + var(--safe-bottom)) 18px;
   position: relative; z-index: 10;
   min-height: 72px;
-  overflow: hidden; /* 高倍缩放时防止 grid 子元素溢出容器 */
+  /* 不设 overflow: hidden — 音量滑块 absolute 定位需要溢出到 .player 上方。
+     所有子列（.player-left/.controls/.progress-center/.player-right）已有自己的 overflow:hidden+min-width:0。 */
 }
 .player-left {
   grid-area: left;
   display: flex; align-items: center; gap: 6px;
-  min-width: 0; overflow: hidden;
+  min-width: 0;
+  /* 不设 overflow:hidden——音量滑块需要溢出到上方 */
 }
 .player .np-cover-wrap { flex: 0 0 auto; }
 .player .np { min-width: 0; overflow: hidden; flex: 1 1 auto; }
@@ -654,6 +656,20 @@ body.light .lp-bg-card-close { border-color: var(--border); }
   flex-shrink: 0;
 }
 .player-right .btn { flex-shrink: 0; }
+/* 队列按钮 badge */
+.queue-badge {
+  position: absolute; top: -6px; right: -6px;
+  min-width: 16px; height: 16px; line-height: 16px; padding: 0 4px;
+  background: var(--accent); color: #fff; border-radius: 8px;
+  font-size: calc(var(--font-size) * 0.75); font-weight: 700; text-align: center;
+}
+#queueBtn { position: relative; }
+/* 队列按钮脉冲动画 */
+@keyframes queuePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+#queueBtn.pulse { animation: queuePulse 0.35s ease-in-out; }
 .np-actions { display: flex; gap: 8px; margin-top: 1px; }
 .np-act-btn {
   background: none; border: none; color: var(--text-dim); font-size: 15px;
@@ -661,7 +677,7 @@ body.light .lp-bg-card-close { border-color: var(--border); }
 }
 .np-act-btn:hover { color: var(--text); }
 #npLikeBtn.liked { color: var(--accent); }
-.player .controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0; overflow: hidden; }
+.player .controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0; /* 不设 overflow:hidden——音量滑块需要溢出到上方 */ }
 .player .progress-center {
   grid-area: center;
   display: flex; justify-content: center; align-items: center;

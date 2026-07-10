@@ -233,6 +233,16 @@ export async function getVideoPages(bvid) {
   return json?.data?.pages || [];
 }
 
+/** 获取视频标题 */
+export async function getVideoTitle(bvid) {
+  const res = await fetch(
+    `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`,
+    { headers: { 'User-Agent': UA, Referer: 'https://www.bilibili.com/' } }
+  );
+  const json = await res.json();
+  return json?.data?.title || '';
+}
+
 /**
  * 通过 WBI 签名接口获取 DASH 纯音频流（高音质、体积小，但对游客易被 412 风控）。
  */

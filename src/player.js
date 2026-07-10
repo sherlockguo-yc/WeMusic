@@ -527,9 +527,15 @@ export async function prefetchNextBvid() {
 }
 
 export async function playFromList(songs, index, context, playlistId) {
+  // 队列中有待播歌时，提示替换
+  const hasPending = state.queueIndex >= 0 && state.queue.length > state.queueIndex + 1;
   state.queue = songs;
   state.queueIndex = index;
   state.currentContext = context === 'playlist' ? playlistId : null;
+  if (hasPending) {
+    import('./queue.js').then(({ updateQueueBadge }) => updateQueueBadge());
+    toast('已替换播放队列');
+  }
   await playCurrent();
 }
 
