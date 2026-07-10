@@ -26,6 +26,7 @@ provider:
 | 3 | 进度条偏左 58px，未处于播放条视觉中心 | 仅加固了列内 flex 居中（无效），后改为 3 列 `1fr auto 1fr` grid | 6 列 grid 左右不对称（左侧 cover+np+controls 比右侧 status+right 宽），progress 列被挤到左边。**只有测量 `getBoundingClientRect()` 才能发现容器级偏移，静态 CSS 分析看不出来** |
 | 4 | 视频标题不滚动（溢出检测失效） | `.player-status` 的 `flex: 0 0 auto` → `flex: 0 1 auto` | 从 6 列 grid 转 3 列时，`.player-status` 从 grid item 变为 flex item，但 `flex-shrink: 0` 被**无脑搬运**过来。在新上下文中它阻止了容器缩小 → `parent.clientWidth` 始终 ≥ `inner.scrollWidth` → `checkMarquee()` 溢出检测永不触发。教训：**布局重构时不能只搬运 CSS 属性——必须逐条审查每个属性的语义在新上下文中是否仍然正确。** |
 | 5 | 浮窗视频标题不滚动 | `setVpTitle()` 单帧 rAF → 双帧 rAF + `clientWidth>0` 守卫 | 视频浮窗从 `display:none` → `display:flex` 时，浏览器需要两帧才能完成 flex 布局计算。`setVpTitle()` 仅用单帧 `requestAnimationFrame` 检测溢出，读到 `clientWidth=0` → `overflow=0` → 滚动永不启动。对比 `checkMarquee()` 一直用双帧 rAF 正常工作。教训：**`display:none→flex` 的元素溢出检测必须双帧 rAF，单帧在不同时机下表现不一致。** |
+| 6 | 音量滑块不可见，点击只能切换静音 | 移除 `.player`、`.player-left`、`.controls` 的 `overflow: hidden` | `.player` 在第 4 次修复时被加了 `overflow: hidden`（防高倍缩放），但这裁剪了 `#volBar`（`position: absolute; bottom: calc(100% + 58px)` 溢出到 `.player` 上方）。三层 `overflow: hidden` 链条（`.player` → `.player-left` → `.controls`）让滑块不可见。所有子列已有自己的 `overflow: hidden`，`.player` 层的是冗余且有害的。教训：**给容器加 `overflow: hidden` 前必须检查是否有 absolute 子元素需要溢出到容器外。** |
 
 教训：只要还有**一个**子元素游离在 grid/flex 系统之外（用 absolute 独立定位），就还没有真正解决问题——它会在另一个尺寸下换个位置重新冲突。**且居中/对齐类问题必须用测量数据诊断，不能仅凭静态 CSS 分析。** **布局重构时不能只搬运 CSS 属性——同一个属性（如 `flex`）在 grid item 和 flex item 上的语义完全不同，必须逐条重新审查而非直接复制旧值。**
 
@@ -40,6 +41,9 @@ provider:
    - 用 `position: fixed; inset: 0` 让视图浮在布局之上（适用于独立视图）
    - 或将父容器设为 `display: block` 解除 grid 约束
    - 禁止不检查父容器就直接设定子元素尺寸
+6. **overflow: hidden 与 absolute 定位约束**（2026-07-10 新增）：给任何容器添加 `overflow: hidden` 之前，**必须**检查该容器的所有后代中是否有 `position: absolute` 且需要溢出到容器外才能正常显示的元素（如弹出式面板、滑块、tooltip）。如果发现存在，该容器禁止设置 `overflow: hidden`——应由更精确的子元素（如文本裁剪用的 `.np`）各自设置。
+   - ✅ 正确：`.np { overflow: hidden }`（只裁剪文本溢出区域）
+   - ❌ 错误：`.player { overflow: hidden }`（一刀切裁剪了整个容器，误伤了 `#volBar` 的 absolute 弹出）
 
 ### 快速检查命令
 
@@ -56,6 +60,7 @@ grep -n 'position: absolute' public/css/style.css | head -20
 1. **超长视频标题能否自动左右滚动** — 触发条件：`.player-status` 的 `flex-shrink` 必须 > 0，否则 `parent.clientWidth` 永不低于 `inner.scrollWidth`，`checkMarquee()` 的溢出检测永不触发
 2. **进度条是否居中** — `getBoundingClientRect()` 测量 centerX 偏差 ≤ 3px
 3. **各按钮不互相覆盖** — 检查 `.player-right` 内的按钮在窄窗口下是否可见
+4. **音量滑块能否正常弹出**（2026-07-10 新增） — 点击音量按钮，`#volBar` 应可见可拖动；再点击应切换静音/恢复。确认 `.player`、`.player-left`、`.controls` **均无** `overflow: hidden`
 
 **特别禁止**：给 `.player-status` 设置 `flex-shrink: 0`（等价于 `flex: 0 0 auto` 或 `flex: 1 0 auto` 等 `flex-shrink=0` 的任何简写）。这是 `text-overflow: ellipsis` 之外的第二类「无声破坏滚动」的 CSS 属性。
 

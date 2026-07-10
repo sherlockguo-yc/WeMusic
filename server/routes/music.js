@@ -11,6 +11,7 @@ import {
   parsePlaylist,
   deduplicateByAlbum,
 } from '../services/qqmusic.js';
+import { extractNeteasePlaylistId, parseNeteasePlaylist } from '../services/netease.js';
 
 const router = express.Router();
 router.use(authRequired);
@@ -89,16 +90,31 @@ router.get('/song-background', async (req, res) => {
   }
 });
 
-// 解析 QQ 音乐歌单链接
+// 解析歌单链接（自动识别 QQ 音乐 / 网易云音乐）
 router.post('/parse-playlist', async (req, res) => {
   const { url } = req.body || {};
+  if (!url) return res.status(400).json({ error: '请提供歌单链接' });
+
+  // 网易云音乐
+  const neId = extractNeteasePlaylistId(url);
+  if (neId) {
+    try {
+      const result = await parseNeteasePlaylist(neId);
+      res.json({ source: 'netease', playlistId: neId, ...result });
+    } catch (e) {
+      res.status(502).json({ error: e.message });
+    }
+    return;
+  }
+
+  // QQ 音乐
   const disstid = extractDisstid(url);
   if (!disstid) {
-    return res.status(400).json({ error: '无法从链接中解析出歌单 ID' });
+    return res.status(400).json({ error: '无法从链接中解析出歌单 ID，请检查链接格式' });
   }
   try {
     const result = await parsePlaylist(disstid);
-    res.json({ disstid, ...result });
+    res.json({ source: 'qqmusic', disstid, ...result });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

@@ -533,7 +533,6 @@ export async function playFromList(songs, index, context, playlistId) {
   state.queueIndex = index;
   state.currentContext = context === 'playlist' ? playlistId : null;
   if (hasPending) {
-    import('./queue.js').then(({ updateQueueBadge }) => updateQueueBadge());
     toast('已替换播放队列');
   }
   await playCurrent();
@@ -701,7 +700,9 @@ async function _fetchGain(bvid) {
 function _applyNormVol() {
   if (!_gainNode) return;
   const skipNorm = localStorage.getItem('wemusic_volume_normalize') !== '1';
-  const effectiveGain = skipNorm ? _bgVolume : (_normGain * _bgVolume);
+  // 输出级安全阀：归一化增益不超过 8 倍，防止极静音频放大后炸耳朵
+  const safeGain = Math.min(_normGain, 8.0);
+  const effectiveGain = skipNorm ? _bgVolume : (safeGain * _bgVolume);
   _gainNode.gain.value = effectiveGain;
   // 更新音量按钮 tooltip，显示归一化增益
   if (_volBtn) {

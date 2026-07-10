@@ -138,7 +138,7 @@
         <div class="player-right-btns">
           <button class="btn sm" id="videoBtn" title="观看 Bilibili 视频">展开</button>
           <button class="btn sm" id="switchSrcBtn" title="换源">换源</button>
-          <button class="btn sm" id="queueBtn" title="播放队列 / 历史"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg> 队列<span class="queue-badge" id="queueBadge" style="display:none"></span></button>
+          <button class="btn sm" id="queueBtn" title="播放队列 / 历史"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg> 队列</button>
         </div>
       </div>
       <audio id="audio" preload="auto"></audio>
@@ -276,6 +276,14 @@
           <input id="importQqUrl" type="text" class="prompt-input" style="margin:0;flex:1"
             placeholder="https://y.qq.com/n/ryqq/playlist/xxxx" />
           <button class="btn green sm" id="importQqBtn">解析</button>
+        </div>
+      </div>
+      <div class="settings-section" style="margin-top:14px">
+        <div class="settings-label">从网易云音乐链接解析</div>
+        <div style="display:flex;gap:8px">
+          <input id="importNeUrl" type="text" class="prompt-input" style="margin:0;flex:1"
+            placeholder="https://music.163.com/playlist?id=xxxx" />
+          <button class="btn green sm" id="importNeBtn">解析</button>
         </div>
       </div>
       <div class="settings-section" style="margin-top:14px">

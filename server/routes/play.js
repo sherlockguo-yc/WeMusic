@@ -22,9 +22,9 @@ try {
 }
 
 // ---- 音量归一化：串行分析队列 ----
-const GAIN_TARGET = -23; // LUFS（EBU R128 广播标准）
-const GAIN_MIN = 0.3;
-const GAIN_MAX = 3.0;
+const GAIN_TARGET = -18; // LUFS（消费端标准，Apple/SoundCloud 常用）
+const GAIN_MIN = 0.05;  // 最多压到 5%
+const GAIN_MAX = 10.0;  // 最多放大 10 倍（安全阀在客户端再限一次）
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 

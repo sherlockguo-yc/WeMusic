@@ -118,7 +118,30 @@ export function updateLyricsPanelMeta(song) {
     const ov = $('lpBgOverlay');
     ov.style.display = ov.style.display === 'none' || !ov.style.display ? 'flex' : 'none';
   };
+  // 「背景」按钮换行后对齐「歌单」按钮中心
+  alignLyricsButtons(lpAdd, bgBtn);
   }); // close _uiP.then(...)
+}
+
+/**
+ * 歌词详情页按钮对齐：如果「背景」按钮被 flex-wrap 换到了第二行，
+ * 修正它的 centerX 使其与「歌单」按钮对齐（而非在容器中居中）。
+ */
+function alignLyricsButtons(addBtn, bgBtn) {
+  if (!addBtn || !bgBtn) return;
+  // 双帧 rAF：等待 display:none→flex 的布局完成
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const ar = addBtn.getBoundingClientRect();
+    const br = bgBtn.getBoundingClientRect();
+    // 同在一行则清除偏移，否则用 translateX 对齐 centerX
+    // 不能用 marginLeft：它在 flex 容器中会触发重新计算 wrap，可能把元素推回第一行
+    if (Math.abs(ar.top - br.top) < 2) {
+      bgBtn.style.transform = '';
+    } else {
+      const offset = (ar.left + ar.width / 2) - (br.left + br.width / 2);
+      bgBtn.style.transform = `translateX(${offset}px)`;
+    }
+  }));
 }
 
 export function openLyricsPanel() {

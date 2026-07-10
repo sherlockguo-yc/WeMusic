@@ -16,16 +16,7 @@ export function enqueueNext(song) {
   }
   import('./player.js').then(({ saveSession }) => saveSession());
   renderQueue();
-  updateQueueBadge();
   pulseQueueBtn();
-}
-
-export function updateQueueBadge() {
-  const badge = document.getElementById('queueBadge');
-  if (!badge) return;
-  const count = state.queue.length;
-  badge.textContent = count > 99 ? '99+' : count;
-  badge.style.display = count > 0 ? '' : 'none';
 }
 
 export function pulseQueueBtn() {

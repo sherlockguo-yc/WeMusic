@@ -464,12 +464,8 @@ export function initPlaylistUI() {
     await loadPlaylists(); toast('歌单已创建');
   };
 
-  // 导入弹层
-  $('importPlBtn').onclick = () => $('importModal').classList.add('show');
-  $('importModalClose').onclick = () => $('importModal').classList.remove('show');
-  $('importModal').onclick = (e) => { if (e.target.id === 'importModal') $('importModal').classList.remove('show'); };
-  $('importQqBtn').onclick = async () => {
-    const url = $('importQqUrl').value.trim();
+  // 导入弹层 — 通用歌单解析 + 展示
+  async function parseAndShowPlaylist(url, inputId) {
     if (!url) return toast('请粘贴歌单链接');
     $('importModal').classList.remove('show');
     const main = $('main');
@@ -483,10 +479,20 @@ export function initPlaylistUI() {
         <div class="song-list" id="parsedList"></div>`;
       renderSongList($('parsedList'), data.songs, { showAdd: true });
       $('addAllParsed').onclick = () => addSongs(data.songs);
-      $('importQqUrl').value = '';
+      if (inputId) $(inputId) && ($(inputId).value = '');
     } catch (e) { main.innerHTML = `<div class="empty">解析失败：${esc(e.message)}</div>`; }
-  };
+  }
+
+  $('importPlBtn').onclick = () => $('importModal').classList.add('show');
+  $('importModalClose').onclick = () => $('importModal').classList.remove('show');
+  $('importModal').onclick = (e) => { if (e.target.id === 'importModal') $('importModal').classList.remove('show'); };
+
+  $('importQqBtn').onclick = () => parseAndShowPlaylist($('importQqUrl').value.trim(), 'importQqUrl');
   $('importQqUrl') && $('importQqUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('importQqBtn').click(); });
+
+  $('importNeBtn').onclick = () => parseAndShowPlaylist($('importNeUrl').value.trim(), 'importNeUrl');
+  $('importNeUrl') && $('importNeUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('importNeBtn').click(); });
+
   $('importJsonBtn').onclick = () => $('importFile').click();
   $('importFile').onchange = async (e) => {
     const file = e.target.files && e.target.files[0];

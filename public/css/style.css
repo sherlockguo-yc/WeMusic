@@ -656,14 +656,6 @@ body.light .lp-bg-card-close { border-color: var(--border); }
   flex-shrink: 0;
 }
 .player-right .btn { flex-shrink: 0; }
-/* 队列按钮 badge */
-.queue-badge {
-  position: absolute; top: -6px; right: -6px;
-  min-width: 16px; height: 16px; line-height: 16px; padding: 0 4px;
-  background: var(--accent); color: #fff; border-radius: 8px;
-  font-size: calc(var(--font-size) * 0.75); font-weight: 700; text-align: center;
-}
-#queueBtn { position: relative; }
 /* 队列按钮脉冲动画 */
 @keyframes queuePulse {
   0%, 100% { transform: scale(1); }
