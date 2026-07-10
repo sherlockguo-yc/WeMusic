@@ -366,7 +366,7 @@ button.topbar-btn {
 }
 .album-card .a-meta-item svg { opacity: .7; flex: 0 0 auto; }
 .album-card .a-btns {
-  display: flex; gap: 6px; margin-top: 10px; align-items: center;
+  display: flex; gap: 6px; margin-top: auto; padding-top: 10px; align-items: center;
 }
 .album-card .a-play-all {
   flex: 1; font-size: 11.5px; padding: 6px 0; font-weight: 600;
@@ -1300,7 +1300,12 @@ input[type='range']::-moz-range-thumb {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .lp-like-row {
-  margin-top: 14px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;
+  /* Grid 布局：第一行 ♡/歌单/歌词 三列，「背景」显式指定所在列（见 lyrics.js 内联 style），
+     与「歌单」按钮共享同一列 → justify-items:center 保证两者 centerX 精确对齐。
+     禁止改回 flex + JS 测量 transform：动画期间（.lyrics-panel 展开的 0.55s scale 过渡）
+     getBoundingClientRect() 读到的是过渡中的错误位置，JS 时序方案在此场景不可靠。 */
+  margin-top: 14px; display: grid; grid-template-columns: repeat(3, auto);
+  justify-content: center; justify-items: center; gap: 12px;
 }
 .lp-action-btn {
   background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);

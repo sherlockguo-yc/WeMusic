@@ -27,6 +27,7 @@ provider:
 | 4 | 视频标题不滚动（溢出检测失效） | `.player-status` 的 `flex: 0 0 auto` → `flex: 0 1 auto` | 从 6 列 grid 转 3 列时，`.player-status` 从 grid item 变为 flex item，但 `flex-shrink: 0` 被**无脑搬运**过来。在新上下文中它阻止了容器缩小 → `parent.clientWidth` 始终 ≥ `inner.scrollWidth` → `checkMarquee()` 溢出检测永不触发。教训：**布局重构时不能只搬运 CSS 属性——必须逐条审查每个属性的语义在新上下文中是否仍然正确。** |
 | 5 | 浮窗视频标题不滚动 | `setVpTitle()` 单帧 rAF → 双帧 rAF + `clientWidth>0` 守卫 | 视频浮窗从 `display:none` → `display:flex` 时，浏览器需要两帧才能完成 flex 布局计算。`setVpTitle()` 仅用单帧 `requestAnimationFrame` 检测溢出，读到 `clientWidth=0` → `overflow=0` → 滚动永不启动。对比 `checkMarquee()` 一直用双帧 rAF 正常工作。教训：**`display:none→flex` 的元素溢出检测必须双帧 rAF，单帧在不同时机下表现不一致。** |
 | 6 | 音量滑块不可见，点击只能切换静音 | 移除 `.player`、`.player-left`、`.controls` 的 `overflow: hidden` | `.player` 在第 4 次修复时被加了 `overflow: hidden`（防高倍缩放），但这裁剪了 `#volBar`（`position: absolute; bottom: calc(100% + 58px)` 溢出到 `.player` 上方）。三层 `overflow: hidden` 链条（`.player` → `.player-left` → `.controls`）让滑块不可见。所有子列已有自己的 `overflow: hidden`，`.player` 层的是冗余且有害的。教训：**给容器加 `overflow: hidden` 前必须检查是否有 absolute 子元素需要溢出到容器外。** |
+| 7 | 歌词页按钮未对齐，JS 补丁无效 | 从 `flex-wrap + requestAnimationFrame + getBoundingClientRect() + transform` 彻底推倒，改为 `display: grid + grid-column` 声明式对齐 | Agent 尝试用 JS 双帧 rAF 测量 → `transform:translateX()` 修正「背景」按钮与「歌单」按钮的 centerX 偏差。独立静态测试页验证通过（`diff:0`），但**真实 `.lyrics-panel` 从 `scale(0)→scale(1)` 展开有 0.55s CSS transition**，动画期间 `getBoundingClientRect()` 读到的是过渡中错误位置 → JS 方案从未真正生效。改用 `grid-template-columns: repeat(3, auto)` + 内联 `grid-column` 声明，纯 CSS 方案，一行 JS 测量也不依赖。教训：**JS 测量 + transform 补丁在有 CSS transition 的真实场景中大概率不可靠。验证方案必须模拟完整的真实状态切换，不能用静态 mock。对齐/居中问题优先用 Grid 声明式解决，禁止用 JS `getBoundingClientRect()` → `transform` 路径。** |
 
 教训：只要还有**一个**子元素游离在 grid/flex 系统之外（用 absolute 独立定位），就还没有真正解决问题——它会在另一个尺寸下换个位置重新冲突。**且居中/对齐类问题必须用测量数据诊断，不能仅凭静态 CSS 分析。** **布局重构时不能只搬运 CSS 属性——同一个属性（如 `flex`）在 grid item 和 flex item 上的语义完全不同，必须逐条重新审查而非直接复制旧值。**
 
@@ -37,6 +38,9 @@ provider:
 2. **编码阶段**：给任何容器内元素写 `position: absolute` 之前，检查是否有**兄弟元素**在 grid/flex 流中。如果有，这是红灯信号。
 3. **修复 bug 阶段**：如果发现「A 覆盖 B」类的布局 bug，先检查容器内是否同时存在 grid/flex 子元素和 absolute 子元素。如果有，只调 `right`/`left` 像素值是治标不治本——必须让所有相关元素回到同一个布局系统中。
 4. **验证阶段**：改完不是看默认窗口截图。用 `getBoundingClientRect()` 抓取所有相关元素的边界，检查多档窗口宽度（720px～1920px）下两两之间 `right ≤ left`。
+
+   **⚠️ 验证环境必须模拟完整的真实状态切换**：如果目标元素涉及 CSS transition / animation（如 `.lyrics-panel` 的 scale 展开动画），用 playwright 走真实用户流程（点击触发 → 等待动画完成 → 再测量）。**禁止**用无动画的静态 HTML mock 替代真实页面验证——静态 mock 通过而生产环境失败的案例至少已发生 1 次。
+
 5. **新增独立视图前**：必须先检查渲染目标的父容器布局（如 `<main>` 是否在 `.app` 的 Grid 中）。如果父容器有 Grid/Flex 约束，则子元素的 `width: 100vw` 无效。解决方案：
    - 用 `position: fixed; inset: 0` 让视图浮在布局之上（适用于独立视图）
    - 或将父容器设为 `display: block` 解除 grid 约束
@@ -44,6 +48,15 @@ provider:
 6. **overflow: hidden 与 absolute 定位约束**（2026-07-10 新增）：给任何容器添加 `overflow: hidden` 之前，**必须**检查该容器的所有后代中是否有 `position: absolute` 且需要溢出到容器外才能正常显示的元素（如弹出式面板、滑块、tooltip）。如果发现存在，该容器禁止设置 `overflow: hidden`——应由更精确的子元素（如文本裁剪用的 `.np`）各自设置。
    - ✅ 正确：`.np { overflow: hidden }`（只裁剪文本溢出区域）
    - ❌ 错误：`.player { overflow: hidden }`（一刀切裁剪了整个容器，误伤了 `#volBar` 的 absolute 弹出）
+7. **JS 测量 + transform 禁止作为布局补丁**（2026-07-10 新增）：对齐/居中类问题**禁止**使用 `getBoundingClientRect()` → `transform: translateX/Y()` 路径作为"修补"方案。这种模式有三重风险：
+   - **CSS transition/animation 期间测量不可靠**：元素在动画中途时 `getBoundingClientRect()` 读到的是过渡值而非终态
+   - **测试环境容易漏**：Agent 倾向用静态 mock 测试而无动画，验证通过但生产失败
+   - **本质上是两套布局系统的变体**：JS 在 CSS layout 之上打补丁，等价于混用定位系统
+
+   **✅ 正确**：纯 Grid/Flex 声明式方案（如 `grid-column` + `justify-items: center`）
+   **❌ 错误**：`const r = el.getBoundingClientRect(); el.style.transform = 'translateX(${offset}px)'`
+
+   例外：`getBoundingClientRect()` 用于**诊断测量**（rule 0）而非**位置补偿**，不违反本条。
 
 ### 快速检查命令
 

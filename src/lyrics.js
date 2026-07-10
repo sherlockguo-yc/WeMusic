@@ -89,11 +89,15 @@ export function updateLyricsPanelMeta(song) {
 
   _uiP.then(({ heartOutline, heartFilled }) => {
   const isLiked = song.song_mid && state.likedMids && state.likedMids.has(song.song_mid);
+  // .lp-like-row 是 3 列 grid（repeat(3, auto)）。「背景」按钮需要显式声明 grid-column，
+  // 使其在换行后与「歌单」按钮共享同一列（从而 centerX 对齐），而不是让浏览器自动流式排列。
+  // 「歌单」的列号取决于「♡」按钮是否存在：有 ♡ 时歌单在第 2 列，否则在第 1 列。
+  const bgCol = song.song_mid ? 2 : 1;
   $('lpLikeRow').innerHTML = `
     ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? heartFilled : heartOutline}</button>` : ''}
     <button class="lp-action-btn" title="添加到歌单" id="lpAddBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 歌单</button>
     <button class="lp-action-btn" title="歌词换源" id="lpSwitchBtn">⤢ 歌词</button>
-    <button class="lp-action-btn lp-bg-action" title="歌曲背景" id="lpBgBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 背景</button>
+    <button class="lp-action-btn lp-bg-action" title="歌曲背景" id="lpBgBtn" style="grid-column:${bgCol}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 背景</button>
   `;
   const lpLikeBtn = document.getElementById('lpLikeBtn');
   if (lpLikeBtn) {
@@ -118,30 +122,7 @@ export function updateLyricsPanelMeta(song) {
     const ov = $('lpBgOverlay');
     ov.style.display = ov.style.display === 'none' || !ov.style.display ? 'flex' : 'none';
   };
-  // 「背景」按钮换行后对齐「歌单」按钮中心
-  alignLyricsButtons(lpAdd, bgBtn);
   }); // close _uiP.then(...)
-}
-
-/**
- * 歌词详情页按钮对齐：如果「背景」按钮被 flex-wrap 换到了第二行，
- * 修正它的 centerX 使其与「歌单」按钮对齐（而非在容器中居中）。
- */
-function alignLyricsButtons(addBtn, bgBtn) {
-  if (!addBtn || !bgBtn) return;
-  // 双帧 rAF：等待 display:none→flex 的布局完成
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    const ar = addBtn.getBoundingClientRect();
-    const br = bgBtn.getBoundingClientRect();
-    // 同在一行则清除偏移，否则用 translateX 对齐 centerX
-    // 不能用 marginLeft：它在 flex 容器中会触发重新计算 wrap，可能把元素推回第一行
-    if (Math.abs(ar.top - br.top) < 2) {
-      bgBtn.style.transform = '';
-    } else {
-      const offset = (ar.left + ar.width / 2) - (br.left + br.width / 2);
-      bgBtn.style.transform = `translateX(${offset}px)`;
-    }
-  }));
 }
 
 export function openLyricsPanel() {
