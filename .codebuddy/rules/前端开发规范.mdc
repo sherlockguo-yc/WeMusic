@@ -111,3 +111,102 @@ provider:
 - 按钮文字使用 `font-weight: 600` 或 `700`。
 - 所有 SVG 图标使用 `currentColor` 继承文字颜色。
 
+## 十、UI 控件匹配
+
+### 核心原则
+
+**能用开关做的二元状态，绝不用下拉框。** 控件类型必须精确匹配它所表达的语义。
+
+### 匹配规则
+
+| 语义 | 正确的控件 | 禁止的控件 |
+|------|-----------|-----------|
+| 开/关、启用/禁用、是/否 | **Toggle Switch（开关按钮）** | `<select>` 下拉选择框、普通按钮 |
+| 2-6 个选项，单选 | 单选按钮组 / `uiChoice` 列表 | `<input type="text">` 手动输入 |
+| 2-6 个选项，多选 | 勾选框组 | — |
+| 7+ 个选项 | 带搜索的下拉框 / 搜索列表 | 无搜索的纯下拉 |
+| 确认/取消 | `uiConfirm` 弹窗（美化版） | 浏览器原生 `confirm()` |
+| 文字输入 | `uiPrompt` 弹窗 | 浏览器原生 `prompt()` |
+
+### 开关按钮样式（Toggle Switch）
+
+CSS 结构：
+```css
+.toggle-switch { position: relative; width: 44px; height: 24px; cursor: pointer; }
+.toggle-switch input { display: none; }
+.toggle-track { /* 背景轨道 */ }
+.toggle-track::after { /* 圆形滑块 */ }
+.toggle-switch input:checked + .toggle-track { background: var(--accent); }
+.toggle-switch input:checked + .toggle-track::after { transform: translateX(20px); }
+```
+
+### 设计理由
+
+1. **选择本身就是命令**：用户切换开关时已经表达了意图，不需要再点「保存」
+2. **视觉语义精准**：开关=二元状态，下拉框=多项选择，控件形状即含义
+3. **减少操作步骤**：从「选→保存」两步变成「点一下」一步
+
+### 例外
+
+- 如果开关操作有不可逆后果（如删除、重置），需要二次确认弹窗
+- 灰度发布等需要 0%/20%/50%/100% 多档值的不在此规则范围内
+
+## 十一、图片加载失败兜底
+
+### 核心原则
+
+**任何外链图片（专辑封面、歌手头像等）加载失败时，必须 fallback 到默认占位元素，禁止仅隐藏图片导致留空。**
+
+### 正确模式
+
+用 `data-fb` 存储默认占位 HTML，`onerror` 触发时用 `outerHTML` 替换：
+
+```js
+const ph = `<span class="song-cover-ph-sm"><svg>...</svg></span>`;
+const html = `<img class="cover" src="${url}" loading="lazy"
+  data-fb="${esc(ph)}"
+  onerror="this.outerHTML=this.dataset.fb" />`;
+```
+
+### 错误模式
+
+```js
+// ❌ 禁止：图片消失留空，用户看到空白区域
+onerror="this.style.display='none'"
+onerror="this.style.visibility='hidden'"
+```
+
+### 已修复位置（全部 8 处，2026-07-08）
+
+| 文件 | 元素 |
+|------|------|
+| `playlist-ui.js` | `renderSongList()` 列表面板 |
+| `utils.js` | `playlistCoverHtml` 歌单封面 |
+| `search.js:72` | 歌手搜索结果头像 |
+| `search.js:164` | 歌手详情页头像 |
+| `search.js:243` | 专辑详情页封面 |
+| `albums.js` | 收藏专辑卡片封面 |
+| `share.js` | 分享落地页封面 |
+| `report.js` | 周报 Top 歌曲/最爱专辑封面 |
+
+### 例外
+
+- `player.js` `updateNpCover` 已有独立的三级兜底（专辑 → 歌手 → 默认），不依赖 inline onerror，不需要修改。
+
+## 十二、弹窗层级
+
+- 所有基础弹窗使用 `.modal-mask`（z-index: 140），禁止单独设置 z-index。
+- **从其他弹窗内部触发的子级弹窗**（如设置面板中打开 QR 弹窗、反馈弹窗中打开确认框），需要显式设置 `z-index: 150`（高于基础弹窗）。
+- 新增弹窗时，必须判断调用链路：如果弹窗 B 从弹窗 A 内部触发，B 的 z-index > A。
+- 禁止两个独立弹窗出现 z-index 相同导致互相遮挡。
+
+### 当前层级表
+
+| 元素 | z-index | 说明 |
+|------|---------|------|
+| `.modal-mask` | 140 | 所有弹窗基类 |
+| `#mobileQRModal` | 150 | 从设置面板触发的子级弹窗 |
+| `.lyrics-panel` | 130 | 歌词全屏（低于弹窗）|
+| `.queue-drawer` | 120 | 队列抽屉 |
+| `.ctx-menu` | 200 | 右键菜单（最高）|
+
