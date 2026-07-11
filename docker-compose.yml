@@ -1,0 +1,18 @@
+services:
+  wemusic:
+    build: .
+    container_name: wemusic
+    restart: unless-stopped
+    ports:
+      - "5174:5174"
+    volumes:
+      - wemusic_data:/app/data
+    environment:
+      - PORT=5174
+      - JWT_SECRET=${JWT_SECRET:-wemusic-prod-change-me}
+      - ALLOW_REGISTER=${ALLOW_REGISTER:-true}
+      - SUPER_ADMIN=${SUPER_ADMIN:-sherlockguo}
+      - TZ=Asia/Shanghai
+
+volumes:
+  wemusic_data:
