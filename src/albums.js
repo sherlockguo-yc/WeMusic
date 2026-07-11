@@ -23,7 +23,7 @@ export async function openSavedAlbums() {
         a.company ? `<span class="a-meta-item" title="发行公司"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg> ${esc(a.company)}</span>` : '',
         a.aDate ? `<span class="a-meta-item" title="发行日期"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ${esc(a.aDate)}</span>` : '',
       ].filter(Boolean).join('');
-      const desc = a.desc ? `<div class="a-desc">${esc(a.desc.slice(0, 60))}${a.desc.length > 60 ? '…' : ''}</div>` : '';
+      const desc = `<div class="a-desc">${a.desc ? esc(a.desc.slice(0, 60)) + (a.desc.length > 60 ? '…' : '') : ''}</div>`;
       const ph = '<div class="ph"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>';
       return `<div class="album-card saved" data-mid="${esc(a.album_mid)}" data-name="${esc(a.name)}">
         <div class="cover">${cover ? `<img src="${cover}" loading="lazy" data-fb="${esc(ph)}" onerror="this.outerHTML=this.dataset.fb" />` : ph}
