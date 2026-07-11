@@ -13,6 +13,16 @@ services:
       - ALLOW_REGISTER=${ALLOW_REGISTER:-true}
       - SUPER_ADMIN=${SUPER_ADMIN:-sherlockguo}
       - TZ=Asia/Shanghai
+    networks:
+      - wemusic-build_default
+      - npm-net
 
 volumes:
   wemusic_data:
+
+networks:
+  wemusic-build_default:
+    name: wemusic-build_default
+  npm-net:
+    name: npm-net
+    external: true

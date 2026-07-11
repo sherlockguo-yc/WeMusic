@@ -14,6 +14,9 @@ import { shortNameToSourceType } from '../shared/constants.js';
 
 const app = express();
 
+// 信任反代（NPM），使用 X-Forwarded-For 获取真实客户端 IP
+app.set('trust proxy', 1);
+
 // ============================================================
 // 安全响应头（防点击劫持、MIME 嗅探、XSS 等）
 // ============================================================
@@ -229,6 +232,14 @@ app.get('/qr', async (req, res) => {
   </div>
 </body>
 </html>`);
+});
+
+// ============================================================
+// SPA fallback：非 API / 非文件请求一律返回 index.html
+// ============================================================
+app.get(/^\/(?!api\/|dist\/|assets\/|sw\.js|qr)/, (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.sendFile('index.html', { root: PUBLIC_DIR });
 });
 
 // ============================================================
