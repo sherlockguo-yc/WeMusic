@@ -39,8 +39,8 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ steps.ver.outputs.sha }}
-          name: build-${{ steps.ver.outputs.sha }}
-          body: Auto build ${{ steps.ver.outputs.sha }}
+          tag_name: latest
+          name: latest
+          body: "Auto build ${{ steps.ver.outputs.sha }}"
           files: wemusic.tar.gz
           prerelease: true

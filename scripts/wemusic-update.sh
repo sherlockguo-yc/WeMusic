@@ -1,45 +1,53 @@
 #!/bin/bash
 # WeMusic 自动更新脚本（N150 生产环境，由 cron 每分钟调用）
-# 查询 GitHub 最新 prerelease → 与本地 .version 比对 → 有新版则下载解压重启
+# 查询 GitHub 固定 tag "latest" 的 release → 从 body 提取 sha → 与本地 .version 比对 → 有新版则部署
+# 本脚本放在 ~/ 下，不在 ~/wemusic/ 内，避免被 rsync --delete 清除
 
 REPO="sherlockguo-yc/WeMusic"
 DIR="$HOME/wemusic"
 LOG="/tmp/wemusic-update.log"
-API="https://api.github.com/repos/$REPO/releases?per_page=1"
+API="https://api.github.com/repos/$REPO/releases/tags/latest"
 
-# 取最新 release 的 tag（形如 build-xxxxxxx）
-TAG=$(curl -sS --connect-timeout 10 "$API" 2>/dev/null | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
-if [ -z "$TAG" ]; then
-  echo "[$(date)] 查询 release 失败" >> "$LOG"
+# 查询 latest release，从 body "Auto build <sha>" 提取 sha
+BODY=$(curl -sS -H "Cache-Control: no-cache" --connect-timeout 10 "$API" 2>/dev/null)
+REMOTE_VER=$(echo "$BODY" | grep -m1 '"body"' | sed -E 's/.*Auto build ([a-f0-9]+).*/\1/')
+
+if [ -z "$REMOTE_VER" ] || [ "$REMOTE_VER" = "$BODY" ]; then
+  echo "[$(date)] 查询 release 失败或无法解析版本" >> "$LOG"
   exit 0
 fi
 
-REMOTE_VER="${TAG#build-}"
 LOCAL_VER=$(cat "$DIR/.version" 2>/dev/null || echo "none")
-
 if [ "$REMOTE_VER" = "$LOCAL_VER" ]; then
   exit 0  # 无更新
 fi
 
 echo "[$(date)] 发现新版本 $REMOTE_VER (当前: $LOCAL_VER)，开始部署" >> "$LOG"
 
-# 下载产物
-URL="https://github.com/$REPO/releases/download/$TAG/wemusic.tar.gz"
-TMP="/tmp/wemusic-$REMOTE_VER.tar.gz"
-if ! curl -sSL --connect-timeout 20 -o "$TMP" "$URL"; then
+# 下载产物（固定 tag latest）
+URL="https://github.com/$REPO/releases/download/latest/wemusic.tar.gz"
+TMP="/tmp/wemusic-latest.tar.gz"
+if ! curl -sSL --connect-timeout 30 -o "$TMP" "$URL"; then
   echo "[$(date)] 下载失败: $URL" >> "$LOG"
   exit 0
 fi
 
-# 解压到临时目录，保护 data/ 和 .env 不被覆盖
-STAGE="/tmp/wemusic-stage-$REMOTE_VER"
+# 解压到临时目录
+STAGE="/tmp/wemusic-stage"
 rm -rf "$STAGE" && mkdir -p "$STAGE"
 if ! tar -xzf "$TMP" -C "$STAGE"; then
   echo "[$(date)] 解压失败" >> "$LOG"
   rm -f "$TMP"; exit 0
 fi
 
-# 同步产物到运行目录（--delete 清理旧文件，但排除 data/ 和 .env）
+# 校验：解压出的 .version 应与远端一致
+STAGE_VER=$(cat "$STAGE/.version" 2>/dev/null)
+if [ "$STAGE_VER" != "$REMOTE_VER" ]; then
+  echo "[$(date)] 版本校验失败: 包内=$STAGE_VER 期望=$REMOTE_VER" >> "$LOG"
+  rm -rf "$STAGE" "$TMP"; exit 0
+fi
+
+# 同步到运行目录（--delete 清理旧文件，但保护 data/ 和 .env）
 mkdir -p "$DIR"
 rsync -a --delete --exclude 'data' --exclude '.env' "$STAGE/" "$DIR/"
 rm -rf "$STAGE" "$TMP"
