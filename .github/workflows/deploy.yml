@@ -18,19 +18,26 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+      - name: Get version
+        id: ver
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
       - name: Package
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: |
           mkdir -p pkg
           cp -r server/ shared/ public/ package.json package-lock.json pkg/
           cd pkg && npm ci --omit=dev && cd ..
-          echo $(git rev-parse --short HEAD) > pkg/.version
+          echo "${{ steps.ver.outputs.sha }}" > pkg/.version
           tar -czf wemusic.tar.gz -C pkg .
+          ls -lh wemusic.tar.gz
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: latest
-          body: Auto build
+          tag_name: build-${{ steps.ver.outputs.sha }}
+          name: build-${{ steps.ver.outputs.sha }}
+          body: Auto build ${{ steps.ver.outputs.sha }}
           files: wemusic.tar.gz
           prerelease: true
