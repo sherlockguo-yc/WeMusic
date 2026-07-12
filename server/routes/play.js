@@ -8,17 +8,26 @@ import { searchVideos, getAudioStream, fetchAudio, getVideoPages, getVideoTitle 
 import { config } from '../config.js';
 import db from '../db.js';
 import { getCrowdCompletions, crowdBonus } from '../services/crowd.js';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 const router = express.Router();
-const ffmpegPath = ffmpegInstaller.path;
+
+// ffmpeg 路径：优先环境变量 FFMPEG_PATH（生产用系统 ffmpeg），回退到 @ffmpeg-installer（本地开发）
+let ffmpegPath = process.env.FFMPEG_PATH || '';
+if (!ffmpegPath) {
+  try {
+    const ffmpegInstaller = (await import('@ffmpeg-installer/ffmpeg')).default;
+    ffmpegPath = ffmpegInstaller.path;
+  } catch {
+    ffmpegPath = 'ffmpeg'; // 最后回退到 PATH 中的 ffmpeg
+  }
+}
 
 // 启动时检查 ffmpeg 是否可用
 try {
-  fs.accessSync(ffmpegPath, fs.constants.X_OK);
+  if (ffmpegPath !== 'ffmpeg') fs.accessSync(ffmpegPath, fs.constants.X_OK);
   console.log(`[gain] ffmpeg ready: ${ffmpegPath}`);
 } catch {
-  console.warn('[gain] ⚠️  ffmpeg 不可用！音量归一化分析将无法运行。运行 npm install 重新安装依赖。');
+  console.warn('[gain] ⚠️  ffmpeg 不可用！音量归一化分析将无法运行。');
 }
 
 // ---- 音量归一化：串行分析队列 ----
