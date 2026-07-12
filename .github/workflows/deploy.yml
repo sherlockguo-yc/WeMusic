@@ -28,6 +28,7 @@ jobs:
         run: |
           mkdir -p pkg
           cp -r server/ shared/ public/ package.json package-lock.json pkg/
+          cp scripts/restart-n150.sh pkg/restart.sh
           cd pkg && npm ci --omit=dev && cd ..
           # 移除大体积二进制：ffmpeg/ffprobe 用 N150 系统版（apt），puppeteer 用系统 Chromium
           rm -rf pkg/node_modules/@ffmpeg-installer pkg/node_modules/@ffprobe-installer
