@@ -15,13 +15,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-      - run: npm ci --omit=dev
+      - run: npm ci
       - run: npm run build
 
       - name: Package
         run: |
           mkdir -p pkg
-          cp -r server/ shared/ public/ node_modules/ package.json pkg/
+          cp -r server/ shared/ public/ package.json package-lock.json pkg/
+          cd pkg && npm ci --omit=dev && cd ..
           echo $(git rev-parse --short HEAD) > pkg/.version
           tar -czf wemusic.tar.gz -C pkg .
 
