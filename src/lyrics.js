@@ -89,15 +89,12 @@ export function updateLyricsPanelMeta(song) {
 
   _uiP.then(({ heartOutline, heartFilled }) => {
   const isLiked = song.song_mid && state.likedMids && state.likedMids.has(song.song_mid);
-  // .lp-like-row 是 3 列 grid（repeat(3, auto)）。「背景」按钮需要显式声明 grid-column，
-  // 使其在换行后与「歌单」按钮共享同一列（从而 centerX 对齐），而不是让浏览器自动流式排列。
-  // 「歌单」的列号取决于「♡」按钮是否存在：有 ♡ 时歌单在第 2 列，否则在第 1 列。
-  const bgCol = song.song_mid ? 2 : 1;
+  // .lp-like-row 是 grid 布局。上行：歌单/歌词/背景 三列；下行：♡ 按钮居中（grid-column: 1/-1 全宽 + justify-self: center）。
   $('lpLikeRow').innerHTML = `
-    ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn">${isLiked ? heartFilled : heartOutline}</button>` : ''}
     <button class="lp-action-btn" title="添加到歌单" id="lpAddBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 歌单</button>
     <button class="lp-action-btn" title="歌词换源" id="lpSwitchBtn">⤢ 歌词</button>
-    <button class="lp-action-btn lp-bg-action" title="歌曲背景" id="lpBgBtn" style="grid-column:${bgCol}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 背景</button>
+    <button class="lp-action-btn lp-bg-action" title="歌曲背景" id="lpBgBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 背景</button>
+    ${song.song_mid ? `<button class="lp-action-btn like-btn${isLiked ? ' liked' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" id="lpLikeBtn" style="grid-column:1/-1;justify-self:center">${isLiked ? heartFilled : heartOutline}</button>` : ''}
   `;
   const lpLikeBtn = document.getElementById('lpLikeBtn');
   if (lpLikeBtn) {

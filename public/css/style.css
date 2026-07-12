@@ -1305,8 +1305,7 @@ input[type='range']::-moz-range-thumb {
   word-break: break-word;
 }
 .lp-like-row {
-  /* Grid 布局：第一行 ♡/歌单/歌词 三列，「背景」显式指定所在列（见 lyrics.js 内联 style），
-     与「歌单」按钮共享同一列 → justify-items:center 保证两者 centerX 精确对齐。
+  /* Grid 布局：上行 歌单/歌词/背景 三列，下行 ♡ 按钮居中（grid-column:1/-1 全宽）。
      禁止改回 flex + JS 测量 transform：动画期间（.lyrics-panel 展开的 0.55s scale 过渡）
      getBoundingClientRect() 读到的是过渡中的错误位置，JS 时序方案在此场景不可靠。 */
   margin-top: 20px; display: grid; grid-template-columns: repeat(3, auto);
