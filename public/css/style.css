@@ -809,6 +809,12 @@ input[type='range']::-webkit-slider-thumb {
 input[type='range']::-moz-range-thumb {
   width: 13px; height: 13px; border-radius: 50%; background: var(--accent); border: none;
 }
+/* 展开视频时进度条禁用拖动（B 站官方未公开支持精确 seek），降低透明度提示不可交互 */
+#seekBar:disabled, .lp-seek:disabled {
+  cursor: not-allowed; opacity: 0.5;
+}
+#seekBar:disabled::-webkit-slider-thumb, .lp-seek:disabled::-webkit-slider-thumb { cursor: not-allowed; }
+#seekBar:disabled::-moz-range-thumb, .lp-seek:disabled::-moz-range-thumb { cursor: not-allowed; }
 
 /* 输入弹层 */
 .modal.modal-sm { max-width: 360px; }

@@ -7,6 +7,11 @@ export let activeTab = 'queue';
 
 // ---- 下一首播放 ----
 export function enqueueNext(song) {
+  const key = `${song.name}__${song.singer || ''}`;
+  if (state.dislikedSongKeys && state.dislikedSongKeys.has(key)) {
+    toast('这首歌已被标记为不喜欢，已跳过');
+    return;
+  }
   if (state.queueIndex >= 0) {
     state.queue.splice(state.queueIndex + 1, 0, song);
     toast(`「${song.name}」将下一首播放`);

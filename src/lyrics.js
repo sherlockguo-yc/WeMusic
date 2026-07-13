@@ -146,15 +146,19 @@ export function openLyricsPanel() {
   // 启动 UI 同步定时器（仅在面板显示时运行）
   if (_lyricsUISyncId) clearInterval(_lyricsUISyncId);
   _lyricsUISyncId = setInterval(() => {
-    // 脏检查：仅在值变化时更新 DOM
-    const ct = $('curTime').textContent,
-          dt = $('durTime').textContent,
-          sb = $('seekBar').value,
-          pb = $('playPauseBtn').innerHTML;
-    if ($('lpCurTime').textContent !== ct) $('lpCurTime').textContent = ct;
-    if ($('lpDurTime').textContent !== dt) $('lpDurTime').textContent = dt;
-    if ($('lpSeekBar').value !== sb) $('lpSeekBar').value = sb;
-    if ($('lpPlayBtn').innerHTML !== pb) $('lpPlayBtn').innerHTML = pb;
+    _playerP.then(({ isSeeking }) => {
+      // 用户正在拖动任一进度条时跳过同步，避免覆盖拖拽中的滑块值
+      if (isSeeking()) return;
+      // 脏检查：仅在值变化时更新 DOM
+      const ct = $('curTime').textContent,
+            dt = $('durTime').textContent,
+            sb = $('seekBar').value,
+            pb = $('playPauseBtn').innerHTML;
+      if ($('lpCurTime').textContent !== ct) $('lpCurTime').textContent = ct;
+      if ($('lpDurTime').textContent !== dt) $('lpDurTime').textContent = dt;
+      if ($('lpSeekBar').value !== sb) $('lpSeekBar').value = sb;
+      if ($('lpPlayBtn').innerHTML !== pb) $('lpPlayBtn').innerHTML = pb;
+    });
   }, 500);
 
   // 启动歌词进度同步定时器
@@ -371,9 +375,5 @@ export function initLyrics() {
     $('lpPlayBtn').innerHTML = $('playPauseBtn').innerHTML;
     toast(result ? '已暂停自动连播' : '继续自动连播');
   };
-  $('lpSeekBar').addEventListener('input', () => {
-    $('seekBar').value = Number($('lpSeekBar').value);
-    $('seekBar').style.setProperty('--seek-pct', ($('seekBar').value / 10) + '%');
-    $('seekBar').dispatchEvent(new Event('input'));
-  });
+  _playerP.then(({ bindSeekBar }) => bindSeekBar($('lpSeekBar'), $('lpCurTime')));
 }

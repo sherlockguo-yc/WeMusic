@@ -106,11 +106,55 @@ function _updateSeekBarUI(elapsed, totalDur) {
 export function resetProgress(d) {
   elapsed = 0; totalDur = Number(d) || 0; timerPaused = false;
   _hasStartedPlaying = false;
+  _seekDragging = false;
   $('curTime').textContent = '0:00';
   $('durTime').textContent = fmtDur(totalDur);
   _updateSeekBarUI(0, totalDur);
   const ring = $('coverProgressFill');
   if (ring) ring.style.strokeDashoffset = COVER_RING_CIRC;
+}
+
+// ---- 拖拽进度条：跳转播放位置 ----
+// 仅 mode === 'bg' 时支持（bgAudio 是 WeMusic 自己的元素，可精确 seek）。
+// mode === 'iframe' 时禁用：B 站官方未公开支持通过 postMessage 精确 seek 的协议，
+// 此时进度条保持 disabled，请用户在视频内使用 B 站播放器自带的进度条。
+export function seekTo(sec) {
+  if (mode !== 'bg' || !state.current) return;
+  sec = Math.max(0, totalDur > 0 ? Math.min(sec, totalDur) : sec);
+  elapsed = sec;
+  _hasStartedPlaying = true; // 跳转后即视为"已开始播放过"，避免误判为加载中
+  _lastTickCurrentTime = sec; _stallTicks = 0; // 避免跳转产生的大幅跳变被误判为停滞
+  if (bgAudio.readyState >= 1) {
+    try { bgAudio.currentTime = sec; } catch { /* metadata 未加载完成，忽略 */ }
+  }
+  _updateSeekBarUI(elapsed, totalDur);
+  _updateCoverRing();
+  $('curTime').textContent = fmtDur(elapsed);
+  if (!timerPaused) bgAudio.play().catch(() => {});
+  _updateMediaSessionPosition();
+}
+
+// 根据当前 mode 切换进度条是否可拖动（展开视频时禁用）
+function _updateSeekInteractivity() {
+  const disabled = mode !== 'bg';
+  const tip = disabled ? '展开视频时请在视频内拖动进度条' : '';
+  $('seekBar').disabled = disabled;
+  $('seekBar').title = tip;
+  const lpSeekBar = $('lpSeekBar');
+  if (lpSeekBar) { lpSeekBar.disabled = disabled; lpSeekBar.title = tip; }
+}
+
+// 同步播放进度到系统媒体控件（锁屏/通知中心/耳机快进快退），支持系统级拖动进度条
+function _updateMediaSessionPosition() {
+  if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') return;
+  if (!(totalDur > 0)) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: totalDur,
+      playbackRate: timerPaused ? 0 : 1,
+      position: Math.min(Math.max(elapsed, 0), totalDur),
+    });
+  } catch { /* 部分浏览器对该 API 支持不完整，静默失败 */ }
 }
 
 // ---- 计时器 / 进度驱动 ----
@@ -121,15 +165,16 @@ let _lastTickCurrentTime = 0;
 let _stallTicks = 0;
 const STALL_TICK_THRESHOLD = 5; // 连续 5 次（约 5 秒）currentTime 无变化 → 判定播放流已死
 let _hasStartedPlaying = false; // 当前曲目是否已经成功开始播放过一次（区分"加载中"与"意外暂停"）
+let _seekDragging = false; // 用户正在拖动进度条：暂停 tick 对进度条/时间文字的覆盖，避免和拖拽打架
 
 function _tick() {
-  if (timerPaused) return;
+  if (timerPaused || _seekDragging) return;
   if (mode === 'bg') {
     if (bgAudio.duration && isFinite(bgAudio.duration)) totalDur = Math.floor(bgAudio.duration);
     const ct = bgAudio.currentTime || 0;
     elapsed = Math.floor(ct);
     $('curTime').textContent = fmtDur(elapsed);
-    if (totalDur > 0) { _updateSeekBarUI(elapsed, totalDur); _updateCoverRing(); }
+    if (totalDur > 0) { _updateSeekBarUI(elapsed, totalDur); _updateCoverRing(); _updateMediaSessionPosition(); }
     if (!bgAudio.paused) _hasStartedPlaying = true;
     if (bgAudio.paused) {
       // 尚未成功开始播放过（曲目还在加载中）属于正常状态，不算"意外暂停"
@@ -156,6 +201,7 @@ function _tick() {
     if (totalDur > 0) {
       _updateSeekBarUI(elapsed, totalDur);
       _updateCoverRing();
+      _updateMediaSessionPosition();
       if (elapsed >= totalDur + 1) autoAdvance();
     }
   }
@@ -489,32 +535,63 @@ export function renderMode() {
   btn.dataset.mode = state.playMode;
 }
 
+// 不喜欢跳过工具函数
+const _songKey = (s) => `${s.name}__${s.singer || ''}`;
+const _isDisliked = (s) => state.dislikedSongKeys && state.dislikedSongKeys.has(_songKey(s));
+
 export function computeNextIndex() {
   const n = state.queue.length;
   if (n === 0) return -1;
+  // 只有一首歌 → 让 playCurrent 自己判断（避免死循环）
   if (n === 1) return 0;
   if (state.playMode === 'shuffle') {
-    let i;
-    do { i = Math.floor(Math.random() * n); } while (i === state.queueIndex);
-    return i;
+    const maxTries = n * 5;
+    for (let t = 0; t < maxTries; t++) {
+      const i = Math.floor(Math.random() * n);
+      if (i !== state.queueIndex && !_isDisliked(state.queue[i])) return i;
+    }
+    return -1; // 全部不喜欢
   }
-  const i = state.queueIndex + 1;
-  return i >= n ? 0 : i;
+  // 顺序模式：向后走，跳过不喜欢，循环
+  for (let step = 1; step <= n; step++) {
+    const i = (state.queueIndex + step) % n;
+    if (!_isDisliked(state.queue[i])) return i;
+  }
+  return -1; // 全部不喜欢
 }
 
 export function playPrev() {
   if (state.queue.length === 0) return;
+  const n = state.queue.length;
   if (state.playMode === 'shuffle' && state.history.length) {
-    state.queueIndex = state.history.pop();
-  } else {
-    state.queueIndex = state.queueIndex > 0 ? state.queueIndex - 1 : state.queue.length - 1;
+    while (state.history.length > 0) {
+      const idx = state.history.pop();
+      if (!_isDisliked(state.queue[idx])) {
+        state.queueIndex = idx;
+        playCurrent();
+        return;
+      }
+    }
   }
-  playCurrent();
+  // 顺序模式 / shuffle 历史已耗尽：向前走，跳过不喜欢
+  let idx = state.queueIndex > 0 ? state.queueIndex - 1 : n - 1;
+  for (let step = 0; step < n; step++) {
+    if (!_isDisliked(state.queue[idx])) {
+      state.queueIndex = idx;
+      playCurrent();
+      return;
+    }
+    idx = idx > 0 ? idx - 1 : n - 1;
+  }
+  toast('队列中的歌曲均已标记为不喜欢');
 }
 
 export function playNext(auto = false) {
   const i = computeNextIndex();
-  if (i === -1) return;
+  if (i === -1) {
+    if (state.queue.length > 0) toast('队列中的歌曲均已标记为不喜欢');
+    return;
+  }
   if (state.playMode === 'shuffle') state.history.push(state.queueIndex);
   state.queueIndex = i;
   playCurrent();
@@ -575,6 +652,18 @@ export async function playCurrent() {
   stopTimer();
   const song = state.queue[state.queueIndex];
   if (!song) return;
+
+  // 跳过不喜欢：如果当前歌曲已被标记为不喜欢，自动切下一首
+  if (_isDisliked(song)) {
+    stopPlayback();
+    if (state.queue.length === 1) {
+      toast('这首歌已被标记为不喜欢');
+      return;
+    }
+    playNext(true);
+    return;
+  }
+
   const seq = ++playSeq;
   state.current = song;
   highlightPlaying();
@@ -883,6 +972,7 @@ export function expandVideo() {
   $('videoBtn').textContent = '收起';
   _setIframeVolume(_volume);
   _restartTick();
+  _updateSeekInteractivity();
 }
 
 export function collapseVideo() {
@@ -898,6 +988,7 @@ export function collapseVideo() {
     try { bgAudio.currentTime = startSec; } catch { /* 忽略 */ }
   }
   _restartTick();
+  _updateSeekInteractivity();
 }
 
 // B 站 iframe 真实启动时间检测（仅在展开视频、mode === 'iframe' 时有意义）：
@@ -932,9 +1023,40 @@ function _onBiliMessage(e) {
   _iframeStartCalibrated = true;
 }
 
+// 当前是否正在拖拽任一进度条（底部播放器或歌词页），供外部（歌词页 UI 同步循环）判断是否要跳过覆盖滑块值
+export function isSeeking() { return _seekDragging; }
+
+// 绑定一组「时间文字 + seek 滑块」的拖拽交互，同时用于底部播放器和歌词全屏页。
+// 拖拽期间实时预览时间文字，松手才真正触发 seekTo（避免拖拽途中频繁 seek 造成卡顿）。
+export function bindSeekBar(bar, curTimeEl) {
+  const previewTime = () => {
+    if (totalDur <= 0) return 0;
+    return Math.round((bar.value / 1000) * totalDur);
+  };
+  bar.addEventListener('pointerdown', () => { _seekDragging = true; });
+  bar.addEventListener('input', () => {
+    // 拖拽中实时预览时间文字 + 滑块填充位置，不触发真正的 seek
+    const t = previewTime();
+    if (curTimeEl) curTimeEl.textContent = fmtDur(t);
+    const pct = totalDur > 0 ? (t / totalDur) * 100 : 0;
+    bar.style.setProperty('--seek-pct', pct + '%');
+  });
+  const commit = () => {
+    if (!_seekDragging) return;
+    _seekDragging = false;
+    seekTo(previewTime());
+  };
+  bar.addEventListener('pointerup', commit);
+  bar.addEventListener('pointercancel', () => { _seekDragging = false; });
+  // 键盘方向键操作 range 时无 pointerup，用 change 事件兜底触发一次
+  bar.addEventListener('change', commit);
+}
+
 export function initPlayer() {
-  // seekBar 禁用：无论是 bgAudio 真实进度还是 iframe 估算进度，都不支持跳转到任意位置
-  $('seekBar').disabled = true;
+  // seekBar 支持拖拽跳转：mode === 'bg' 时可用（bgAudio 是 WeMusic 自己的元素，可精确 seek）；
+  // mode === 'iframe'（展开视频）时禁用，因为 B 站官方未公开支持 postMessage 精确 seek。
+  _updateSeekInteractivity();
+  bindSeekBar($('seekBar'), $('curTime'));
 
   // 监听 B 站 iframe postMessage，检测视频真实启动时刻，校正展开模式下的估算进度
   window.addEventListener('message', _onBiliMessage);
@@ -1063,6 +1185,21 @@ export function initPlayer() {
   });
   navigator.mediaSession.setActionHandler('previoustrack', playPrev);
   navigator.mediaSession.setActionHandler('nexttrack', () => playNext(false));
+  // 系统级拖拽进度条（锁屏/通知中心/耳机快进快退），仅 mode === 'bg' 时生效（原理同底部播放器 seekBar）
+  try {
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+      if (mode !== 'bg') return;
+      seekTo(details.seekTime);
+    });
+    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+      if (mode !== 'bg') return;
+      seekTo(elapsed - (details.seekOffset || 10));
+    });
+    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+      if (mode !== 'bg') return;
+      seekTo(elapsed + (details.seekOffset || 10));
+    });
+  } catch { /* 部分浏览器不支持这三个 action，静默忽略 */ }
 
   // 用户展开视频后把浏览器标签页切到后台：iframe 会被浏览器限流/静音，
   // 此时自动收起视频面板，改回 bgAudio 继续播放声音，避免"看视频时切走导致没声音"。
