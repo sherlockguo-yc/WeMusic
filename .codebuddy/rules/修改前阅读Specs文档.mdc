@@ -1,5 +1,5 @@
 ---
-description: 修改已有模块前强制检查 docs/specs/ 中是否有对应文档
+description: 修改已有模块前强制检查 docs/功能规格/ 中是否有对应文档
 alwaysApply: true
 enabled: true
 ---
@@ -8,17 +8,17 @@ enabled: true
 
 ## 规则
 
-修改任何已有模块（`src/player.js`、`server/services/bilibili.js`、`server/routes/play.js` 等）的行为或架构前，**必须先检查 `docs/specs/` 目录中是否有对应文档**。
+修改任何已有模块（`src/player.js`、`server/services/bilibili.js`、`server/routes/play.js` 等）的行为或架构前，**必须先检查 `docs/功能规格/` 目录中是否有对应文档**。
 
 对应关系：
-- `src/player.js` → `docs/specs/后台播放.md`
-- `server/services/bilibili.js` / `server/routes/play.js` → `docs/specs/候选选择.md`
-- `src/lyrics.js` / `server/services/lyrics.js` → `docs/specs/候选选择.md`（歌词候选 + 屏蔽弹窗）
-- `src/ui.js` → `docs/specs/候选选择.md`（视频换源弹窗 + 视频屏蔽按钮）
-- `src/utils.js` → 涉及屏蔽展示（`blockedSectionHtml` / `fetchBlockedList` / `saveBlockedMeta`）时 → `docs/specs/候选选择.md`
-- `server/routes/stats.js` → 涉及 `/stats/blocked` / `/stats/lyrics` 屏蔽过滤 → `docs/specs/候选选择.md`
-- `server/db.js` → 涉及 `blocked_sources` 表 → `docs/specs/候选选择.md`
-- 不确定时 → `ls docs/specs/` 查看完整列表，用文件名和内容判断
+- `src/player.js` → `docs/功能规格/后台播放.md`
+- `server/services/bilibili.js` / `server/routes/play.js` → `docs/功能规格/候选选择.md`
+- `src/lyrics.js` / `server/services/lyrics.js` → `docs/功能规格/候选选择.md`（歌词候选 + 屏蔽弹窗）
+- `src/ui.js` → `docs/功能规格/候选选择.md`（视频换源弹窗 + 视频屏蔽按钮）
+- `src/utils.js` → 涉及屏蔽展示（`blockedSectionHtml` / `fetchBlockedList` / `saveBlockedMeta`）时 → `docs/功能规格/候选选择.md`
+- `server/routes/stats.js` → 涉及 `/stats/blocked` / `/stats/lyrics` 屏蔽过滤 → `docs/功能规格/候选选择.md`
+- `server/db.js` → 涉及 `blocked_sources` 表 → `docs/功能规格/候选选择.md`
+- 不确定时 → `ls docs/功能规格/` 查看完整列表，用文件名和内容判断
 
 ## 理由
 
