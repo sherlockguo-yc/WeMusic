@@ -79,7 +79,10 @@ export async function doSearch() {
     const songBuf = [...data.songs];
     renderSongList(sContainer, songBuf, { showAdd: true });
     bindListTools(main, songBuf, sContainer, null, null);
-    if (isSingerResult && data.hasMore !== false) appendLoadMore(main, sContainer, songBuf, data.singer, data.total);
+    if (isSingerResult && data.hasMore !== false) {
+      appendLoadMore(main, sContainer, songBuf, data.singer, data.total);
+      wrapPlayBtnsForBgLoad(main, songBuf, data.singer, data.total);
+    }
     if (isSingerResult) $('openArtistBtn').onclick = () => openArtist(data.singer.mid, data.singer.name);
   } catch (e) { main.innerHTML = `<div class="empty">搜索失败：${esc(e.message)}</div>`; }
 }
@@ -141,6 +144,69 @@ function appendLoadMore(main, container, songBuf, singer, total) {
   };
 }
 
+// ---- 后台加载：播放时将未加载的歌曲追加到队列 ----
+let _bgLoadSeq = 0;
+
+async function loadRemainingSongs(songBuf, singer, total) {
+  const seq = ++_bgLoadSeq;
+  let begin = songBuf.length;
+  let retries = 0;
+
+  while (begin < total) {
+    if (seq !== _bgLoadSeq) return; // 被新搜索取消
+    try {
+      const res = await api(`/music/artist?mid=${encodeURIComponent(singer.mid)}&name=${encodeURIComponent(singer.name || '')}&begin=${begin}`);
+      if (seq !== _bgLoadSeq) return;
+      const newSongs = res.songs || [];
+      if (newSongs.length === 0) break;
+
+      // 去重后追加到队列
+      const existingKeys = new Set(state.queue.map(s => `${s.name}__${s.singer || ''}`));
+      for (const s of newSongs) {
+        const key = `${s.name}__${s.singer || ''}`;
+        if (!existingKeys.has(key)) {
+          state.queue.push(s);
+          existingKeys.add(key);
+        }
+      }
+      begin += newSongs.length;
+
+      // 队列抽屉打开时刷新
+      const drawer = document.getElementById('queueDrawer');
+      if (drawer && drawer.classList.contains('show')) {
+        import('./queue.js').then(({ renderActiveTab }) => renderActiveTab());
+      }
+    } catch (e) {
+      retries++;
+      if (retries >= 3) break;
+      await new Promise(r => setTimeout(r, 1000 * retries));
+    }
+  }
+}
+
+function wrapPlayBtnsForBgLoad(main, songBuf, singer, total) {
+  const playBtn = main.querySelector('[data-tool="playall"]');
+  const shuffleBtn = main.querySelector('[data-tool="shuffle"]');
+
+  const doPlay = (shuffle) => {
+    if (!songBuf || songBuf.length === 0) return toast('列表为空');
+    import('./player.js').then(({ playFromList, renderMode }) => {
+      if (shuffle && state.playMode !== 'shuffle') {
+        state.playMode = 'shuffle';
+        localStorage.setItem('wemusic_mode', 'shuffle');
+        renderMode();
+      }
+      state.history = [];
+      const start = shuffle ? Math.floor(Math.random() * songBuf.length) : 0;
+      playFromList(songBuf, start, null, null);
+    });
+    loadRemainingSongs(songBuf, singer, total);
+  };
+
+  if (playBtn) playBtn.onclick = () => doPlay(false);
+  if (shuffleBtn) shuffleBtn.onclick = () => doPlay(true);
+}
+
 let _artistTab = 'songs'; // 记住上次在专辑页点了哪个 tab
 let _lbPhotos = [];       // lightbox 图片列表（模块级，跨歌手页共享）
 let _lbIdx = 0;           // lightbox 当前索引
@@ -194,7 +260,10 @@ export async function openArtist(mid, name) {
     renderSongList(aContainer, songBuf, { showAdd: true });
     bindListTools(main, songBuf, aContainer, null, null);
     $('addAllSongs')?.remove(); // 旧按钮不存在
-    if (data.hasMore !== false) appendLoadMore(main, aContainer, songBuf, data.singer, data.total);
+    if (data.hasMore !== false) {
+      appendLoadMore(main, aContainer, songBuf, data.singer, data.total);
+      wrapPlayBtnsForBgLoad(main, songBuf, data.singer, data.total);
+    }
 
     // 专辑面板
     const grid = $('artistAlbums');
