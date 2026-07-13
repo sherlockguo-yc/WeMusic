@@ -38,8 +38,10 @@
 
 ### 播放控制
 - 视频浮窗（拖动/全屏/收起）、列表循环/单曲循环/随机播放。
-- 自动连播 + 后台 `<audio>` 代理，切后台自动接管，回前台无缝恢复。
+- 自动连播 + 后台 `<audio>` 代理（bgAudio 单一音频源），切后台自动接管，回前台无缝恢复。
 - 换源偏好持久化到数据库，播放队列/历史同框切换，恢复上次会话。
+- 标记「不喜欢」：播放与切歌（随机/顺序）时自动跳过已标记的歌曲，标记状态跨设备持久化。
+- 音量归一化：基于 EBU R128 (ebur128) 分析不同视频响度并自动统一增益，设置面板开关，立即生效。
 
 ### 歌词
 - 全屏歌词页（毛玻璃 + 旋转封面 + LRC 同步滚动），缩放动画。
@@ -53,7 +55,7 @@
 - 分享海报两种方案（html2canvas 简约 + Puppeteer 精工），4 主题可选，拼贴墙按专辑去重。
 
 ### 界面
-- 深色/浅色/跟随系统，10 色主题，字号 4 档，字体 6 种。
+- 深色/浅色/跟随系统，10 色预设主题 + 自定义主题色（拾色器，最多 8 个，跨设备同步），字号 4 档，字体 6 种。
 - Lucide SVG 图标全站统一，hover 反馈全覆盖。
 - 顶栏按钮：反馈 / 打赏（圆形 $）/ 管理员（盾牌）/ 帮助（?）。
 - 底栏长歌名 / 视频标题自动左右滚动，视频浮窗标题同样支持。详见 `docs/功能规格/文本滚动.md`。
@@ -81,6 +83,7 @@
 | 前端 | ES Modules + Vite + history API 路由 |
 | 数据 | QQ 音乐 / Bilibili / 网易云歌词 API |
 | 海报 | html2canvas + Puppeteer |
+| 音频处理 | ffmpeg / ffprobe（音量归一化） |
 | 存储 | SQLite + localStorage |
 
 ---
@@ -101,6 +104,28 @@ npm test                      # 单元 + API + 依赖检查（git push 自动运
 - **adb**：手机 USB 连接，`npm run mobile` 自动打开浏览器
 - **手动**：`http://<局域网IP>:5174`（同一 Wi-Fi）
 - iOS 分享 →「添加到主屏幕」即可获得 PWA 全屏体验。
+
+---
+
+## 部署
+
+### Docker（推荐）
+
+```bash
+cp .env.example .env          # 按需修改 JWT_SECRET / ALLOW_REGISTER / SUPER_ADMIN
+docker compose up -d --build  # 构建并后台启动，监听 5174
+```
+
+数据持久化在 `wemusic_data` 卷中；如需改端口，修改 `docker-compose.yml` 的 `ports` 映射并设置 `PORT` 环境变量。
+
+### 裸机 / 内网自托管
+
+```bash
+npm install && npm run build
+npm start                      # 默认监听 5174，可用 .env 的 PORT 覆盖
+```
+
+> 中国移动等运营商通常封锁 80/443 入站端口，公网访问可改用非标端口（如 8443）或 Cloudflare 隧道。详见 `docs/架构/自建服务器方案.md`。
 
 ---
 
@@ -137,22 +162,37 @@ npm test                      # 单元 + API + 依赖检查（git push 自动运
 
 ```
 WeMusic/
-├── src/                   # 前端源码（14 个文件，Vite 打包）
-│   ├── main.js            # 入口 + 路由
-│   ├── player.js          # 播放核心
-│   ├── lyrics.js          # 歌词全屏页
-│   ├── search.js          # 搜索 / 歌手 / 专辑
-│   ├── stats.js           # 统计 / 周报月报 / 海报
-│   ├── settings.js        # 主题 / 头像 / 设置
-│   ├── ui.js              # 右键菜单 / 换源弹窗
-│   ├── admin.js           # 管理员面板
-│   └── ...                # api / state / utils / queue / playlist-ui
-├── shared/                # 海报模板（前后端共用）
-├── public/                # HTML / CSS / PWA / dist
-├── server/                # Express + routes + services
-├── scripts/               # build-restart / e2e / codegraph / check-deps / mobile-open
-├── tests/                 # 单元测试 + API 集成测试
-├── data/                  # SQLite 数据库
+├── src/                      # 前端源码（ES Modules，Vite 打包到 public/dist/）
+│   ├── main.js               # 入口 + 路由 + 视图调度
+│   ├── player.js             # 播放核心（bgAudio 单音频源 / 进度 / 音量归一化）
+│   ├── lyrics.js             # 歌词全屏页
+│   ├── search.js             # 搜索 / 歌手 / 专辑
+│   ├── stats.js              # 统计 / 周报月报
+│   ├── report.js             # 分享海报生成
+│   ├── settings.js           # 主题 / 头像 / 设置 / 自定义色 / 音量归一化开关
+│   ├── ui.js                 # 右键菜单 / 换源弹窗 / 喜欢·不喜欢
+│   ├── admin-panel.js        # 管理员面板
+│   ├── albums.js             # 专辑收藏
+│   ├── discover.js           # 为你推荐 / 排行榜
+│   ├── likes.js              # 喜欢列表
+│   ├── share.js              # 分享落地页
+│   ├── queue.js              # 播放队列管理
+│   ├── playlist-ui.js        # 歌单列表渲染
+│   ├── state.js / api.js / utils.js / platform.js / login-entry.js
+│   └── admin/               # 管理面板子模块
+├── shared/                   # 前后端共用（海报模板 / 常量）
+│   ├── poster-template.js
+│   └── constants.js
+├── public/                   # HTML / CSS / PWA / dist（构建产物）
+├── server/                   # Express 后端
+│   ├── index.js / config.js / db.js / webhook.js
+│   ├── routes/              # auth / music / play / playlist / stats / admin
+│   ├── services/            # bilibili / qqmusic / netease / lyrics / crowd / poster
+│   └── middleware/          # 鉴权 / 限流
+├── scripts/                  # build-restart / e2e / codegraph / check-deps / mobile-open / promote-admin
+├── tests/                    # 单元测试 + API 集成测试
+├── docker-compose.yml / Dockerfile
+├── data/                     # SQLite 数据库（运行时生成）
 └── package.json
 ```
 
