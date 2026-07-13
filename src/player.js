@@ -105,6 +105,7 @@ function _updateSeekBarUI(elapsed, totalDur) {
 
 export function resetProgress(d) {
   elapsed = 0; totalDur = Number(d) || 0; timerPaused = false;
+  _hasStartedPlaying = false;
   $('curTime').textContent = '0:00';
   $('durTime').textContent = fmtDur(totalDur);
   _updateSeekBarUI(0, totalDur);
@@ -112,15 +113,44 @@ export function resetProgress(d) {
   if (ring) ring.style.strokeDashoffset = COVER_RING_CIRC;
 }
 
-export function startTimer(d) {
-  stopTimer();
-  totalDur = Number(d) || totalDur || (state.current && state.current.duration) || 0;
-  $('durTime').textContent = fmtDur(totalDur);
-  timerPaused = false;
-  $('playPauseBtn').innerHTML = PAUSE_ICON;
-  $('playPauseBtn').title = '暂停自动连播';
-  autoTimer = setInterval(() => {
-    if (timerPaused) return;
+// ---- 计时器 / 进度驱动 ----
+// mode === 'bg'：唯一常规模式，进度直接读取 bgAudio.currentTime（真实播放位置）。
+// mode === 'iframe'：仅当用户点击「展开」观看视频时进入，B 站 iframe 跨域，无法读取真实进度，
+//                     只能用「每秒 +1」的计时器估算（与展开前的历史实现一致）。
+let _lastTickCurrentTime = 0;
+let _stallTicks = 0;
+const STALL_TICK_THRESHOLD = 5; // 连续 5 次（约 5 秒）currentTime 无变化 → 判定播放流已死
+let _hasStartedPlaying = false; // 当前曲目是否已经成功开始播放过一次（区分"加载中"与"意外暂停"）
+
+function _tick() {
+  if (timerPaused) return;
+  if (mode === 'bg') {
+    if (bgAudio.duration && isFinite(bgAudio.duration)) totalDur = Math.floor(bgAudio.duration);
+    const ct = bgAudio.currentTime || 0;
+    elapsed = Math.floor(ct);
+    $('curTime').textContent = fmtDur(elapsed);
+    if (totalDur > 0) { _updateSeekBarUI(elapsed, totalDur); _updateCoverRing(); }
+    if (!bgAudio.paused) _hasStartedPlaying = true;
+    if (bgAudio.paused) {
+      // 尚未成功开始播放过（曲目还在加载中）属于正常状态，不算"意外暂停"
+      if (_hasStartedPlaying) {
+        console.warn('[bgAudio] 意外暂停，尝试恢复播放');
+        bgAudio.play().catch(() => {});
+      }
+    } else if (Math.abs(ct - _lastTickCurrentTime) < 0.3) {
+      _stallTicks++;
+      if (_stallTicks >= STALL_TICK_THRESHOLD) {
+        console.warn(`[bgAudio] currentTime 停滞 ${STALL_TICK_THRESHOLD}s+，自动切歌`);
+        _stallTicks = 0;
+        autoAdvance();
+        return;
+      }
+    } else {
+      _stallTicks = 0;
+    }
+    _lastTickCurrentTime = ct;
+  } else {
+    // iframe 展开模式：计时器估算进度（跨域无法读取真实播放位置）
     elapsed++;
     $('curTime').textContent = fmtDur(elapsed);
     if (totalDur > 0) {
@@ -128,7 +158,24 @@ export function startTimer(d) {
       _updateCoverRing();
       if (elapsed >= totalDur + 1) autoAdvance();
     }
-  }, 1000);
+  }
+}
+
+// 重启计时器但不重置 timerPaused / 播放按钮图标（用于展开/收起视频时的引擎切换）
+function _restartTick() {
+  if (autoTimer) clearInterval(autoTimer);
+  _lastTickCurrentTime = mode === 'bg' ? (bgAudio.currentTime || 0) : elapsed;
+  _stallTicks = 0;
+  autoTimer = setInterval(_tick, 1000);
+}
+
+export function startTimer(d) {
+  totalDur = Number(d) || totalDur || (state.current && state.current.duration) || 0;
+  $('durTime').textContent = fmtDur(totalDur);
+  timerPaused = false;
+  $('playPauseBtn').innerHTML = PAUSE_ICON;
+  $('playPauseBtn').title = '暂停自动连播';
+  _restartTick();
 }
 
 export function stopTimer() {
@@ -191,10 +238,8 @@ function checkMarquee(el) {
 }
 
 function autoAdvance() {
-  const from = document.hidden ? 'bg-ended/sync' : 'timer';
-  console.log(`[bg:advance] autoAdvance (from=${from}, elapsed=${elapsed}s, dur=${totalDur}s, hidden=${document.hidden})`);
+  console.log(`[advance] autoAdvance (mode=${mode}, elapsed=${elapsed}s, dur=${totalDur}s)`);
   stopTimer();
-  _stopBgSync(); // 停止后台校准定时器，避免干扰下一首歌曲初始化
   _flushLog(totalDur || elapsed);
   if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
   if (state.playMode === 'single') { playCurrent(); return; }
@@ -240,7 +285,7 @@ export function mountVideo(bvid, title) {
   mountVideoAt(bvid, title, 0);
 }
 
-// 带起始时间戳挂载 iframe（回前台时对齐进度用）
+// 带起始时间戳挂载 iframe（展开视频/切歌时对齐进度用）
 export function mountVideoAt(bvid, title, startSec) {
   setVpTitle(title);
   $('videoContainer').innerHTML =
@@ -249,29 +294,16 @@ export function mountVideoAt(bvid, title, startSec) {
   $('videoContainer').dataset.mountedAt = Date.now();
 }
 
+// 完全停止播放：销毁 iframe（如果有）+ 停止 bgAudio + 停止计时器
 export function destroyVideo() {
   $('videoPane').classList.remove('show', 'fullscreen');
-  const vc = $('videoContainer');
-  vc.innerHTML = '';
-  delete vc.dataset.pendingBvid;
-  _pendingMount = null;
-  _bgStop();
+  $('videoContainer').innerHTML = '';
+  $('videoBtn').textContent = '展开';
+  bgAudio.pause();
+  bgAudio.removeAttribute('src');
+  bgAudio.load();
+  mode = 'bg';
   stopTimer();
-}
-
-export function applyPaneVisibility() {
-  const pane = $('videoPane');
-  const vc = $('videoContainer');
-  const mounted = vc.children.length > 0 || !!vc.dataset.pendingBvid;
-  if (state.paneVisible && mounted) pane.classList.add('show');
-  else pane.classList.remove('show');
-  $('videoBtn').textContent = mounted ? (state.paneVisible ? '收起' : '展开') : '看视频';
-}
-
-export function setPaneVisible(v) {
-  state.paneVisible = v;
-  localStorage.setItem('wemusic_pane', String(v));
-  applyPaneVisibility();
 }
 
 // ---- 封面/高亮 ----
@@ -597,75 +629,25 @@ export async function playCurrent() {
   startVideo(song.bvid, song._biliTitle, song._biliDur || song.duration);
 }
 
-// ---- 后台播放：bgAudio 接管 ----
-// 流程：
-//   前台播放时：bgAudio 静音预缓冲当前歌曲（preload），切后台几乎零延迟接续
-//   切后台：销毁 iframe → bgAudio 解除静音、seek 到 elapsed → play()
-//   后台切歌：bgAudio 换 src → 重新 preload → play()
-//   回前台：mountVideoAt 带时间戳建 iframe → iframe canplay 后停 bgAudio（交叉，无空档）
+// ---- 音频播放引擎 ----
+// WeMusic 只有一个真正会发声的「音频源」：bgAudio（一个隐藏的 <audio> 元素）。
+// 无论用户在前台还是后台，日常听歌全部由 bgAudio 播放，因此不再需要「前后台切换引擎」
+// 那一整套交叉过渡/健康检查逻辑。
+//
+// 唯一的例外：用户主动点击「展开」想看视频画面时，切换为 B 站官方 iframe（画面+声音）。
+// 点击「收起」/关闭视频面板后，立即销毁 iframe，改回 bgAudio 从记录的进度继续播放声音。
+//
+// mode: 'bg'（默认，唯一常规模式） | 'iframe'（用户展开视频时）
+let mode = 'bg';
 const bgAudio = document.getElementById('audio');
-let _bgBvid = null;         // 当前 bgAudio 加载的 bvid（preload 或正在播）
-let _bgPlaying = false;     // bgAudio 当前是否在有声播放（非 preload）
-
-// bgAudio ended 事件：后台切歌最可靠的通知（不被 Chrome 节流/冻结影响）
-bgAudio.addEventListener('ended', () => {
-  if (_bgPlaying) {
-    console.log(`[bgAudio] ended at ${bgAudio.currentTime?.toFixed(1)}s — auto advance`);
-    _bgPlaying = false;
-    autoAdvance();
-  }
-});
-// 后台诊断日志：监听 bgAudio 各种状态事件 —— 附带恢复逻辑
-// 流中断时 <audio> 不会触发 ended，而是 stalled + 静默停止，必须主动恢复
-let _bgStalledTimer = null;
-bgAudio.addEventListener('error', () => {
-  const err = bgAudio.error;
-  console.warn(`[bgAudio] ERROR code=${err?.code} message="${err?.message}" src=${bgAudio.src?.slice(0,60)}`);
-  // 后台播放中流错误 → 直接切歌（无法恢复）
-  if (_bgPlaying) {
-    console.warn(`[bgAudio] ERROR during bg play — auto advance`);
-    _bgPlaying = false;
-    autoAdvance();
-  }
-});
-bgAudio.addEventListener('stalled', () => {
-  const ct = bgAudio.currentTime?.toFixed(1) || '?';
-  console.warn(`[bgAudio] STALLED currentTime=${ct}s readyState=${bgAudio.readyState}`);
-  // 后台播放中卡住 → 等 3 秒，如果还没恢复就切歌
-  if (_bgPlaying && !_bgStalledTimer) {
-    _bgStalledTimer = setTimeout(() => {
-      _bgStalledTimer = null;
-      if (!_bgPlaying) return;
-      const ct2 = bgAudio.currentTime?.toFixed(1) || '?';
-      console.warn(`[bgAudio] STALLED 3s+ at ${ct2}s — auto advance`);
-      _bgPlaying = false;
-      autoAdvance();
-    }, 3000);
-  }
-});
-bgAudio.addEventListener('playing', () => {
-  // 恢复播放时清除 stalled 定时器
-  if (_bgStalledTimer) { clearTimeout(_bgStalledTimer); _bgStalledTimer = null; }
-});
-bgAudio.addEventListener('waiting', () => {
-  console.log(`[bgAudio] waiting (buffering) currentTime=${bgAudio.currentTime?.toFixed(1)}s`);
-});
-bgAudio.addEventListener('canplay', () => {
-  console.log(`[bgAudio] canplay readyState=${bgAudio.readyState} duration=${bgAudio.duration?.toFixed(1)}s`);
-});
-bgAudio.addEventListener('loadeddata', () => {
-  console.log(`[bgAudio] loadeddata duration=${bgAudio.duration?.toFixed(1)}s`);
-});
-bgAudio.addEventListener('pause', () => {
-  if (_bgPlaying) console.log(`[bgAudio] pause event (unexpected? bgPlaying=${_bgPlaying})`);
-});
-bgAudio.addEventListener('play', () => {
-  console.log(`[bgAudio] play event currentTime=${bgAudio.currentTime?.toFixed(1)}s`);
-});
-let _pendingMount = null;   // { bvid, title }：回前台时需要挂载的 iframe
-let _bgVolume = 0.8;        // WeMusic 自维护音量（0~1），持久化
+let _usedFallback = false;   // 当前曲目是否已经从「直连 CDN」降级到「服务端代理」
+let _healthCheckId = null;   // play() 成功后 5s 健康检查 setTimeout ID
+let _stalledTimer = null;    // stalled 事件 3s 兜底切歌 setTimeout ID
+let _volume = 0.8;           // 用户手动设置的音量（0~1），持久化，前后台/是否展开视频都用同一个值
 
 // ---- 音量归一化：AudioContext + GainNode ----
+// GainNode 挂在 bgAudio 上，因此无论 bgAudio 是否正在展开视频时静默预载，
+// 只要它是真正在出声的引擎（mode === 'bg'），归一化效果就会生效。
 let _audioCtx = null;
 let _gainNode = null;
 let _normGain = 1.0;         // 服务端查询到的归一化 gain，默认 1.0（无归一化）
@@ -702,148 +684,145 @@ function _applyNormVol() {
   const skipNorm = localStorage.getItem('wemusic_volume_normalize') !== '1';
   // 输出级安全阀：归一化增益不超过 8 倍，防止极静音频放大后炸耳朵
   const safeGain = Math.min(_normGain, 8.0);
-  const effectiveGain = skipNorm ? _bgVolume : (safeGain * _bgVolume);
+  const effectiveGain = skipNorm ? _volume : (safeGain * _volume);
   _gainNode.gain.value = effectiveGain;
   // 更新音量按钮 tooltip，显示归一化增益
   if (_volBtn) {
     const normInfo = skipNorm ? '归一化已关闭'
       : (_normGain !== 1.0 ? `增益 ${_normGain.toFixed(2)}x` : '增益 1.00x（无缓存）');
-    _volBtn.title = document.hidden ? `后台音量 | ${normInfo}` : `后台音量 | ${normInfo}（前台请在视频内调节）`;
+    _volBtn.title = mode === 'iframe' ? `音量 | ${normInfo}（展开视频时请在视频内调节）` : `音量 | ${normInfo}`;
   }
 }
 
-// 前台静音预缓冲：加载 src 但不 play，切后台时可立即接续
-function _bgPreload(bvid) {
-  if (_bgBvid === bvid) return;
-  console.log(`[bg:state] preload bvid=${bvid} (was ${_bgBvid || 'none'})`);
-  _bgBvid = bvid;
-  _bgPlaying = false;
-  // 异步查询 gain（不阻塞播放）
-  _fetchGain(bvid);
-  bgAudio.src = `/api/play/stream?bvid=${bvid}&token=${encodeURIComponent(Auth.token)}`;
-  bgAudio.muted = true;
-  bgAudio.volume = 1.0; // 始终 1.0，实际音量由 GainNode 控制
-  bgAudio.load();
+// 解析可播放地址：优先直连 B 站 CDN（不占用自建服务器带宽），
+// 若服务端解析失败则直接降级为服务端代理地址。
+// <audio> 标签跨域直连失败（CORS/风控节点差异）时，由 bgAudio 的 error 事件在播放期兜底降级。
+async function _getPlayableUrl(bvid) {
+  try {
+    const r = await api(`/play/direct-url?bvid=${encodeURIComponent(bvid)}`);
+    if (r && r.url) return { url: r.url, isDirect: true };
+  } catch { /* 直连地址解析失败，走代理 */ }
+  return { url: `/api/play/stream?bvid=${encodeURIComponent(bvid)}&token=${encodeURIComponent(Auth.token)}`, isDirect: false };
 }
 
-// 解除静音并从指定进度开始播放（切后台时调用）
-function _bgUnmuteAndPlay(seekSec) {
-  console.log(`[bg:state] unmute+play seekSec=${seekSec}s bvid=${_bgBvid}`);
-  bgAudio.muted = false;
-  bgAudio.volume = 1.0; // 始终 1.0，实际音量由 GainNode 控制
-  _bgPlaying = true;
+// 加载曲目到 bgAudio 并立即播放（mode === 'bg' 时使用）
+async function _loadAndPlayBgTrack(bvid, seekSec = 0) {
+  const seq = playSeq;
+  _usedFallback = false;
+  const { url } = await _getPlayableUrl(bvid);
+  if (seq !== playSeq || mode !== 'bg') return; // 期间歌曲已切换，或用户已展开视频
+  bgAudio.src = url;
+  bgAudio.load();
+  _fetchGain(bvid);
+  _playBgAudioWithRetry(seekSec);
+}
 
-  // 重试 play() 直到成功或达到上限（后台 src 刚换完，数据可能还没加载好）
+// 静默加载曲目到 bgAudio（不播放）：用户正在看视频时，提前把 bgAudio 准备好，
+// 这样收起视频时可以立刻续播，不需要现场再请求一次直链。
+async function _loadBgTrack(bvid) {
+  const seq = playSeq;
+  _usedFallback = false;
+  const { url } = await _getPlayableUrl(bvid);
+  if (seq !== playSeq) return;
+  bgAudio.src = url;
+  bgAudio.load();
+  _fetchGain(bvid);
+}
+
+// 播放 bgAudio，必要时 seek 到指定秒数；play() 失败自动重试（最多 10 次，间隔递增）
+function _playBgAudioWithRetry(seekSec) {
   let retries = 0;
   const doPlay = () => {
+    if (mode !== 'bg') return; // 用户已展开视频，不再尝试播放 bgAudio（避免双声道）
     bgAudio.play().then(() => {
-      console.log(`[bg:retry] play() SUCCESS at retry=${retries}, currentTime=${bgAudio.currentTime?.toFixed(1)}s`);
-      // play() 成功后 5 秒做健康检查：如果又停了且没被外部暂停，重试
-      if (_bgHealthCheckId) clearTimeout(_bgHealthCheckId);
-      _bgHealthCheckId = setTimeout(() => {
-        _bgHealthCheckId = null;
-        if (_bgPlaying && bgAudio.paused && !timerPaused) {
+      if (_healthCheckId) clearTimeout(_healthCheckId);
+      // play() 成功后 5 秒做健康检查：如果又停了且没被用户手动暂停，重试
+      _healthCheckId = setTimeout(() => {
+        _healthCheckId = null;
+        if (mode === 'bg' && !timerPaused && bgAudio.paused) {
           console.warn(`[bgAudio] health-check FAILED (paused at ${bgAudio.currentTime?.toFixed(1)}s) — retrying`);
           retries = 0;
           doPlay();
         }
       }, 5000);
     }).catch((e) => {
+      if (mode !== 'bg') return;
       retries++;
       if (retries <= 10) {
         const delay = 500 * Math.min(retries, 6);
         console.log(`[bg:retry] play() attempt ${retries}/10 failed (${e.name}) — retry in ${delay}ms`);
         setTimeout(doPlay, delay);
       } else {
-        console.warn(`[bg:retry] play() FAILED after 10 retries — giving up`);
+        console.warn('[bg:retry] play() FAILED after 10 retries — giving up');
       }
     });
   };
 
-  if (seekSec > 2 && Math.abs(bgAudio.currentTime - seekSec) > 1) {
+  if (seekSec > 0.5 && Math.abs(bgAudio.currentTime - seekSec) > 1) {
     const onSeeked = () => { bgAudio.removeEventListener('seeked', onSeeked); doPlay(); };
     bgAudio.addEventListener('seeked', onSeeked);
-    bgAudio.currentTime = seekSec;
+    try { bgAudio.currentTime = seekSec; } catch { /* metadata 未加载完成，忽略 */ }
     // 兜底：seek 超过 1.5s 未响应则直接 play（避免死等）
     setTimeout(() => {
       bgAudio.removeEventListener('seeked', onSeeked);
-      if (bgAudio.paused) doPlay();
+      if (bgAudio.paused && mode === 'bg') doPlay();
     }, 1500);
+  } else if (bgAudio.readyState >= 2) { // HAVE_CURRENT_DATA 或更高
+    doPlay();
   } else {
-    // 等 canplay 再播，避免数据没加载好就被浏览器拒绝
-    if (bgAudio.readyState >= 2) { // HAVE_CURRENT_DATA 或更高
-      doPlay();
-    } else {
-      const onCan = () => { bgAudio.removeEventListener('canplay', onCan); doPlay(); };
-      bgAudio.addEventListener('canplay', onCan);
-    }
+    const onCan = () => { bgAudio.removeEventListener('canplay', onCan); doPlay(); };
+    bgAudio.addEventListener('canplay', onCan);
   }
 }
 
-let _bgHealthCheckId = null;
-function _bgStop() {
-  _stopBgSync();
-  if (_bgHealthCheckId) { clearTimeout(_bgHealthCheckId); _bgHealthCheckId = null; }
-  if (_bgStalledTimer) { clearTimeout(_bgStalledTimer); _bgStalledTimer = null; }
-  if (!_bgBvid) return;
-  console.log(`[bg:state] stop bvid=${_bgBvid}`);
-  bgAudio.pause();
-  bgAudio.muted = true;
-  bgAudio.src = '';
-  _bgBvid = null;
-  _bgPlaying = false;
-}
+// bgAudio 'ended' 事件：正常播完，触发自动连播
+bgAudio.addEventListener('ended', () => {
+  if (mode === 'bg' && !timerPaused) {
+    console.log(`[bgAudio] ended at ${bgAudio.currentTime?.toFixed(1)}s — auto advance`);
+    autoAdvance();
+  }
+});
 
-// 后台时每 4 秒用 bgAudio.currentTime 校准 elapsed（消除 setInterval 节流漂移）
-let _bgSyncTimer = null;
-let _bgLastCurrentTime = 0; // 上一次检测的 currentTime，用于停滞检测
-function _startBgSync() {
-  _stopBgSync();
-  _bgLastCurrentTime = bgAudio.currentTime || 0;
-  _bgSyncTimer = setInterval(() => {
-    // 恢复检查：后台应该播放但 bgAudio 停了 → 尝试重启
-    if (_bgPlaying && bgAudio.paused && !timerPaused) {
-      const ct = bgAudio.currentTime?.toFixed(1) || '?';
-      console.warn(`[bgSync] bgAudio paused unexpectedly at ${ct}s (elapsed=${elapsed}s, dur=${totalDur}s, readyState=${bgAudio.readyState}) — restarting`);
-      bgAudio.play().then(() => {
-        console.log(`[bgSync] restart succeeded, now at ${bgAudio.currentTime?.toFixed(1)}s`);
-      }).catch((e) => {
-        console.warn(`[bgSync] restart FAILED: ${e.name} — ${e.message?.slice(0,60)}`);
-      });
-      _bgLastCurrentTime = bgAudio.currentTime || 0;
-      return;
-    }
-    if (!_bgPlaying || bgAudio.paused || !bgAudio.currentTime) {
-      _bgLastCurrentTime = bgAudio.currentTime || 0;
-      return;
-    }
-    const real = Math.round(bgAudio.currentTime);
-    if (Math.abs(real - elapsed) >= 2) {
-      console.log(`[bgSync] calibrate elapsed ${elapsed}s → ${real}s (bgAudio.currentTime)`);
-      elapsed = real;
-      _updateCoverRing();
-    }
-    // 停滞检测：currentTime 连续 2 轮没变化（8s+）且已播放过半 → 流已死，切歌
-    if (_bgLastCurrentTime > 0 && Math.abs(bgAudio.currentTime - _bgLastCurrentTime) < 0.5) {
-      const pct = totalDur > 0 ? Math.round(real / totalDur * 100) : 0;
-      console.warn(`[bgSync] STALL DETECTED — currentTime stuck at ${real}s (~${pct}%), dur=${totalDur}s — auto advance`);
-      _bgPlaying = false;
-      _bgLastCurrentTime = 0;
-      autoAdvance();
-      return;
-    }
-    _bgLastCurrentTime = bgAudio.currentTime;
-    // autoAdvance 完全由 bgAudio.ended 事件触发，不在此主动切歌
-    // 避免 bgAudio.currentTime 瞬时跳变 / 流时长与元数据不一致时提前切断播放
-  }, 4000);
-  console.log('[bgSync] timer started (4s interval)');
-}
-function _stopBgSync() {
-  if (_bgSyncTimer) { clearInterval(_bgSyncTimer); _bgSyncTimer = null; }
-}
+// error 事件：先尝试从「直连」降级为「服务端代理」，仍失败才判定播放失败自动切歌
+bgAudio.addEventListener('error', () => {
+  const err = bgAudio.error;
+  console.warn(`[bgAudio] ERROR code=${err?.code} message="${err?.message}" src=${bgAudio.src?.slice(0, 60)}`);
+  if (!_usedFallback && state.current?.bvid) {
+    _usedFallback = true;
+    console.warn('[bgAudio] 直连 CDN 失败，降级为服务端代理');
+    bgAudio.src = `/api/play/stream?bvid=${encodeURIComponent(state.current.bvid)}&token=${encodeURIComponent(Auth.token)}`;
+    bgAudio.load();
+    if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
+    return;
+  }
+  if (mode === 'bg' && !timerPaused) {
+    console.warn('[bgAudio] ERROR during playback (fallback 已用尽) — auto advance');
+    autoAdvance();
+  }
+});
+
+// stalled：卡住 3 秒仍未恢复则判定失败切歌；流中断时 <audio> 常不触发 ended，需主动兜底
+bgAudio.addEventListener('stalled', () => {
+  if (mode !== 'bg' || timerPaused) return;
+  const ct = bgAudio.currentTime?.toFixed(1) || '?';
+  console.warn(`[bgAudio] STALLED currentTime=${ct}s readyState=${bgAudio.readyState}`);
+  if (!_stalledTimer) {
+    _stalledTimer = setTimeout(() => {
+      _stalledTimer = null;
+      if (mode === 'bg' && !timerPaused) {
+        console.warn('[bgAudio] STALLED 3s+ — auto advance');
+        autoAdvance();
+      }
+    }, 3000);
+  }
+});
+bgAudio.addEventListener('playing', () => {
+  if (_stalledTimer) { clearTimeout(_stalledTimer); _stalledTimer = null; }
+});
 
 // 通过 postMessage 控制 B 站 iframe 音量（官方支持的消息协议）
-// 注意：不在此处乘归一化增益。前台 iframe 无法可靠控制音量，归一化仅对后台 bgAudio 生效。
+// 注意：归一化增益不作用于 iframe——iframe 是 B 站官方播放器，WeMusic 无法在音量之外
+// 再对它做处理，只能远程喊话调节音量本身。
 function _setIframeVolume(vol) {
   const iframe = $('videoContainer').querySelector('iframe');
   if (!iframe) return;
@@ -855,26 +834,18 @@ function _setIframeVolume(vol) {
   } catch { console.warn('B站 iframe 音量通信失败') }
 }
 
+// 播放/切换到某个 bvid（供 playCurrent / 换源 调用）。
+// mode === 'bg'：加载并播放 bgAudio。
+// mode === 'iframe'：挂载新 iframe（保持展开状态），同时静默预载 bgAudio 供随时收起。
 export function startVideo(bvid, title, dur) {
   _iframeStartCalibrated = false;
-  if (document.hidden) {
-    // 后台切歌：重新 preload 新歌，立即播放
-    console.log(`[bg:state] startVideo (hidden) bvid=${bvid} title="${title?.slice(0,30)}"`);
-    _bgBvid = null; // 强制重新 preload
-    _bgPreload(bvid);
-    _bgUnmuteAndPlay(0); // 新歌从 0 开始
-    _pendingMount = { bvid, title };
-    $('videoContainer').dataset.pendingBvid = bvid;
+  if (mode === 'iframe') {
+    mountVideoAt(bvid, title, 0);
+    elapsed = 0;
+    _loadBgTrack(bvid);
   } else {
-    // 前台：挂载 iframe，同时静音预缓冲 bgAudio（为下次切后台做准备）
-    _bgStop();
-    _pendingMount = null;
-    delete $('videoContainer').dataset.pendingBvid;
-    mountVideo(bvid, title);
-    // 500ms 后预缓冲：给 iframe 短暂优先带宽启动，避免争抢导致双方都慢
-    setTimeout(() => _bgPreload(bvid), 500);
+    _loadAndPlayBgTrack(bvid, 0);
   }
-  applyPaneVisibility();
   const displayTitle = title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer}` : 'Bilibili 播放');
   $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(displayTitle)}</span>`;
   const inner = $('playStatus').querySelector('.status-inner');
@@ -899,19 +870,48 @@ export function startVideo(bvid, title, dur) {
   prefetchNextBvid();
 }
 
-// B 站 iframe 真实启动时间检测：
+// ---- 展开 / 收起视频（唯一的引擎切换入口，替代原来的前后台切换）----
+export function expandVideo() {
+  if (!state.current?.bvid || mode === 'iframe') return;
+  const startSec = Math.floor(bgAudio.currentTime || elapsed);
+  bgAudio.pause();
+  mode = 'iframe';
+  _iframeStartCalibrated = false;
+  mountVideoAt(state.current.bvid, state.current._biliTitle, startSec);
+  elapsed = startSec;
+  $('videoPane').classList.add('show');
+  $('videoBtn').textContent = '收起';
+  _setIframeVolume(_volume);
+  _restartTick();
+}
+
+export function collapseVideo() {
+  if (mode !== 'iframe') return;
+  const startSec = elapsed;
+  $('videoPane').classList.remove('show', 'fullscreen');
+  $('videoContainer').innerHTML = '';
+  $('videoBtn').textContent = '展开';
+  mode = 'bg';
+  if (!timerPaused) {
+    _playBgAudioWithRetry(startSec);
+  } else if (bgAudio.readyState >= 1) {
+    try { bgAudio.currentTime = startSec; } catch { /* 忽略 */ }
+  }
+  _restartTick();
+}
+
+// B 站 iframe 真实启动时间检测（仅在展开视频、mode === 'iframe' 时有意义）：
 // B 站播放器会通过 postMessage 发送心跳（包含 type:'heartbeat' 或 currentTime 等）
-// 监听第一条有效消息即可知道视频真正开始播放的时刻，用于校正计时器偏移
+// 监听第一条有效消息即可知道视频真正开始播放的时刻，用于校正「计时器估算进度」的偏移
 let _iframeStartCalibrated = false; // 当前歌是否已校正过
 
 function _onBiliMessage(e) {
-  if (_iframeStartCalibrated) return;
-  if (!state.current?.bvid || document.hidden) return;
+  if (mode !== 'iframe' || _iframeStartCalibrated) return;
+  if (!state.current?.bvid) return;
   // B 站消息结构：{ type, data } 或直接字符串，只要收到任意一条就说明播放器已初始化
   try {
     const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
     if (!d || typeof d !== 'object') return;
-    // 任意 B 站播放器消息（heartbeat / statechange 等）
     if (!d.type && !d.event) return;
   } catch { return; }
 
@@ -921,7 +921,6 @@ function _onBiliMessage(e) {
   if (delay < 0.5 || delay > 15) return; // 不合理则忽略
 
   // 把计时器往回拨：elapsed 实际上多走了 delay 秒
-  // 修正：elapsed = 当前 elapsed - delay（但不能小于 0）
   if (elapsed > delay + 1) {
     elapsed = Math.max(0, Math.round(elapsed - delay));
     $('curTime').textContent = fmtDur(elapsed);
@@ -934,10 +933,10 @@ function _onBiliMessage(e) {
 }
 
 export function initPlayer() {
-  // seekBar 禁用（跨域 iframe 无法 seek）
+  // seekBar 禁用：无论是 bgAudio 真实进度还是 iframe 估算进度，都不支持跳转到任意位置
   $('seekBar').disabled = true;
 
-  // 监听 B 站 iframe postMessage，检测视频真实启动时刻，校正计时器
+  // 监听 B 站 iframe postMessage，检测视频真实启动时刻，校正展开模式下的估算进度
   window.addEventListener('message', _onBiliMessage);
 
   // 初始化 AudioContext（音量归一化用，createMediaElementSource 只能调一次）
@@ -946,8 +945,9 @@ export function initPlayer() {
   // 设置面板切换归一化开关 → 立即生效
   window.addEventListener('volume_normalize_changed', () => _applyNormVol());
 
-  // 音量控件：通过 GainNode 控制实际输出音量（前台 iframe 音量需在 B 站播放器内调节）
-  _bgVolume = Number(localStorage.getItem('wemusic_vol') || 0.8);
+  // 音量控件：通过 GainNode 控制 bgAudio 的实际输出音量；同时通过 postMessage 同步 iframe 音量。
+  // 无论当前是 bg 模式还是 iframe 模式，这一个滑块始终同时驱动两者，保证前后台/展开态音量一致。
+  _volume = Number(localStorage.getItem('wemusic_vol') || 0.8);
   const volBar = $('volBar');
   const volBtn = $('volBtn');
   _volBtn = volBtn; // 保存引用供 _applyNormVol 更新 tooltip
@@ -956,36 +956,36 @@ export function initPlayer() {
   const _applyVol = () => {
     // 音量由 GainNode 统一控制：bgAudio.volume 始终 1.0
     bgAudio.volume = 1.0;
-    bgAudio.muted = (_bgVolume === 0);
+    bgAudio.muted = (_volume === 0);
     _applyNormVol();
-    const pct = Math.round(_bgVolume * 100);
+    const pct = Math.round(_volume * 100);
     volBar.value = pct;
     volBar.style.setProperty('--vol-fill', pct + '%');
     // 静音时隐掉滑块拇指，避免残留的 accent 色
     volBar.style.setProperty('--vol-thumb-bg', pct === 0 ? 'transparent' : 'var(--accent)');
     volBar.style.setProperty('--vol-thumb-border', pct === 0 ? 'transparent' : 'var(--accent)');
-    volBtn.innerHTML = _bgVolume === 0 ? volOffIcon : volOnIcon;
+    volBtn.innerHTML = _volume === 0 ? volOffIcon : volOnIcon;
     // tooltip 由 _applyNormVol 统一设置（含 gain 信息）
   };
   _applyVol();
   volBar.oninput = () => {
-    _bgVolume = volBar.value / 100;
-    localStorage.setItem('wemusic_vol', _bgVolume);
+    _volume = volBar.value / 100;
+    localStorage.setItem('wemusic_vol', _volume);
     _applyVol();
-    _setIframeVolume(_bgVolume); // 同步 iframe 音量
+    _setIframeVolume(_volume); // 同步 iframe 音量（展开视频时生效）
   };
-  let _prevVol = _bgVolume;
+  let _prevVol = _volume;
   const volWrap = document.querySelector('.volume-wrap');
   volBtn.onclick = (e) => {
     e.stopPropagation();
     if (!volWrap.classList.contains('open')) {
       volWrap.classList.add('open');
     } else {
-      if (_bgVolume > 0) { _prevVol = _bgVolume; _bgVolume = 0; }
-      else { _bgVolume = _prevVol || 0.8; }
-      localStorage.setItem('wemusic_vol', _bgVolume);
+      if (_volume > 0) { _prevVol = _volume; _volume = 0; }
+      else { _volume = _prevVol || 0.8; }
+      localStorage.setItem('wemusic_vol', _volume);
       _applyVol();
-      _setIframeVolume(_bgVolume);
+      _setIframeVolume(_volume);
     }
   };
   // 点击其他地方关闭音量条
@@ -1012,13 +1012,14 @@ export function initPlayer() {
     toast(timerPaused ? '已暂停自动连播' : '继续自动连播');
   };
 
+  // 展开/收起视频：展开 = 用户想看画面（切到 iframe，声音也归 iframe）；
+  // 收起 = 用户只想听歌（销毁 iframe，声音无缝交回 bgAudio）
   $('videoBtn').onclick = () => {
     if (!state.current || !state.current.bvid) return toast('请先播放一首歌曲');
-    if ($('videoContainer').children.length === 0) { playCurrent(); return; }
-    setPaneVisible(!state.paneVisible);
+    if (mode === 'iframe') collapseVideo(); else expandVideo();
   };
-  $('vpHide').onclick = () => setPaneVisible(false);
-  $('vpClose').onclick = () => { destroyVideo(); applyPaneVisibility(); setStatus('已停止'); };
+  $('vpHide').onclick = () => collapseVideo(); // 「收起（保持播放）」
+  $('vpClose').onclick = () => { destroyVideo(); setStatus('已停止'); };
   $('vpFull').onclick = () => {
     const pane = $('videoPane');
     if (!document.fullscreenElement) {
@@ -1053,79 +1054,22 @@ export function initPlayer() {
 
   // Media Session（"播放"=恢复自动连播 / "暂停"=暂停自动连播）
   navigator.mediaSession.setActionHandler('play', () => {
-    if (state.current && $('videoContainer').children.length > 0) {
-      timerPaused = false; $('playPauseBtn').innerHTML = PAUSE_ICON;
-      $('playPauseBtn').title = '暂停自动连播';
-    } else if (state.current) { playCurrent(); }
+    if (!state.current) return;
+    if (autoTimer) togglePause();
+    else playCurrent();
   });
   navigator.mediaSession.setActionHandler('pause', () => {
-    timerPaused = true; $('playPauseBtn').innerHTML = PLAY_ICON;
-    $('playPauseBtn').title = '继续自动连播';
+    if (autoTimer && !timerPaused) togglePause();
   });
   navigator.mediaSession.setActionHandler('previoustrack', playPrev);
   navigator.mediaSession.setActionHandler('nexttrack', () => playNext(false));
 
+  // 用户展开视频后把浏览器标签页切到后台：iframe 会被浏览器限流/静音，
+  // 此时自动收起视频面板，改回 bgAudio 继续播放声音，避免"看视频时切走导致没声音"。
   document.addEventListener('visibilitychange', () => {
-    if (!bgAudio) return;
-    if (!autoTimer || timerPaused) return;
-
-    if (document.hidden) {
-      // 切到后台：销毁 iframe，bgAudio 接管
-      if (!state.current?.bvid) return;
-      console.log(`[bg:state] visibility HIDDEN — switching to bgAudio (elapsed=${elapsed}s, bvid=${state.current.bvid})`);
-      if (_bgBvid !== state.current.bvid) _bgPreload(state.current.bvid);
-      $('videoContainer').innerHTML = '';
-      _pendingMount = { bvid: state.current.bvid, title: state.current._biliTitle };
-      $('videoContainer').dataset.pendingBvid = state.current.bvid;
-      _bgUnmuteAndPlay(elapsed);
-      _startBgSync();
-    } else {
-      // 回到前台：停 bgAudio，重建 iframe
-      if (!state.current?.bvid) return;
-      console.log(`[bg:state] visibility VISIBLE — switching to iframe (elapsed=${elapsed}s, bgPlaying=${_bgPlaying}, bgPaused=${bgAudio.paused})`);
-      _stopBgSync(); // 停止后台校准
-
-      // 用 bgAudio.currentTime 校正进度
-      if (_bgPlaying && bgAudio.currentTime > 1) {
-        elapsed = Math.round(bgAudio.currentTime);
-        $('curTime').textContent = fmtDur(elapsed);
-        if (totalDur > 0) _updateSeekBarUI(elapsed, totalDur);
-      }
-
-      // 重建 iframe，带时间戳对齐进度
-      const target = _pendingMount ?? { bvid: state.current.bvid, title: state.current._biliTitle };
-      _pendingMount = null;
-      delete $('videoContainer').dataset.pendingBvid;
-      mountVideoAt(target.bvid, target.title, elapsed > 5 ? elapsed : 0);
-      applyPaneVisibility();
-      // 更新底部播放器视频标题（空值时兜底为歌名）
-      const vt = target.title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer}` : 'Bilibili 播放');
-      $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(vt)}</span>`;
-      const inner = $('playStatus').querySelector('.status-inner');
-      if (inner) checkMarquee(inner);
-
-      // 交叉：收到来自 B 站的 postMessage（视频已初始化）时立即停 bgAudio
-      // 兜底：800ms 后无论如何停止（避免双声道时间过长）
-      let _crossStopped = false;
-      const stopCross = () => {
-        if (_crossStopped) return;
-        _crossStopped = true;
-        window.removeEventListener('message', crossMsg);
-        _bgStop();
-      };
-      const crossMsg = (e) => {
-        // 只处理来自 B 站播放器域名的消息，排除 WeMusic 自发的
-        if (!e.origin?.includes('bilibili.com')) return;
-        try {
-          const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-          if (d && typeof d === 'object' && (d.type || d.event)) stopCross();
-        } catch { /* 消息格式非法，忽略 */ }
-      };
-      window.addEventListener('message', crossMsg);
-      setTimeout(stopCross, 800); // 兜底缩短到 800ms
-
-      // 同步 iframe 音量
-      setTimeout(() => _setIframeVolume(_bgVolume), 400);
+    if (document.hidden && mode === 'iframe') {
+      console.log('[video] 标签页切到后台且视频处于展开状态 — 自动收起，交回 bgAudio 播放');
+      collapseVideo();
     }
   });
 }
@@ -1134,15 +1078,14 @@ export function initPlayer() {
 // 不能通过 p.timerPaused 直接赋值（构建后为只读 getter），只能通过此函数操作
 export function togglePause() {
   if (!state.current) return 'noSong';
-  const vc = $('videoContainer');
-  const mounted = vc.children.length > 0 || !!vc.dataset.pendingBvid;
-  if (!mounted) { playCurrent(); return 'mounted'; }
+  if (!autoTimer) { playCurrent(); return 'mounted'; }
   timerPaused = !timerPaused;
   $('playPauseBtn').innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON;
   $('playPauseBtn').title = timerPaused ? '继续自动连播' : '暂停自动连播';
-  if (document.hidden && _bgBvid) {
+  if (mode === 'bg') {
     if (timerPaused) bgAudio.pause();
     else bgAudio.play().catch(() => {});
   }
+  // mode === 'iframe' 时，B 站播放器由用户在视频内自行暂停/播放，这里只暂停计时器/歌词同步
   return timerPaused;
 }

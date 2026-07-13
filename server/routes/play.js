@@ -509,6 +509,46 @@ router.get('/stream', async (req, res) => {
 });
 
 /**
+ * 直连播放地址：只返回 B 站 CDN 真实直链，不做服务端代理转发。
+ * 客户端（bgAudio）优先尝试直接播放此地址；若播放失败（CORS/风控节点差异），
+ * 前端会自动 fallback 到 /api/play/stream 代理地址。
+ * GET /api/play/direct-url?bvid=BVxxx[&cid=xxx]
+ * → { url, backup, cid, mime, expiresAt }
+ *
+ * 与 /stream 一样触发音量归一化分析（因为客户端直连时不会经过 /stream）。
+ */
+router.get('/direct-url', authRequired, async (req, res) => {
+  const { bvid, cid } = req.query;
+  if (!bvid) return res.status(400).json({ error: '缺少 bvid' });
+  try {
+    const stream = await getAudioStream(bvid, cid ? Number(cid) : undefined);
+    const resolvedCid = stream.cid;
+
+    // 音量归一化：DB 中无此 bvid+cid 的 gain → 触发后台异步分析（逻辑与 /stream 一致）
+    const row = db.prepare('SELECT status FROM gain_cache WHERE bvid = ? AND cid = ?').get(bvid, resolvedCid);
+    if (!row || row.status === 'failed') {
+      const now = Date.now();
+      db.prepare('INSERT OR REPLACE INTO gain_cache (bvid, cid, gain_mult, status, created_at, updated_at) VALUES (?, ?, 1.0, ?, ?, ?)')
+        .run(bvid, resolvedCid, 'pending', now, now);
+      enqueueAnalysis(bvid, resolvedCid, stream.url);
+    }
+
+    // deadline 参数（若存在）解析为过期时间，供前端判断直链是否临近过期
+    let expiresAt = null;
+    try {
+      const m = stream.url.match(/deadline=(\d+)/);
+      if (m) expiresAt = Number(m[1]) * 1000;
+    } catch { /* 忽略解析失败 */ }
+
+    console.log(`[play:direct-url] bvid=${bvid} cid=${resolvedCid}`);
+    res.json({ url: stream.url, backup: stream.backup || [], cid: resolvedCid, mime: stream.mime, expiresAt });
+  } catch (e) {
+    console.warn(`[play:direct-url] ERROR bvid=${bvid}: ${e.message}`);
+    res.status(502).json({ error: e.message });
+  }
+});
+
+/**
  * 查询音量归一化 gain。
  * GET /api/gain?bvid=BVxxx
  * → { gain: 0.47, status: "complete" }  // 已有分析结果
