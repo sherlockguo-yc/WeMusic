@@ -1,5 +1,5 @@
 // ---------------- 搜索、歌手页、专辑页 ----------------
-import { $, esc, fmtDur, albumCover, singerAvatar, toast, songColHeader } from './utils.js';
+import { $, esc, fmtDur, albumCover, singerAvatar, toast, songColHeader, refreshCacheBadges } from './utils.js';
 import { heartOutline, heartFilled } from './ui.js';
 import { api } from './api.js';
 import { state } from './state.js';
@@ -115,7 +115,7 @@ function appendLoadMore(main, container, songBuf, singer, total) {
         div.className = 'song-row'; div.dataset.i = String(i);
         div.innerHTML = `
           <span class="idx">${i + 1}</span>
-          <span class="name">${esc(s.name)}</span>
+          <span class="name">${esc(s.name)}<span class="cache-badge-slot" data-bvid="${esc(s.bvid || '')}"></span></span>
           <span class="singer">${esc(s.singer)}</span>
           <span class="album">${esc(s.album)}</span>
           ${bookmark}
@@ -135,7 +135,7 @@ function appendLoadMore(main, container, songBuf, singer, total) {
         div.oncontextmenu = (ev) => { ev.preventDefault(); import('./ui.js').then(({ openSongMenu }) => openSongMenu(ev, songBuf, i, null, null, div)); };
         frag.appendChild(div);
       });
-      container.appendChild(frag); container._songs = songBuf;
+      container.appendChild(frag); container._songs = songBuf; refreshCacheBadges();
       const h2 = main.querySelector('.section-head h2');
       if (h2) h2.textContent = h2.textContent.replace(/已加载 \d+/, `已加载 ${begin}`);
       if (res.hasMore === false || begin >= (res.total || begin)) wrap.remove();

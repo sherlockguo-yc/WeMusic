@@ -1,6 +1,6 @@
 // ---------------- 通用 UI：右键菜单、换源、喜欢、弹幕 ----------------
-import { $, esc, fmtDur, fmtPlay, toast, fetchBlockedList, blockedSectionHtml, bindBlockedSection, saveBlockedMeta, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED } from './utils.js';
-import { api } from './api.js';
+import { $, esc, fmtDur, fmtPlay, toast, fetchBlockedList, blockedSectionHtml, bindBlockedSection, saveBlockedMeta, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED, CACHE_ICON } from './utils.js';
+import { api, Auth } from './api.js';
 import { state } from './state.js';
 
 // ---- 右键菜单 ----
@@ -20,6 +20,8 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
     { sep: true },
     { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 复制 Bilibili 链接', act: 'copy', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
     { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> 在 Bilibili 搜索此歌', act: 'search' },
+    { sep: true },
+    { label: CACHE_ICON + ' 缓存到本地', act: 'cacheoffline', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
   ];
   if (inPlaylist) items.push({ sep: true }, { label: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 从歌单移除', act: 'del', danger: true });
   menu.innerHTML = items.map((it) =>
@@ -47,6 +49,14 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
       else if (act === 'search') {
         const kw = `${song.name} ${(song.singer || '').split('/')[0]}`.trim();
         window.open(`https://search.bilibili.com/all?keyword=${encodeURIComponent(kw)}`, '_blank');
+      }
+      else if (act === 'cacheoffline') {
+        import('./offlineCache.js').then(({ fetchAndStore }) => {
+          toast('正在缓存到本地…');
+          fetchAndStore(song.bvid, Auth.token, { pinned: true, videoSource: { bvid: song.bvid }, lyrics: null, song: { name: song.name, singer: song.singer } })
+            .then(() => { toast('已缓存到本地（钉住）'); window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
+            .catch(e => toast('缓存失败：' + e.message));
+        });
       }
     };
   });
@@ -109,8 +119,13 @@ export async function openCandModal() {
     row.onclick = () => {
       const c = findByBvid(row.dataset.bvid);
       if (!c) return;
+      const oldBvid = currentBvid;
       state.current.bvid = c.bvid; state.current._biliTitle = c.title;
       state.current._biliDur = c.duration || state.current.duration;
+      // 钉住随源迁移：旧源已钉住则释放并钉住新源
+      if (oldBvid && oldBvid !== c.bvid) {
+        import('./offlineCache.js').then(({ migratePin }) => migratePin(oldBvid, c.bvid, Auth.token, { name: state.current.name, singer: state.current.singer }).catch(() => {}));
+      }
       import('./player.js').then(({ cacheBvid, resetProgress, startVideo }) => {
         cacheBvid(state.current);
         resetProgress(state.current._biliDur);

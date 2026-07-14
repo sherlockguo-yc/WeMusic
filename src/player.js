@@ -1,5 +1,6 @@
 // ---------------- 播放核心 ----------------
-import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, PLAY_ICON, PAUSE_ICON } from './utils.js';
+import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, PLAY_ICON, PAUSE_ICON, OFFLINE_ICON } from './utils.js';
+import * as offline from './offlineCache.js';
 import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { clearSleep, sleepAfterSong } from './settings.js';
@@ -348,6 +349,9 @@ export function destroyVideo() {
   bgAudio.pause();
   bgAudio.removeAttribute('src');
   bgAudio.load();
+  if (_cacheUrl) { URL.revokeObjectURL(_cacheUrl); _cacheUrl = null; }
+  _cacheUse = null;
+  _weakFallback = false;
   mode = 'bg';
   stopTimer();
 }
@@ -650,6 +654,8 @@ export async function playFromList(songs, index, context, playlistId) {
 export async function playCurrent() {
   _flushLog(elapsed);
   stopTimer();
+  if (_cacheUrl) { URL.revokeObjectURL(_cacheUrl); _cacheUrl = null; }
+  _cacheUse = null;
   const song = state.queue[state.queueIndex];
   if (!song) return;
 
@@ -729,7 +735,10 @@ export async function playCurrent() {
 // mode: 'bg'（默认，唯一常规模式） | 'iframe'（用户展开视频时）
 let mode = 'bg';
 const bgAudio = document.getElementById('audio');
-let _usedFallback = false;   // 当前曲目是否已经从「直连 CDN」降级到「服务端代理」
+let _usedFallback = false;
+let _cacheUrl = null;
+let _cacheUse = null;
+let _weakFallback = false;   // 当前曲目是否已经从「直连 CDN」降级到「服务端代理」
 let _healthCheckId = null;   // play() 成功后 5s 健康检查 setTimeout ID
 let _stalledTimer = null;    // stalled 事件 3s 兜底切歌 setTimeout ID
 let _volume = 0.8;           // 用户手动设置的音量（0~1），持久化，前后台/是否展开视频都用同一个值
@@ -783,26 +792,74 @@ function _applyNormVol() {
   }
 }
 
-// 解析可播放地址：优先直连 B 站 CDN（不占用自建服务器带宽），
-// 若服务端解析失败则直接降级为服务端代理地址。
-// <audio> 标签跨域直连失败（CORS/风控节点差异）时，由 bgAudio 的 error 事件在播放期兜底降级。
+// 解析可播放地址：
+//  - 离线（!onLine）→ 直接命中缓存（离线播放）
+//  - 在线 → 优先直连 CDN / 服务端代理（缓存仅作离线/弱网储备）
+//  - 在线但网络失败 → 由 bgAudio error 事件回退缓存（弱网降级）
 async function _getPlayableUrl(bvid) {
+  if (!navigator.onLine) {
+    try {
+      const c = await offline.get(bvid);
+      if (c && c.audio) {
+        const url = _makeObjUrl(c.audio);
+        offline.touch(bvid);
+        _cacheUse = { fromCache: true, reason: '离线' };
+        return { url, isDirect: false, fromCache: true };
+      }
+    } catch {}
+    _cacheUse = null;
+    return null; // 离线且无缓存，无法播放
+  }
+  _cacheUse = null;
+  _weakFallback = false;
   try {
     const r = await api(`/play/direct-url?bvid=${encodeURIComponent(bvid)}`);
-    if (r && r.url) return { url: r.url, isDirect: true };
+    if (r && r.url) return { url: r.url, isDirect: true, fromCache: false };
   } catch { /* 直连地址解析失败，走代理 */ }
-  return { url: `/api/play/stream?bvid=${encodeURIComponent(bvid)}&token=${encodeURIComponent(Auth.token)}`, isDirect: false };
+  return { url: `/api/play/stream?bvid=${encodeURIComponent(bvid)}&token=${encodeURIComponent(Auth.token)}`, isDirect: false, fromCache: false };
+}
+
+// 创建缓存 audio 的 object URL；回收上一个，避免内存泄漏
+function _makeObjUrl(blob) {
+  if (_cacheUrl) URL.revokeObjectURL(_cacheUrl);
+  _cacheUrl = URL.createObjectURL(blob);
+  return _cacheUrl;
+}
+
+// 设置播放栏状态区：缓存命中显示「离线播放 + 原因」，否则显示 Bilibili 标
+function _setPlayStatus() {
+  const song = state.current;
+  const title = song?._biliTitle || (song?.name && song?.singer ? `${song.name} - ${song.singer}` : 'Bilibili 播放');
+  if (_cacheUse && _cacheUse.fromCache) {
+    $('playStatus').innerHTML = `<span class="status-inner"><span class="badge offline-badge">${OFFLINE_ICON} 离线播放</span> <span class="offline-reason">${esc(_cacheUse.reason)}</span> ${esc(title)}</span>`;
+  } else {
+    $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(title)}</span>`;
+  }
+  const inner = $('playStatus').querySelector('.status-inner');
+  if (inner) checkMarquee(inner);
+}
+
+// 边播边后台落盘（被动，pinned=false）；失败静默。完成后广播刷新角标。
+function _cacheCurrent(bvid) {
+  const cur = state.current;
+  const song = cur && cur.name ? { name: cur.name, singer: cur.singer } : null;
+  offline.fetchAndStore(bvid, Auth.token, { pinned: false, videoSource: { bvid }, song })
+    .then(() => { window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
+    .catch(e => console.warn('[offline] 后台缓存失败', bvid, e.message));
 }
 
 // 加载曲目到 bgAudio 并立即播放（mode === 'bg' 时使用）
 async function _loadAndPlayBgTrack(bvid, seekSec = 0) {
   const seq = playSeq;
   _usedFallback = false;
-  const { url } = await _getPlayableUrl(bvid);
+  const info = await _getPlayableUrl(bvid);
   if (seq !== playSeq || mode !== 'bg') return; // 期间歌曲已切换，或用户已展开视频
-  bgAudio.src = url;
+  if (!info) { setStatus('离线状态且无缓存，无法播放'); toast('离线状态且无缓存，无法播放'); return; }
+  bgAudio.src = info.url;
   bgAudio.load();
   _fetchGain(bvid);
+  _setPlayStatus();
+  if (!info.fromCache) _cacheCurrent(bvid); // 走网络才后台落盘（被动）
   _playBgAudioWithRetry(seekSec);
 }
 
@@ -811,11 +868,14 @@ async function _loadAndPlayBgTrack(bvid, seekSec = 0) {
 async function _loadBgTrack(bvid) {
   const seq = playSeq;
   _usedFallback = false;
-  const { url } = await _getPlayableUrl(bvid);
+  const info = await _getPlayableUrl(bvid);
   if (seq !== playSeq) return;
-  bgAudio.src = url;
+  if (!info) return; // 离线且无缓存，静默预载跳过
+  bgAudio.src = info.url;
   bgAudio.load();
   _fetchGain(bvid);
+  _setPlayStatus();
+  if (!info.fromCache) _cacheCurrent(bvid);
 }
 
 // 播放 bgAudio，必要时 seek 到指定秒数；play() 失败自动重试（最多 10 次，间隔递增）
@@ -884,6 +944,25 @@ bgAudio.addEventListener('error', () => {
     if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
     return;
   }
+  // 代理也失败 → 尝试缓存（弱网降级到离线缓存）
+  if (_usedFallback && !_weakFallback && state.current?.bvid) {
+    offline.get(state.current.bvid).then((c) => {
+      if (c && c.audio) {
+        _weakFallback = true;
+        const url = _makeObjUrl(c.audio);
+        offline.touch(state.current.bvid);
+        _cacheUse = { fromCache: true, reason: '网络不佳' };
+        _setPlayStatus();
+        bgAudio.src = url;
+        bgAudio.load();
+        if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
+      } else if (mode === 'bg' && !timerPaused) {
+        console.warn('[bgAudio] ERROR (fallback+缓存均用尽) — auto advance');
+        autoAdvance();
+      }
+    }).catch(() => { if (mode === 'bg' && !timerPaused) autoAdvance(); });
+    return;
+  }
   if (mode === 'bg' && !timerPaused) {
     console.warn('[bgAudio] ERROR during playback (fallback 已用尽) — auto advance');
     autoAdvance();
@@ -935,10 +1014,6 @@ export function startVideo(bvid, title, dur) {
   } else {
     _loadAndPlayBgTrack(bvid, 0);
   }
-  const displayTitle = title || (state.current?.name && state.current?.singer ? `${state.current.name} - ${state.current.singer}` : 'Bilibili 播放');
-  $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(displayTitle)}</span>`;
-  const inner = $('playStatus').querySelector('.status-inner');
-  if (inner) checkMarquee(inner);
   startTimer(dur);
   saveSession();
   import('./queue.js').then(({ pushPlayHistory, renderActiveTab }) => {

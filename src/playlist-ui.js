@@ -1,5 +1,5 @@
 // ---------------- 歌单侧边栏 + 歌曲列表渲染 + 导入导出 ----------------
-import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml, songColHeader, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED } from './utils.js';
+import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml, songColHeader, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED, refreshCacheBadges } from './utils.js';
 
 import { api } from './api.js';
 import { state } from './state.js';
@@ -254,7 +254,7 @@ export function renderSongList(container, songs, opts = {}) {
     return `
     <div class="song-row" data-i="${i}">
       <span class="idx">${i + 1}</span>
-      <span class="name${showCover ? ' name-with-cover' : ''}">${coverHtml}<span class="name-text">${esc(s.name)}</span></span>
+      <span class="name${showCover ? ' name-with-cover' : ''}">${coverHtml}<span class="name-text">${esc(s.name)}</span><span class="cache-badge-slot" data-bvid="${esc(s.bvid || '')}"></span></span>
       <span class="singer">${esc(s.singer)}</span>
       <span class="album">${esc(s.album)}</span>
       ${bookmark}
@@ -267,6 +267,8 @@ export function renderSongList(container, songs, opts = {}) {
       </span>
     </div>`;
   }).join('');
+
+  refreshCacheBadges();
 
   container.querySelectorAll('.song-row').forEach((row) => {
     const i = Number(row.dataset.i);

@@ -281,6 +281,30 @@ button.topbar-btn {
 .name-with-cover .name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song-row .singer, .song-row .album { color: var(--text-dim); font-size: 13px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song-row .dur { color: var(--text-dim); font-size: 12px; text-align: right; }
+
+/* 离线播放提示（播放栏状态区） */
+.offline-badge { display: inline-flex; align-items: center; gap: 4px; color: var(--text-dim); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 6px; font-size: calc(var(--font-size) * 0.85); }
+.offline-badge svg { flex-shrink: 0; }
+.offline-reason { color: var(--text-dim); font-size: calc(var(--font-size) * 0.85); margin: 0 2px; }
+
+/* 歌曲行缓存状态角标（两态，明显区分） */
+.cache-badge { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 5px; flex-shrink: 0; }
+.cache-badge.pinned { color: var(--accent); }                /* 主动钉住：强调（accent） */
+.cache-badge.temp   { color: var(--text-dim); opacity: 0.7; } /* 被动临时：弱化（灰度） */
+.cache-badge svg { width: 13px; height: 13px; }
+
+/* 设置页：离线缓存管理区 */
+.offline-stat { font-size: calc(var(--font-size) * 0.95); margin: 8px 0; color: var(--text); }
+.offline-stat #offlineUsed { color: var(--accent); font-weight: 600; }
+.offline-limit { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: var(--text-dim); font-size: 13px; }
+.offline-limit select { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; }
+.offline-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+.offline-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.offline-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
+.offline-item.pinned { border-color: var(--accent); }
+.offline-item .oi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.offline-item .oi-tag { font-size: 11px; color: var(--text-dim); }
+.offline-item.pinned .oi-tag { color: var(--accent); }
 .song-row .ops { display: flex; gap: 6px; justify-content: flex-start; }
 .icon-btn {
   width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);

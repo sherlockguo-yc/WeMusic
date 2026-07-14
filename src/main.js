@@ -10,12 +10,14 @@ import { initLyrics } from './lyrics.js';
 import { initUI } from './ui.js';
 import { initSettings, loadAvatar, loadPrefsFromServer } from './settings.js';
 import { initStats, openDiscover } from './stats.js';
+import * as offline from './offlineCache.js';
 
 // 登录拦截
 if (!Auth.token) location.href = '/login.html';
 
 // 初始化全部模块
 initGlobalTooltip(); // 全局 tooltip（stats / playlist-ui 共用）
+offline.init().catch(e => console.warn('offline init failed', e)); // 打开 IndexedDB + 申请持久化存储
 initSettings();
 initPlayer();
 initQueue();

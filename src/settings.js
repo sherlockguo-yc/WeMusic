@@ -1,5 +1,6 @@
 // ---------------- 主题、设置面板、Sleep Timer、侧边栏拖拽 ----------------
-import { $, toast, debounce } from './utils.js';
+import { $, toast, debounce, esc } from './utils.js';
+import * as offline from './offlineCache.js';
 import { Auth, api } from './api.js';
 import { state } from './state.js';
 
@@ -601,6 +602,38 @@ export async function openSettings() {
   }
 
   updateSleepHint();
+
+  // 离线缓存管理区
+  try {
+    const renderOffline = async () => {
+      const s = await offline.stats();
+      $('offlineUsed').textContent = (s.used / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+      $('offlineLimitLabel').textContent = Math.round(offline.getLimitBytes() / 1024 / 1024 / 1024) + ' GB';
+      const items = await offline.list();
+      $('offlineList').innerHTML = items.length ? items.map(e => `
+        <div class="offline-item ${e.pinned ? 'pinned' : ''}">
+          <span class="oi-name">${esc(e.videoSource?.bvid || e.key)}</span>
+          <span class="oi-tag">${e.pinned ? '钉住' : '自动'}</span>
+          <button class="btn sm" data-del="${esc(e.key)}">${e.pinned ? '删除' : '取消离线'}</button>
+        </div>`).join('') : '<div class="empty">暂无离线缓存</div>';
+      $('offlineList').querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+        await offline.remove(b.dataset.del);
+        window.dispatchEvent(new CustomEvent('offline_cache_changed'));
+        renderOffline();
+      });
+    };
+    await renderOffline();
+    const limitSel = $('offlineLimitSel');
+    if (limitSel) {
+      limitSel.value = String(Math.round(offline.getLimitBytes() / 1024 / 1024 / 1024));
+      limitSel.onchange = () => { offline.setLimitBytes(Number(limitSel.value) * 1024 ** 3); renderOffline(); };
+    }
+    $('offlineClearAuto').onclick = async () => { await offline.clearAuto(); renderOffline(); toast('已清空自动缓存'); };
+    $('offlineClearAll').onclick = async () => {
+      const { uiConfirm } = await import('./utils.js');
+      if (await uiConfirm('确定清空全部离线缓存（含主动钉住）？')) { await offline.clearAll(); renderOffline(); toast('已清空全部'); }
+    };
+  } catch (e) { console.warn('离线缓存面板渲染失败', e); }
 
   // 定时停止按钮
   const customWrap = $('sleepCustomWrap');

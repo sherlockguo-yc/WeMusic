@@ -1,4 +1,5 @@
 // ---------------- 工具函数 ----------------
+import * as offline from './offlineCache.js';
 
 export const $ = (id) => document.getElementById(id);
 
@@ -6,6 +7,34 @@ export const $ = (id) => document.getElementById(id);
 // 注意：这里的"播放/暂停"图标用于"自动连播"开关，不是控制音乐播放
 export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';  // 自动连播已暂停 → 点击恢复
 export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'; // 自动连播进行中 → 点击暂停
+
+// 离线缓存相关图标（Lucide）
+export const OFFLINE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><path d="M5 13a10 10 0 0 1 5.24-2.76"/><path d="M12 20h.01"/></svg>'; // 离线播放标
+export const CACHE_ICON   = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'; // 已临时缓存（弱化角标）
+export const PIN_ICON     = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-.62-1.45L13.1 9.9a1 1 0 0 1-.18-.56V5a1 1 0 0 1 1-1h1.76a1 1 0 0 1 1 1v4.34a1 1 0 0 1-.18.56L15.62 13.8a2 2 0 0 0-.62 1.45V17"/></svg>'; // 已下载/钉住（强调角标）
+
+// 歌曲行缓存状态角标：'pinned'（主动钉住，强调）| 'temp'（被动临时，弱化）| null（无）
+export function cacheBadgeHtml(status) {
+  if (status === 'pinned') return `<span class="cache-badge pinned" title="已下载（钉住）">${PIN_ICON}</span>`;
+  if (status === 'temp') return `<span class="cache-badge temp" title="已临时缓存">${CACHE_ICON}</span>`;
+  return '';
+}
+
+// 刷新页面所有歌曲行的缓存角标（一次 list 批量查，避免逐首 get）
+export async function refreshCacheBadges() {
+  let entries = null;
+  try { entries = await offline.list(); } catch { return; }
+  const map = new Map(entries.map(e => [e.key, e]));
+  document.querySelectorAll('.cache-badge-slot[data-bvid]').forEach((slot) => {
+    const bvid = slot.dataset.bvid;
+    const e = bvid ? map.get(bvid) : null;
+    const st = e && e.audio ? (e.pinned ? 'pinned' : 'temp') : null;
+    slot.innerHTML = cacheBadgeHtml(st);
+  });
+}
+
+// 钉住/落盘变化后自动刷新角标
+window.addEventListener('offline_cache_changed', () => { refreshCacheBadges().catch(() => {}); });
 
 // 不喜欢图标：空心（默认） / 实心（已不喜欢）
 // 实心态：心形用 currentColor 填充成灰色，斜线用固定深灰 #666 确保在填充上仍可见

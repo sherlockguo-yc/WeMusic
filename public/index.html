@@ -357,6 +357,23 @@
             </div>
           </div>
         </div>
+        <div class="settings-section" id="offlineSection">
+          <div class="settings-label">离线缓存</div>
+          <div class="offline-stat"><span id="offlineUsed">0 MB</span> / <span id="offlineLimitLabel">2 GB</span></div>
+          <div class="offline-limit">
+            <label>存储上限</label>
+            <select id="offlineLimitSel">
+              <option value="2">2 GB</option>
+              <option value="5">5 GB</option>
+              <option value="10">10 GB</option>
+            </select>
+          </div>
+          <div class="offline-actions">
+            <button class="btn sm" id="offlineClearAuto">清空自动缓存</button>
+            <button class="btn sm blue" id="offlineClearAll">清空全部</button>
+          </div>
+          <div class="offline-list" id="offlineList"></div>
+        </div>
         <div class="settings-section">
           <div class="settings-label">配色方案</div>
           <div class="settings-row theme-options">

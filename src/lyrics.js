@@ -3,6 +3,7 @@ import { $, esc, albumCover, toast, PLAY_ICON, PAUSE_ICON, fetchBlockedList, blo
 import { api } from './api.js';
 import { state } from './state.js';
 import { LyricsSource } from './platform.js';
+import * as offline from './offlineCache.js';
 
 // 预加载 player 模块（避免在 setInterval 中重复 import，解决循环依赖）
 const _playerP = import('./player.js');
@@ -205,6 +206,21 @@ export async function loadLyrics(song) {
 async function doLoadLyrics(song, forceSourceId) {
   const key = `${song.name}__${song.singer || ''}`;
   $('lpBody').innerHTML = '<div class="lp-loading">加载歌词中…</div>';
+
+  // 离线优先：若本地缓存命中且已有歌词整包，直接复用，不发网络请求
+  if (song.bvid) {
+    try {
+      const cached = await offline.get(song.bvid);
+      if (cached && cached.lyrics) {
+        lyricsLines = cached.lyrics.lines || [];
+        lyricsFor = key;
+        lyricsCandidates = cached.lyrics.candidates || [];
+        lyricsCurrentSourceId = cached.lyrics.sourceId || forceSourceId || null;
+        renderLyricsLines();
+        return true;
+      }
+    } catch { /* 离线读取失败则回退到网络 */ }
+  }
 
   try {
     const params = `name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}${forceSourceId ? `&sourceId=${forceSourceId}` : ''}`;
