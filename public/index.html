@@ -65,7 +65,7 @@
         <button id="feedbackTopBtn" class="topbar-btn" title="反馈"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
         <button id="donateBtn" class="topbar-btn" title="打赏"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg></button>
         <button id="adminTopBtn" class="topbar-btn" title="管理员面板" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></button>
-        <button id="helpBtn" class="topbar-btn" title="快捷键帮助 (?)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>
+        <button id="helpBtn" class="topbar-btn" title="帮助"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>
         <div class="user-avatar-wrap" id="userAvatarWrap" title="设置">
           <img class="user-avatar" id="userAvatar" src="" alt="" style="display:none" />
           <span class="user-avatar-fallback" id="userAvatarFallback"></span>
@@ -336,7 +336,7 @@
 
   <!-- 设置面板 -->
   <div class="modal-mask" id="settingsModal">
-    <div class="modal modal-sm">
+    <div class="modal settings-modal">
       <h3>设置</h3>
       <div class="settings-body">
         <div class="settings-section">
@@ -565,10 +565,28 @@
     </div>
   </div>
 
-  <!-- 快捷键帮助浮层 -->
+  <!-- 帮助浮层 -->
   <div class="modal-mask" id="helpModal">
     <div class="modal modal-sm">
-      <h3>键盘快捷键</h3>
+      <h3>帮助</h3>
+
+      <div class="help-section-title">播放器操作</div>
+      <div class="help-ops">
+        <div class="help-op">
+          <div class="help-op-name">展开</div>
+          <div class="help-op-desc">点击后在播放器上方弹出 Bilibili 视频画面，声音也切换到视频（需联网）。适合想看 MV / 现场画面时使用。再次点击按钮（变为「收起」）即回到只听歌。</div>
+        </div>
+        <div class="help-op">
+          <div class="help-op-name">收起</div>
+          <div class="help-op-desc">隐藏视频画面，声音无缝交回后台音频，继续只听声音。当浏览器标签页切到后台时也会自动收起，避免看视频时切走导致没声音。展开状态下进度条不可拖动。</div>
+        </div>
+        <div class="help-op">
+          <div class="help-op-name">换源</div>
+          <div class="help-op-desc">同一首歌可能对应多个 Bilibili 视频。若当前视频不合适（音质差、画面错位、违规等），点「换源」可挑选其它视频源，或屏蔽不想要的源。</div>
+        </div>
+      </div>
+
+      <div class="help-section-title">键盘快捷键</div>
       <div class="help-list">
         <div class="help-row"><kbd>空格</kbd><span>暂停 / 继续自动连播</span></div>
         <div class="help-row"><kbd>→</kbd><span>下一首</span></div>

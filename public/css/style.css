@@ -849,6 +849,7 @@ input[type='range']::-moz-range-thumb {
 
 /* 输入弹层 */
 .modal.modal-sm { max-width: 360px; }
+#helpModal .modal { max-width: 460px; }
 .prompt-label {
   display: block;
   font-size: calc(var(--font-size) * 0.86);
@@ -983,6 +984,11 @@ input[type='range']::-moz-range-thumb {
 
 
 /* 帮助快捷键列表 */
+.help-section-title { font-weight: 600; margin: 14px 0 2px; font-size: calc(var(--font-size) * 0.92); color: var(--text); }
+.help-ops { margin: 0 0 12px; }
+.help-op { display: flex; align-items: flex-start; gap: 12px; padding: 7px 0; font-size: 14px; }
+.help-op-name { flex: 0 0 44px; font-weight: 600; color: var(--text); }
+.help-op-desc { flex: 1; color: var(--text-dim); }
 .help-list { margin: 4px 0 16px; }
 .help-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 14px; }
 .help-row kbd {
@@ -2014,6 +2020,8 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px;
 }
 .modal h3 { margin-bottom: 12px; }
+/* 设置面板：比通用 modal 更宽，避免离线用量行换行 */
+.modal.settings-modal { max-width: 480px; }
 
 /* 打赏弹窗：双码并排 */
 .donate-qrs { display: flex; flex-direction: column; gap: 20px; align-items: center; }
