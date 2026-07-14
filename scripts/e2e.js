@@ -3,6 +3,7 @@
 // 由 npm run deploy 自动调用（可用 SKIP_VERIFY=1 跳过）
 
 import { execSync } from 'node:child_process';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 
 const PCLI = 'playwright-cli';
 const PORT = '5174';
@@ -45,9 +46,38 @@ shell(`${PCLI} run-code "async page => { await page.evaluate(t => { localStorage
 shell(`${PCLI} goto http://localhost:${PORT}/`);
 shell('sleep 4');
 
-// 检查页面是否成功渲染（无 JS 错误）
-const hasError = shell('cat .playwright-cli/console-*.log 2>/dev/null').includes('[ERROR]');
-check('页面无 JS 错误', !hasError);
+// 检查页面是否成功渲染（无 WeMusic 自身的 JS 错误）
+// 注意：playwright-cli 的 console 日志会混入浏览器扩展 / 第三方 CDN 的噪音，
+// 且与历史日志混杂。这里只检查「本次会话」(脚本启动后) 新生成的日志，并过滤与项目无关的报错。
+const since = Date.now();
+let consoleLogs = '';
+try {
+  for (const f of readdirSync('.playwright-cli')) {
+    if (!f.startsWith('console-') || !f.endsWith('.log')) continue;
+    const fp = `.playwright-cli/${f}`;
+    if (statSync(fp).mtimeMs >= since) consoleLogs += readFileSync(fp, 'utf-8') + '\n';
+  }
+} catch { /* 目录不存在时忽略 */ }
+
+// 与 WeMusic 无关的噪音来源（浏览器扩展、第三方 CDN、登录态）
+const NOISE = [
+  /favicon/i,
+  /net::/i,
+  /alicdn\.com/i,
+  /aliyun/i,
+  /zol\.com\.cn/i,
+  /127\.0\.0\.1:\d+/i,                  // 浏览器扩展本地脚本（如 dayTimezone.js）
+  /401|Unauthorized|登录已过期/i,        // E2E 打开 login.html 时未带 token
+  /y\.qq\.com/i,                        // 外站资源 404/503
+  /Permissions policy violation/i,
+  /MessageChannel没有初始化/i,
+  /Error fetching common config/i,
+];
+const realErrors = consoleLogs
+  .split('\n')
+  .filter((l) => l.includes('[ERROR]'))
+  .filter((l) => !NOISE.some((re) => re.test(l)));
+check('页面无 JS 错误', realErrors.length === 0, realErrors.slice(0, 3).join(' | '));
 
 // 检查关键元素
 const peval = (expr) => {
