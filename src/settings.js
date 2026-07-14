@@ -1,5 +1,5 @@
 // ---------------- 主题、设置面板、Sleep Timer、侧边栏拖拽 ----------------
-import { $, toast, debounce, esc } from './utils.js';
+import { $, toast, debounce, esc, X_ICON, CHEVRON_RIGHT, CHEVRON_DOWN } from './utils.js';
 import * as offline from './offlineCache.js';
 import { Auth, api } from './api.js';
 import { state } from './state.js';
@@ -608,20 +608,35 @@ export async function openSettings() {
     const renderOffline = async () => {
       const s = await offline.stats();
       $('offlineUsed').textContent = (s.used / 1024 / 1024 / 1024).toFixed(2) + ' GB';
-      $('offlineLimitLabel').textContent = Math.round(offline.getLimitBytes() / 1024 / 1024 / 1024) + ' GB';
       const items = await offline.list();
-      $('offlineList').innerHTML = items.length ? items.map(e => `
-        <div class="offline-item ${e.pinned ? 'pinned' : ''}">
-          <span class="oi-name">${esc(e.videoSource?.bvid || e.key)}</span>
-          <span class="oi-tag">${e.pinned ? '钉住' : '自动'}</span>
-          <button class="btn sm" data-del="${esc(e.key)}">${e.pinned ? '删除' : '取消离线'}</button>
-        </div>`).join('') : '<div class="empty">暂无离线缓存</div>';
+      $('offlineCount').textContent = items.length;
+      $('offlineList').innerHTML = items.length ? items.map(e => {
+        const name = e.song?.name || e.lyrics?.song?.name || '未知歌曲';
+        const sub = e.song?.singer || e.lyrics?.song?.artist || '';
+        return `
+        <div class="offline-item">
+          <div class="oi-text">
+            <span class="oi-name">${esc(name)}</span>
+            ${sub ? `<span class="oi-sub">${esc(sub)}</span>` : ''}
+          </div>
+          <button class="oi-remove" data-del="${esc(e.key)}" title="从离线缓存移除" aria-label="移除">${X_ICON}</button>
+        </div>`;
+      }).join('') : '<div class="empty">暂无离线缓存</div>';
       $('offlineList').querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
         await offline.remove(b.dataset.del);
         window.dispatchEvent(new CustomEvent('offline_cache_changed'));
         renderOffline();
       });
     };
+    // 缓存列表默认折叠，点击标题展开/收起（状态不随重新渲染重置）
+    const head = $('offlineHead');
+    const wrap = $('offlineListWrap');
+    const setFold = (open) => {
+      if (open) { wrap.removeAttribute('hidden'); head.setAttribute('aria-expanded', 'true'); head.querySelector('.offline-chevron').innerHTML = CHEVRON_DOWN; }
+      else { wrap.setAttribute('hidden', ''); head.setAttribute('aria-expanded', 'false'); head.querySelector('.offline-chevron').innerHTML = CHEVRON_RIGHT; }
+    };
+    head.onclick = () => setFold(wrap.hasAttribute('hidden'));
+    head.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFold(wrap.hasAttribute('hidden')); } };
     await renderOffline();
     const limitSel = $('offlineLimitSel');
     if (limitSel) {

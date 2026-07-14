@@ -141,7 +141,7 @@ export async function fetchAndStore(bvid, token, { pinned = false, videoSource =
       // 被动升级钉住：复用音频；lyrics 复用已有，或按需抓取
       const resolvedLyrics = lyrics !== null ? lyrics
         : (song && song.name ? await fetchLyricsForOffline(song.name, song.singer) : existing.lyrics || null);
-      const entry = { ...existing, pinned: true, videoSource, lyrics: resolvedLyrics, lastAccessed: Date.now() };
+      const entry = { ...existing, pinned: true, videoSource, lyrics: resolvedLyrics, song: song || existing.song || null, lastAccessed: Date.now() };
       await put(entry);
       return entry;               // 被动升级钉住，复用音频
     }
@@ -155,7 +155,7 @@ export async function fetchAndStore(bvid, token, { pinned = false, videoSource =
   const resolvedLyrics = lyrics !== null ? lyrics
     : (song && song.name ? await fetchLyricsForOffline(song.name, song.singer) : null);
   const entry = {
-    key: bvid, audio: blob, videoSource, lyrics: resolvedLyrics,
+    key: bvid, audio: blob, videoSource, lyrics: resolvedLyrics, song: song || null,
     pinned, lastAccessed: Date.now(), size: blob.size, createdAt: Date.now(),
   };
   await put(entry);

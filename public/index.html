@@ -359,20 +359,24 @@
         </div>
         <div class="settings-section" id="offlineSection">
           <div class="settings-label">离线缓存</div>
-          <div class="offline-stat"><span id="offlineUsed">0 MB</span> / <span id="offlineLimitLabel">2 GB</span></div>
-          <div class="offline-limit">
-            <label>存储上限</label>
-            <select id="offlineLimitSel">
+          <div class="offline-bar">
+            <div class="offline-stat"><span id="offlineUsed">0 MB</span> / <select id="offlineLimitSel" class="offline-limit-sel">
               <option value="2">2 GB</option>
               <option value="5">5 GB</option>
               <option value="10">10 GB</option>
-            </select>
+            </select></div>
+            <div class="offline-actions">
+              <button class="btn sm" id="offlineClearAuto">清空自动缓存</button>
+              <button class="btn sm blue" id="offlineClearAll">清空全部</button>
+            </div>
           </div>
-          <div class="offline-actions">
-            <button class="btn sm" id="offlineClearAuto">清空自动缓存</button>
-            <button class="btn sm blue" id="offlineClearAll">清空全部</button>
+          <div class="offline-head" id="offlineHead" role="button" tabindex="0" aria-expanded="false">
+            <span class="offline-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+            <span>已缓存 <span id="offlineCount">0</span> 首</span>
           </div>
-          <div class="offline-list" id="offlineList"></div>
+          <div class="offline-list-wrap" id="offlineListWrap" hidden>
+            <div class="offline-list" id="offlineList"></div>
+          </div>
         </div>
         <div class="settings-section">
           <div class="settings-label">配色方案</div>

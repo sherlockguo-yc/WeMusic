@@ -208,16 +208,22 @@ async function doLoadLyrics(song, forceSourceId) {
   $('lpBody').innerHTML = '<div class="lp-loading">加载歌词中…</div>';
 
   // 离线优先：若本地缓存命中且已有歌词整包，直接复用，不发网络请求
+  // 但用户显式切换歌词源（forceSourceId）且离线缓存的源与之不一致时，
+  // 必须落到网络请求以尊重用户选择，否则切换歌词源会无效。
   if (song.bvid) {
     try {
       const cached = await offline.get(song.bvid);
       if (cached && cached.lyrics) {
-        lyricsLines = cached.lyrics.lines || [];
-        lyricsFor = key;
-        lyricsCandidates = cached.lyrics.candidates || [];
-        lyricsCurrentSourceId = cached.lyrics.sourceId || forceSourceId || null;
-        renderLyricsLines();
-        return true;
+        const offlineSourceId = cached.lyrics.sourceId || null;
+        const sameSource = !forceSourceId || String(offlineSourceId) === String(forceSourceId);
+        if (sameSource) {
+          lyricsLines = cached.lyrics.lines || [];
+          lyricsFor = key;
+          lyricsCandidates = cached.lyrics.candidates || [];
+          lyricsCurrentSourceId = offlineSourceId || forceSourceId || null;
+          renderLyricsLines();
+          return true;
+        }
       }
     } catch { /* 离线读取失败则回退到网络 */ }
   }
