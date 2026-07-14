@@ -187,6 +187,30 @@ export async function clearAll() {
   for (const e of all) await remove(e.key);
 }
 
+// 迁移旧条目：补全 song 字段（从 lyrics 包内提取），无法回填的自动删除。
+// 返回 { updated, deleted } 统计。
+export async function migrateOldEntries() {
+  const all = await list();
+  let updated = 0, deleted = 0;
+  for (const e of all) {
+    // 已有 song 字段 → 跳过
+    if (e.song && e.song.name) continue;
+    // 尝试从歌词包提取歌名
+    const name = e.lyrics?.song?.name || null;
+    const artist = e.lyrics?.song?.artist || e.lyrics?.artist || null;
+    if (name) {
+      e.song = { name, singer: artist };
+      await put(e);
+      updated++;
+    } else {
+      // 无法回填 → 删除（用户要求）
+      await remove(e.key);
+      deleted++;
+    }
+  }
+  return { updated, deleted };
+}
+
 // 钉住随源迁移：旧源已钉住才迁移 —— 释放旧源、钉住新源
 export async function migratePin(oldBvid, newBvid, token, song = null) {
   const old = await get(oldBvid);

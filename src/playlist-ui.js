@@ -1,7 +1,7 @@
 // ---------------- 歌单侧边栏 + 歌曲列表渲染 + 导入导出 ----------------
-import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml, songColHeader, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED, refreshCacheBadges } from './utils.js';
+import { $, esc, toast, fmtDur, fmtTotal, uiPrompt, uiPromptDual, uiConfirm, albumCover, playlistCoverHtml, songColHeader, BROKEN_HEART_OUTLINE, BROKEN_HEART_FILLED, refreshCacheBadges, CACHE_ICON } from './utils.js';
 
-import { api } from './api.js';
+import { api, Auth } from './api.js';
 import { state } from './state.js';
 
 // ---- 按钮 SVG 图标 ----
@@ -282,22 +282,35 @@ export function renderSongList(container, songs, opts = {}) {
           const song = songs[i];
           const rect = btn.getBoundingClientRect();
           const menu = document.getElementById('ctxMenu');
-          menu.innerHTML = [
-            showAdd ? `<div class="ctx-item" data-act="add">${ADD_ICON} 添加到歌单</div>` : '',
-            song.song_mid ? `<div class="ctx-item" data-act="share">${SHARE_ICON} 分享</div>` : '',
-            showDelete ? `<div class="ctx-item danger" data-act="del">${DEL_ICON} 从歌单移除</div>` : '',
-          ].filter(Boolean).join('');
+          const items = [
+            showAdd ? { act: 'add', label: `${ADD_ICON} 添加到歌单` } : null,
+            song.song_mid ? { act: 'share', label: `${SHARE_ICON} 分享` } : null,
+            showDelete ? { act: 'del', label: `${DEL_ICON} 从歌单移除`, danger: true } : null,
+            { act: 'cacheoffline', label: `${CACHE_ICON} 缓存到本地`, dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
+          ].filter(Boolean);
+          menu.innerHTML = items.map((it) =>
+            `<div class="ctx-item${it.danger ? ' danger' : ''}${it.dim ? ' dim' : ''}" data-act="${it.act}"${it.dimTip ? ` data-dim-tip="${esc(it.dimTip)}"` : ''}>${it.label}</div>`
+          ).join('');
           menu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
           menu.style.top = Math.min(rect.bottom + 4, window.innerHeight - menu.offsetHeight - 8) + 'px';
           menu.classList.add('show');
           menu.querySelectorAll('.ctx-item[data-act]').forEach((el) => {
             el.onclick = (ev) => {
               ev.stopPropagation();
+              if (el.classList.contains('dim')) { menu.classList.remove('show'); toast(el.dataset.dimTip || '暂不可用'); return; }
               menu.classList.remove('show');
               const a = el.dataset.act;
               if (a === 'add') addSongs([song]);
               else if (a === 'share') import('./share.js').then(({ openShareModal }) => openShareModal(song));
               else if (a === 'del') deleteSong(playlistId, song.id, row);
+              else if (a === 'cacheoffline') {
+                import('./offlineCache.js').then(({ fetchAndStore }) => {
+                  toast('正在缓存到本地…');
+                  fetchAndStore(song.bvid, Auth.token, { pinned: true, videoSource: { bvid: song.bvid }, lyrics: null, song: { name: song.name, singer: song.singer } })
+                    .then(() => { toast('已缓存到本地（钉住）'); window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
+                    .catch(e => toast('缓存失败：' + e.message));
+                });
+              }
             };
           });
           return;

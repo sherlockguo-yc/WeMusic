@@ -605,19 +605,29 @@ export async function openSettings() {
 
   // 离线缓存管理区
   try {
+    // 一次性迁移旧条目：补全 song 字段，无法回填的自动删除
+    const mig = await offline.migrateOldEntries();
+    if (mig.updated || mig.deleted) {
+      console.log('[offline] 迁移完成:', JSON.stringify(mig));
+      if (mig.deleted) toast(`已清理 ${mig.deleted} 条无歌名旧缓存`);
+    }
     const renderOffline = async () => {
       const s = await offline.stats();
       $('offlineUsed').textContent = (s.used / 1024 / 1024 / 1024).toFixed(2) + ' GB';
       const items = await offline.list();
       $('offlineCount').textContent = items.length;
       $('offlineList').innerHTML = items.length ? items.map(e => {
-        const name = e.song?.name || e.lyrics?.song?.name || '未知歌曲';
+        // 多级回退取歌名：显式 song → 歌词包内 song → 视频源标题 → BV 号
+        const name = e.song?.name || e.lyrics?.song?.name || e.videoSource?.title || e.key;
         const sub = e.song?.singer || e.lyrics?.song?.artist || '';
+        // 源信息标签
+        const srcLabel = 'B站音频';
+        const lyrLabel = e.lyrics ? (e.lyrics.sourceId || '已缓存') : '无';
         return `
         <div class="offline-item">
           <div class="oi-text">
             <span class="oi-name">${esc(name)}</span>
-            ${sub ? `<span class="oi-sub">${esc(sub)}</span>` : ''}
+            <span class="oi-sub">${sub ? esc(sub) + ' · ' : ''}${esc(srcLabel)} · 歌词 ${esc(lyrLabel)}</span>
           </div>
           <button class="oi-remove" data-del="${esc(e.key)}" title="从离线缓存移除" aria-label="移除">${X_ICON}</button>
         </div>`;
