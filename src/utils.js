@@ -33,8 +33,10 @@ export async function refreshCacheBadges() {
   });
 }
 
-// 钉住/落盘变化后自动刷新角标
-window.addEventListener('offline_cache_changed', () => { refreshCacheBadges().catch(() => {}); });
+// 钉住/落盘变化后自动刷新角标（非浏览器环境如单测跳过注册，避免 window 未定义）
+if (typeof window !== 'undefined') {
+  window.addEventListener('offline_cache_changed', () => { refreshCacheBadges().catch(() => {}); });
+}
 
 // 不喜欢图标：空心（默认） / 实心（已不喜欢）
 // 实心态：心形用 currentColor 填充成灰色，斜线用固定深灰 #666 确保在填充上仍可见
