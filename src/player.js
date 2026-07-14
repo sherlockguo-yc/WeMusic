@@ -1,5 +1,5 @@
 // ---------------- 播放核心 ----------------
-import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, PLAY_ICON, PAUSE_ICON, OFFLINE_ICON } from './utils.js';
+import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, PLAY_ICON, PAUSE_ICON, LOADING_ICON, OFFLINE_ICON } from './utils.js';
 import * as offline from './offlineCache.js';
 import { api, Auth } from './api.js';
 import { state } from './state.js';
@@ -699,6 +699,9 @@ export async function playCurrent() {
   }
 
   if (!song.bvid) {
+    // 全局缓存未命中 → 需要 B 站搜索匹配（耗时 1-3s），显示加载态
+    $('playPauseBtn').innerHTML = LOADING_ICON;
+    $('npCoverWrap').classList.add('loading');
     setStatus('正在从 Bilibili 匹配资源…');
     try {
       const { best, candidates } = await api('/play/resolve', {
@@ -707,7 +710,11 @@ export async function playCurrent() {
       });
       if (seq !== playSeq) return;
       song._candidates = candidates;
-      if (!best) { setStatus('未找到合适资源，可点「换源」'); toast('⚠ 未找到合适资源，可点换源'); return; }
+      if (!best) {
+        $('playPauseBtn').innerHTML = PLAY_ICON;
+        $('npCoverWrap').classList.remove('loading');
+        setStatus('未找到合适资源，可点「换源」'); toast('⚠ 未找到合适资源，可点换源'); return;
+      }
       song.bvid = best.bvid;
       // 优先用 candidates 里同名 bvid 的 title（B 站偶尔返回 best.title 为空时回查）
       const match = best.bvid ? candidates.find(c => c.bvid === best.bvid) : null;
@@ -716,11 +723,17 @@ export async function playCurrent() {
       cacheBvid(song);
     } catch (e) {
       if (seq !== playSeq) return;
+      $('playPauseBtn').innerHTML = PLAY_ICON;
+      $('npCoverWrap').classList.remove('loading');
       setStatus('匹配失败：' + esc(e.message));
       return;
     }
   }
   if (seq !== playSeq) return;
+  // 清理加载态（如果之前进入了 resolve 分支）
+  $('npCoverWrap').classList.remove('loading');
+  // 当前曲目 bvid 已确认，立即并行预取下一首，与直链解析/音频加载并行
+  prefetchNextBvid();
   startVideo(song.bvid, song._biliTitle, song._biliDur || song.duration);
 }
 
@@ -1031,7 +1044,6 @@ export function startVideo(bvid, title, dur) {
     // 异步加载歌曲背景（不阻塞播放）
     if (state.current) loadSongBackground(state.current);
   });
-  prefetchNextBvid();
 }
 
 // ---- 展开 / 收起视频（唯一的引擎切换入口，替代原来的前后台切换）----

@@ -1,5 +1,5 @@
 // 统计页（周报/月报 + 分享海报）
-import { $, esc, fmtSec, fmtFullMin, rankBadge, toast, setTooltip, albumCover } from './utils.js';
+import { $, esc, fmtSec, fmtFullMin, rankBadge, toast, setTooltip, albumCover, singerAvatar } from './utils.js';
 import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { setActiveNav } from './playlist-ui.js';
@@ -58,6 +58,13 @@ function buildTrendHtml(trend) {
       <div class="tr-label">${esc(w.label)}</div>
     </div>
   `).join('');
+}
+
+// 歌手头像（圆形）：有 mid 用 QQ 头像，失败/无 mid 回退到人物图标占位（Rule 十一 兜底）
+function artistAvatarHtml(mid, size = 150) {
+  const ph = '<span class="artist-avatar-ph"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>';
+  if (!mid) return ph;
+  return `<img class="artist-avatar" src="${singerAvatar(mid, size)}" loading="lazy" data-fb="${esc(ph)}" onerror="this.outerHTML=this.dataset.fb" />`;
 }
 
 /** 构建周报/月报卡片 HTML + 分享海报所需数据 */
@@ -127,8 +134,8 @@ function buildReportHtml(data, periodType) {
             const coverUrl = s.album_mid ? albumCover(s.album_mid, 150) : '';
             const wrSongPh = '<div class="wr-song-cover" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>';
             return `<li>
-              ${coverUrl ? `<img class="wr-song-cover" src="${coverUrl}" loading="lazy" data-fb="${esc(wrSongPh)}" onerror="this.outerHTML=this.dataset.fb" />` : ''}
               ${rankBadge(i)}
+              ${coverUrl ? `<img class="wr-song-cover" src="${coverUrl}" loading="lazy" data-fb="${esc(wrSongPh)}" onerror="this.outerHTML=this.dataset.fb" />` : ''}
               <div class="wr-li-info">
                 <div class="wr-li-name">${esc(s.name)}</div>
                 <div class="wr-li-sub">${esc(s.singer)}${s.album ? ` · ${esc(s.album)}` : ''}</div>
@@ -139,7 +146,7 @@ function buildReportHtml(data, periodType) {
         </div>
         <div class="wr-card artists">
           <div class="wr-card-hd"><span class="wr-card-icon i-artist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></span>Top 歌手</div>
-          <ol class="wr-list">${data.topArtists.map((a, i) => `<li>${rankBadge(i)}<div class="wr-li-info"><div class="wr-li-name">${esc(a.singer)}</div><div class="wr-li-sub">${fmtFullMin(a.total_sec || 0)}</div></div><span>${a.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
+          <ol class="wr-list">${data.topArtists.map((a, i) => `<li>${rankBadge(i)}${artistAvatarHtml(a.singer_mid)}<div class="wr-li-info"><div class="wr-li-name">${esc(a.singer)}</div><div class="wr-li-sub">${fmtFullMin(a.total_sec || 0)}</div></div><span>${a.play_count}次</span></li>`).join('') || '<li class="wr-empty">暂无</li>'}</ol>
         </div>
         <div class="wr-card albums">
           <div class="wr-card-hd"><span class="wr-card-icon i-album"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span>最爱专辑</div>
@@ -402,6 +409,7 @@ export async function openStats() {
       const pct = Math.round((a.play_count / maxArtistPlay) * 100);
       _artistTips[i] = `${esc(a.singer)}<br><b>${a.play_count} 次</b>　${fmtFullMin(a.total_sec || 0)}`;
       return `<div class="artist-bar-row" data-singer="${esc(a.singer)}" data-idx="${i}">
+        ${artistAvatarHtml(a.singer_mid)}
         <div class="artist-bar-name">${esc(a.singer)}</div>
         <div class="artist-bar-wrap"><div class="artist-bar-fill" style="width:${pct}%"></div></div>
         <div class="artist-bar-val">${a.play_count}次</div>

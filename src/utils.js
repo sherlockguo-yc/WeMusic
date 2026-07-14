@@ -7,18 +7,19 @@ export const $ = (id) => document.getElementById(id);
 // 注意：这里的"播放/暂停"图标用于"自动连播"开关，不是控制音乐播放
 export const PLAY_ICON  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>';  // 自动连播已暂停 → 点击恢复
 export const PAUSE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'; // 自动连播进行中 → 点击暂停
+export const LOADING_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>'; // 加载中（Lucide Loader2）
 
 // 离线缓存相关图标（Lucide）
 export const OFFLINE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.17-2.65"/><path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76"/><path d="M16.85 11.25a10 10 0 0 1 2.22 1.68"/><path d="M5 13a10 10 0 0 1 5.24-2.76"/><path d="M12 20h.01"/></svg>'; // 离线播放标
 export const CACHE_ICON   = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'; // 已临时缓存（弱化角标）
-export const PIN_ICON     = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-.62-1.45L13.1 9.9a1 1 0 0 1-.18-.56V5a1 1 0 0 1 1-1h1.76a1 1 0 0 1 1 1v4.34a1 1 0 0 1-.18.56L15.62 13.8a2 2 0 0 0-.62 1.45V17"/></svg>'; // 已下载/钉住（强调角标）
+export const PIN_ICON     = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>'; // 已缓存到本地（强调角标）
 export const X_ICON      = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'; // 关闭/移除
 export const CHEVRON_RIGHT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>'; // 折叠指示器（收起）
 export const CHEVRON_DOWN  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'; // 折叠指示器（展开）
 
-// 歌曲行缓存状态角标：'pinned'（主动钉住，强调）| 'temp'（被动临时，弱化）| null（无）
+// 歌曲行缓存状态角标：'pinned'（主动缓存，强调）| 'temp'（被动临时，弱化）| null（无）
 export function cacheBadgeHtml(status) {
-  if (status === 'pinned') return `<span class="cache-badge pinned" title="已下载（钉住）">${PIN_ICON}</span>`;
+  if (status === 'pinned') return `<span class="cache-badge pinned" title="已缓存到本地">${PIN_ICON}</span>`;
   if (status === 'temp') return `<span class="cache-badge temp" title="已临时缓存">${CACHE_ICON}</span>`;
   return '';
 }
@@ -36,7 +37,7 @@ export async function refreshCacheBadges() {
   });
 }
 
-// 钉住/落盘变化后自动刷新角标（非浏览器环境如单测跳过注册，避免 window 未定义）
+// 缓存落盘变化后自动刷新角标（非浏览器环境如单测跳过注册，避免 window 未定义）
 if (typeof window !== 'undefined') {
   window.addEventListener('offline_cache_changed', () => { refreshCacheBadges().catch(() => {}); });
 }

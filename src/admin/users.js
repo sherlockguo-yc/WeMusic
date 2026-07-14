@@ -73,6 +73,7 @@ function renderActiveUsers(data) {
                 <button class="admin-action-btn" data-action="role" data-id="${u.id}" data-username="${esc(u.username)}">角色</button>
               ` : ''}
               ${['admin', 'super_admin'].includes(currentRole) ? `
+                <button class="admin-action-btn" data-action="status" data-id="${u.id}" data-username="${esc(u.username)}" data-status="${u.status}">状态</button>
                 <button class="admin-action-btn" data-action="archive" data-id="${u.id}" data-username="${esc(u.username)}">归档</button>
               ` : ''}
             </td>
@@ -90,12 +91,13 @@ function renderArchivedUsers(users) {
   list.innerHTML = `
     <table class="admin-table">
       <thead><tr>
-        <th>用户名</th><th>归档时间</th><th>注册时间</th><th>操作</th>
+        <th>用户名</th><th>状态</th><th>归档时间</th><th>注册时间</th><th>操作</th>
       </tr></thead>
       <tbody>
         ${users.map((u) => `
           <tr>
             <td><strong>${esc(u.username)}</strong></td>
+            <td><span class="admin-badge badge-${u.status}">${statusLabel(u.status)}</span></td>
             <td>${fmtTime(u.archived_at)}</td>
             <td>${fmtTime(u.created_at)}</td>
             <td class="admin-actions">
@@ -154,6 +156,22 @@ function bindActions(container) {
           toast(`已删除 ${username}`);
           loadPage(currentPage);
         } catch (e) { toast(e.message || '删除失败'); }
+      } else if (action === 'status') {
+        const statusDefs = [
+          { value: 'active', label: '正常',   desc: '恢复正常状态' },
+          { value: 'warned', label: '已警告', desc: '标记该用户已被警告' },
+          { value: 'banned', label: '已封禁', desc: '封禁该用户，禁止其使用' },
+        ];
+        const newStatus = await uiChoice(
+          `修改「${username}」的状态`,
+          '请选择该用户的新状态：',
+          statusDefs,
+          btn.dataset.status,
+        );
+        if (!newStatus) return;
+        await api(`/admin/users/${id}/status`, { method: 'PUT', body: { status: newStatus } });
+        toast(`已更新 ${username} 状态为 ${statusLabel(newStatus)}`);
+        loadPage(currentPage);
       } else if (action === 'role') {
         const roleDefs = [
           { value: 'user',       label: '用户',     desc: '普通用户，无管理权限' },

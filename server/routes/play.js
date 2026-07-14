@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { execFile } from 'node:child_process';
 import { authRequired } from '../middleware/auth.js';
-import { searchVideos, getAudioStream, fetchAudio, getVideoPages, getVideoTitle } from '../services/bilibili.js';
+import { searchVideos, getAudioStream, fetchAudio, getVideoPages, getVideoTitle, evictAudioStream } from '../services/bilibili.js';
 import { config } from '../config.js';
 import db from '../db.js';
 import { getCrowdCompletions, crowdBonus } from '../services/crowd.js';
@@ -479,7 +479,9 @@ router.get('/stream', async (req, res) => {
     const upstream = await fetchAudio(stream.url, bvid, range);
 
     if (!upstream.ok && upstream.status !== 206 && upstream.status !== 200) {
-      // 主地址失败则尝试备用地址
+      // 主地址失败：缓存的直链可能已失效，清掉避免在 TTL 内反复返回死链接
+      evictAudioStream(bvid, resolvedCid);
+      // 尝试备用地址
       const backup = stream.backup && stream.backup[0];
       if (backup) {
         console.log(`[bg:stream] primary failed (${upstream.status}), trying backup`);

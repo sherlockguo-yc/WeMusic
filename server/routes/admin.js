@@ -20,12 +20,12 @@ const stmt = {
   roleLookup: db.prepare('SELECT role FROM users WHERE id = ?'),
   userById: db.prepare('SELECT * FROM users WHERE id = ?'),
   userByUsername: db.prepare('SELECT id, username, role, archived_at FROM users WHERE username = ?'),
-  archiveUser: db.prepare('UPDATE users SET archived_at = ? WHERE id = ?'),
-  restoreUser: db.prepare('UPDATE users SET archived_at = NULL WHERE id = ?'),
+  archiveUser: db.prepare("UPDATE users SET archived_at = ?, status = 'banned' WHERE id = ?"),
+  restoreUser: db.prepare("UPDATE users SET archived_at = NULL, status = 'active' WHERE id = ?"),
   updateRole: db.prepare('UPDATE users SET role = ? WHERE id = ?'),
   updateStatus: db.prepare('UPDATE users SET status = ? WHERE id = ?'),
   deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
-  archivedUsers: db.prepare('SELECT id, username, archived_at, created_at FROM users WHERE archived_at IS NOT NULL ORDER BY archived_at DESC'),
+  archivedUsers: db.prepare('SELECT id, username, status, archived_at, created_at FROM users WHERE archived_at IS NOT NULL ORDER BY archived_at DESC'),
   feedbackTotal: db.prepare('SELECT COUNT(*) AS cnt FROM feedback'),
   feedbackDelete: db.prepare('DELETE FROM feedback WHERE id = ?'),
   blockedTotal: db.prepare('SELECT COUNT(*) AS cnt FROM blocked_sources'),
@@ -83,7 +83,7 @@ router.get('/users', requireRole('moderator'), (req, res) => {
   const { page = 1, limit = 50, search = '', status = '', role = '' } = req.query;
   const offset = (Number(page) - 1) * Number(limit);
 
-  let where = 'WHERE 1=1';
+  let where = 'WHERE archived_at IS NULL';
   const params = [];
   if (search) { where += ' AND username LIKE ?'; params.push(`%${search}%`); }
   if (status) { where += ' AND status = ?'; params.push(status); }

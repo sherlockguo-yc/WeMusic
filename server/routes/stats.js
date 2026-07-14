@@ -5,7 +5,7 @@ import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
 import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache, qqFetchLyric, parseLrc } from '../services/lyrics.js';
-import { getTopList, searchSongs, searchSongsForRecommend } from '../services/qqmusic.js';
+import { getTopList, searchSongs, searchSongsForRecommend, findSingerMid } from '../services/qqmusic.js';
 import { renderPosterPNG } from '../services/poster.js';
 import { POSTER_THEMES } from '../../shared/poster-template.js';
 import { decodeSourceId, Platform } from '../../shared/constants.js';
@@ -109,8 +109,53 @@ const MEANINGFUL_COND = "played_sec >= 30 OR (duration > 0 AND CAST(played_sec A
 // 跳过判断：播了 < 25% 总时长（duration 未知时回退 30s 绝对阈值）
 const SKIP_COND = "(duration > 0 AND CAST(played_sec AS REAL)/duration < 0.25) OR ((duration IS NULL OR duration = 0) AND played_sec < 30)";
 
+// 歌手名分隔符：拆分合唱/组合（与 computeArtistWeights 保持一致）
+const ARTIST_SPLIT_RE = /[\/、,，&]/;
+
+// 把 "A / B" 这类组合歌手名拆分为单独歌手名数组
+function splitArtistNames(singer) {
+  return (singer || '').split(ARTIST_SPLIT_RE).map((p) => p.trim()).filter(Boolean);
+}
+
+// 从 play_logs 聚合歌手播放数据，拆分合唱/组合歌手并各自计 full 权重
+// 返回按 play_count 降序排列的完整数组（调用方自行 slice）
+function aggregateArtists(uid, since, until) {
+  const rows = db.prepare(`
+    SELECT singer, COUNT(*) AS play_count, SUM(played_sec) AS total_sec,
+           COUNT(DISTINCT name) AS unique_songs
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
+    GROUP BY singer
+  `).all(uid, since, until);
+  const map = new Map();
+  for (const r of rows) {
+    const parts = splitArtistNames(r.singer);
+    if (parts.length === 0) continue;
+    for (const name of parts) {
+      const cur = map.get(name) || { singer: name, play_count: 0, total_sec: 0, unique_songs: 0 };
+      cur.play_count += r.play_count;
+      cur.total_sec += (r.total_sec || 0);
+      cur.unique_songs += r.unique_songs; // 近似累加（合唱曲会同时计入多位歌手）
+      map.set(name, cur);
+    }
+  }
+  return [...map.values()].sort((a, b) => b.play_count - a.play_count || (b.total_sec || 0) - (a.total_sec || 0));
+}
+
+// 并行解析歌手 mid（用于头像展示），单条失败不影响整体
+async function attachSingerMids(artists) {
+  await Promise.allSettled(artists.map(async (a) => {
+    try {
+      const s = await findSingerMid(a.singer);
+      a.singer_mid = s ? s.mid : '';
+    } catch {
+      a.singer_mid = '';
+    }
+  }));
+  return artists;
+}
+
 // 公共函数：构建听歌报告数据
-function buildReport(uid, since, until, compareSince, compareUntil, label) {
+async function buildReport(uid, since, until, compareSince, compareUntil, label) {
   // —— 概览（含有效播放次数） ——
   const periodT = db.prepare(`
     SELECT COUNT(*) AS plays, SUM(played_sec) AS sec,
@@ -134,11 +179,10 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
     GROUP BY name, singer ORDER BY play_count DESC LIMIT 10
   `).all(uid, since, until);
 
-  const topArtists = db.prepare(`
-    SELECT singer, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
-    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
-    GROUP BY singer ORDER BY play_count DESC LIMIT 5
-  `).all(uid, since, until);
+  // —— Top 歌手（拆分合唱/组合，各自计 full 权重） ——
+  const _allArtists = aggregateArtists(uid, since, until);
+  const topArtists = _allArtists.slice(0, 5);
+  await attachSingerMids(topArtists);
 
   // —— 跳过率（相对阈值：播放时长 < 歌曲时长的 25%；无 duration 时回退 30s 绝对阈值） ——
   const skipRow = db.prepare(`
@@ -176,10 +220,8 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
     GROUP BY album ORDER BY play_count DESC LIMIT 2
   `).all(uid, since, until);
 
-  // —— 歌手多样性 ——
-  const uniqueArtists = db.prepare(`
-    SELECT COUNT(DISTINCT singer) AS cnt FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND singer != ''
-  `).get(uid, since, until).cnt;
+  // —— 歌手多样性（同样拆分合唱/组合，统计不重复个人歌手数） ——
+  const uniqueArtists = _allArtists.length || 0;
 
   // —— 重复播放率：播放超过 1 次的歌曲占不重复歌曲的比例 ——
   const repeatRow = db.prepare(`
@@ -223,7 +265,7 @@ function buildReport(uid, since, until, compareSince, compareUntil, label) {
   };
 }
 
-router.get('/weekly', (req, res) => {
+router.get('/weekly', async (req, res) => {
   const uid = req.user.id;
   const now = new Date();
   const off = Number(req.query.weekOffset) || 0;
@@ -245,7 +287,7 @@ router.get('/weekly', (req, res) => {
     ? `${fmtDate(targetMonday)} — ${fmtDate(now)}`
     : `${fmtDate(targetMonday)} — ${fmtDate(new Date(targetMonday.getFullYear(), targetMonday.getMonth(), targetMonday.getDate() + 6))}`;
 
-  const report = buildReport(uid, targetStart, actualEnd, lastSince, lastUntil, label);
+  const report = await buildReport(uid, targetStart, actualEnd, lastSince, lastUntil, label);
 
   // —— 近 4 周趋势 ——
   const trend = [];
@@ -261,7 +303,7 @@ router.get('/weekly', (req, res) => {
 });
 
 // —— 本月听歌报告（自然月，支持 monthOffset 查看历史月） ——
-router.get('/monthly', (req, res) => {
+router.get('/monthly', async (req, res) => {
   const uid = req.user.id;
   const now = new Date();
   const off = Number(req.query.monthOffset) || 0;
@@ -277,7 +319,7 @@ router.get('/monthly', (req, res) => {
   const lastUntil = targetSince;
   const label = `${targetStart.getFullYear()}年${targetStart.getMonth() + 1}月`;
 
-  const report = buildReport(uid, targetSince, targetEnd, lastSince, lastUntil, label);
+  const report = await buildReport(uid, targetSince, targetEnd, lastSince, lastUntil, label);
 
   // —— 近 6 个月趋势 ——
   const trend = [];
@@ -308,21 +350,15 @@ router.get('/top-songs', (req, res) => {
   res.json({ songs: rows });
 });
 
-// 最常听歌手 Top N
-router.get('/top-artists', (req, res) => {
+// 最常听歌手 Top N（拆分合唱/组合，各自计 full 权重，并附带歌手 mid 用于头像）
+router.get('/top-artists', async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 10, 50);
   const days  = req.query.days ? Number(req.query.days) : null;
   const uid   = req.user.id;
   const since = days ? Date.now() - days * 86400000 : 0;
-  const rows  = db.prepare(`
-    SELECT singer, COUNT(*) AS play_count, SUM(played_sec) AS total_sec,
-           COUNT(DISTINCT name) AS unique_songs
-    FROM play_logs WHERE user_id=? AND played_at>=? AND singer!=''
-    GROUP BY singer
-    ORDER BY play_count DESC
-    LIMIT ?
-  `).all(uid, since, limit);
-  res.json({ artists: rows });
+  const artists = aggregateArtists(uid, since, Date.now()).slice(0, limit);
+  await attachSingerMids(artists);
+  res.json({ artists });
 });
 
 // 每日播放趋势（最近 N 天，默认 30）

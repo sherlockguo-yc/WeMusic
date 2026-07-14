@@ -54,7 +54,7 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
         import('./offlineCache.js').then(({ fetchAndStore }) => {
           toast('正在缓存到本地…');
           fetchAndStore(song.bvid, Auth.token, { pinned: true, videoSource: { bvid: song.bvid }, lyrics: null, song: { name: song.name, singer: song.singer } })
-            .then(() => { toast('已缓存到本地（钉住）'); window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
+            .then(() => { toast('已缓存到本地'); window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
             .catch(e => toast('缓存失败：' + e.message));
         });
       }

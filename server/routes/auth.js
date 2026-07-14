@@ -62,9 +62,12 @@ router.post('/login', (req, res) => {
   if (!valid) {
     return res.status(401).json({ error: '用户名或密码错误' });
   }
-  // 检查是否被归档
+  // 检查是否被归档或封禁
   if (user.archived_at) {
     return res.status(403).json({ error: '该账号已被归档，无法登录' });
+  }
+  if (user.status === 'banned') {
+    return res.status(403).json({ error: '该账号已被封禁，无法登录' });
   }
   // 记录登录时间
   db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(Date.now(), user.id);

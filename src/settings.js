@@ -656,7 +656,7 @@ export async function openSettings() {
     $('offlineClearAuto').onclick = async () => { await offline.clearAuto(); renderOffline(); toast('已清空自动缓存'); };
     $('offlineClearAll').onclick = async () => {
       const { uiConfirm } = await import('./utils.js');
-      if (await uiConfirm('确定清空全部离线缓存（含主动钉住）？')) { await offline.clearAll(); renderOffline(); toast('已清空全部'); }
+      if (await uiConfirm('确定清空全部离线缓存（含主动缓存）？')) { await offline.clearAll(); renderOffline(); toast('已清空全部'); }
     };
   } catch (e) { console.warn('离线缓存面板渲染失败', e); }
 

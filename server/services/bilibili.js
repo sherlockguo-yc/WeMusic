@@ -223,14 +223,23 @@ export async function searchVideos(keyword, page = 1, pageSize = 20) {
   throw new Error('Bilibili 搜索失败（风控）：' + (lastErr && lastErr.message));
 }
 
+// 分 P 信息几乎不随时间变化（视频发布后 cid 列表是固定的），缓存 1 天足够安全，
+// 避免每次播放同一首歌都重新请求一次 view 接口（这是重复播放时缓存命中路径里仅剩的一次 B 站请求）。
+const _pagesCache = new Map(); // bvid -> { pages, at }
+const PAGES_CACHE_TTL = ONE_DAY;
+
 /** 获取视频分 P 信息（用于取 cid） */
 export async function getVideoPages(bvid) {
+  const cached = _pagesCache.get(bvid);
+  if (cached && Date.now() - cached.at < PAGES_CACHE_TTL) return cached.pages;
   const res = await fetch(
     `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`,
     { headers: { 'User-Agent': UA, Referer: 'https://www.bilibili.com/' } }
   );
   const json = await res.json();
-  return json?.data?.pages || [];
+  const pages = json?.data?.pages || [];
+  if (pages.length) _pagesCache.set(bvid, { pages, at: Date.now() });
+  return pages;
 }
 
 /** 获取视频标题 */
@@ -293,18 +302,31 @@ async function getHtml5Durl(bvid, cid) {
   };
 }
 
-/**
- * 获取视频最佳音频流地址。
- * 优先 DASH 纯音频；被风控（412/RISK_CONTROL）时回退 H5 durl。
- * 返回 { cid, url, backup, bandwidth, mime }，url 需经后端代理（带 Referer）后才能播放。
- */
-export async function getAudioStream(bvid, cid) {
-  if (!cid) {
-    const pages = await getVideoPages(bvid);
-    cid = pages[0]?.cid;
-  }
-  if (!cid) throw new Error('未获取到视频 cid');
+// ---- 直链缓存：按 bvid+cid 缓存已解析的可播放地址 ----
+// 背景：getAudioStream 内部要先拿 cid（1 次 B 站请求）再签名拉直链（1~2 次 B 站请求），
+// 每次播放（包括重复播放同一首歌/单曲循环/切回上一首）都重新走一遍是「等一会儿才播放」的主要原因之一。
+// 已用 curl 实测验证（2026-07-15）：直链不绑定请求方 UA/Referer（真实浏览器 UA + 任意 Referer 均可 206），
+// 且直链自带 deadline 参数（约 2 小时有效期），因此可以安全地跨请求内存缓存复用。
+const _streamCache = new Map(); // key: `${bvid}:${cid||0}` -> { data, expiresAt }
+const STREAM_CACHE_DEFAULT_TTL = 20 * 60 * 1000; // 解析不到 deadline 时的兜底 TTL：20 分钟
+const STREAM_CACHE_SAFETY_MARGIN = 5 * 60 * 1000; // deadline 前 5 分钟即视为过期，留出播放缓冲，避免边播边过期
 
+function _streamCacheKey(bvid, cid) {
+  return `${bvid}:${cid || 0}`;
+}
+
+function _parseDeadlineMs(url) {
+  const m = String(url || '').match(/deadline=(\d+)/);
+  return m ? Number(m[1]) * 1000 : null;
+}
+
+/** 主动清除某个 bvid+cid 的直链缓存。上游代理转发时若发现链接确实失效（非 CORS 类问题），应调用此函数，避免在 TTL 内反复返回死链接。 */
+export function evictAudioStream(bvid, cid) {
+  _streamCache.delete(_streamCacheKey(bvid, cid));
+}
+
+/** 实际解析音频流（无缓存）：优先 DASH，被风控时回退 H5 durl */
+async function _resolveAudioStream(bvid, cid) {
   // 1) 优先 DASH（纯音频高音质），失败重试一次刷新鉴权
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -327,6 +349,32 @@ export async function getAudioStream(bvid, cid) {
     }
   }
   throw new Error('获取音频流失败（可能被风控）：' + (lastErr && lastErr.message));
+}
+
+/**
+ * 获取视频最佳音频流地址。
+ * 优先命中缓存（同一 bvid+cid 短时间内重复播放无需重新请求 B 站）；
+ * 未命中则解析：优先 DASH 纯音频；被风控（412/RISK_CONTROL）时回退 H5 durl。
+ * 返回 { cid, url, backup, bandwidth, mime }，url 需经后端代理（带 Referer）后才能播放。
+ */
+export async function getAudioStream(bvid, cid) {
+  if (!cid) {
+    const pages = await getVideoPages(bvid);
+    cid = pages[0]?.cid;
+  }
+  if (!cid) throw new Error('未获取到视频 cid');
+
+  const key = _streamCacheKey(bvid, cid);
+  const cached = _streamCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+
+  const result = await _resolveAudioStream(bvid, cid);
+  const deadlineMs = _parseDeadlineMs(result.url);
+  const expiresAt = deadlineMs ? (deadlineMs - STREAM_CACHE_SAFETY_MARGIN) : (Date.now() + STREAM_CACHE_DEFAULT_TTL);
+  _streamCache.set(key, { data: result, expiresAt });
+  return result;
 }
 
 /**
