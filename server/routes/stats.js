@@ -588,9 +588,9 @@ router.get('/recommend', async (req, res) => {
   if (songScores.size === 0) {
     try {
       const songs = await getTopList(26, 40);
-      return res.json({ songs, artists: [], reason: 'cold_start' });
+      return res.json({ songs, total: songs.length, hasMore: false, artists: [], reason: 'cold_start' });
     } catch {
-      return res.json({ songs: [], artists: [], reason: 'cold_start' });
+      return res.json({ songs: [], total: 0, hasMore: false, artists: [], reason: 'cold_start' });
     }
   }
 
