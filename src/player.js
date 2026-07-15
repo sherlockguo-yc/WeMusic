@@ -807,8 +807,9 @@ function _applyNormVol() {
 
 // 解析可播放地址：
 //  - 离线（!onLine）→ 直接命中缓存（离线播放）
-//  - 在线 → 优先直连 CDN / 服务端代理（缓存仅作离线/弱网储备）
-//  - 在线但网络失败 → 由 bgAudio error 事件回退缓存（弱网降级）
+//  - 在线 → 优先直连 CDN
+//  - 直连失败 → 有本地缓存则直接用缓存（跳过服务端代理，避免弱网下两轮等待）
+//  - 无本地缓存 → 回退服务端代理（bgAudio error 事件仍有弱网降级兜底）
 async function _getPlayableUrl(bvid) {
   if (!navigator.onLine) {
     try {
@@ -828,7 +829,20 @@ async function _getPlayableUrl(bvid) {
   try {
     const r = await api(`/play/direct-url?bvid=${encodeURIComponent(bvid)}`);
     if (r && r.url) return { url: r.url, isDirect: true, fromCache: false };
-  } catch { /* 直连地址解析失败，走代理 */ }
+  } catch { /* 直连地址解析失败，跳过 */ }
+
+  // 直连失败：如果本地有缓存则直接用缓存，不走服务端代理
+  try {
+    const c = await offline.get(bvid);
+    if (c && c.audio) {
+      const url = _makeObjUrl(c.audio);
+      offline.touch(bvid);
+      _cacheUse = { fromCache: true, reason: '网络不佳' };
+      return { url, isDirect: false, fromCache: true };
+    }
+  } catch { /* IndexedDB 读取失败，忽略 */ }
+
+  // 无本地缓存：回退服务端代理
   return { url: `/api/play/stream?bvid=${encodeURIComponent(bvid)}&token=${encodeURIComponent(Auth.token)}`, isDirect: false, fromCache: false };
 }
 

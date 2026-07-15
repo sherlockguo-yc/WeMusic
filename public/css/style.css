@@ -309,6 +309,10 @@ button.topbar-btn {
 .offline-item .oi-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .offline-item .oi-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .offline-item .oi-sub { font-size: calc(var(--font-size) * 0.82); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oi-status { display: inline-flex; align-items: center; vertical-align: middle; gap: 2px; }
+.oi-status svg { width: 12px; height: 12px; flex-shrink: 0; }
+.oi-status.pinned { color: var(--accent); }
+.oi-status.temp { color: var(--text-dim); opacity: 0.7; }
 .offline-item .oi-remove { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: calc(var(--font-size) * 2); height: calc(var(--font-size) * 2); border: none; background: transparent; color: var(--text-dim); border-radius: var(--radius); cursor: pointer; padding: 0; }
 .offline-item .oi-remove:hover { color: var(--danger); background: var(--bg-soft); }
 .offline-item .oi-remove svg { flex-shrink: 0; }
@@ -1910,6 +1914,10 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .load-more-wrap { text-align: center; padding: 16px 0 8px; }
 .load-more-btn { padding: 8px 24px !important; min-width: 200px; }
 .load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 推荐页滚动加载 */
+.rec-loading-sentinel { text-align: center; padding: 20px 0; }
+.rec-end { text-align: center; padding: 20px 0; font-size: 13px; color: var(--text-dim); }
 
 /* 搜索历史 / 建议下拉 */
 .search-suggest {

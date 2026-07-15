@@ -1,5 +1,5 @@
 // 发现页
-import { $, esc, albumCover, toast, fmtFullMin, rankBadge, setTooltip, songColHeader } from './utils.js';
+import { $, esc, albumCover, toast, fmtDur, fmtFullMin, rankBadge, setTooltip, songColHeader, refreshCacheBadges } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 import { renderSongList, setActiveNav } from './playlist-ui.js';
@@ -31,12 +31,26 @@ export async function openDiscover() {
   await loadDiscoverTab('recommend');
 }
 
+// 推荐页加载更多状态（closure，切换 tab / 重新打开时重置）
+let _recOffset = 0, _recTotal = 0, _recHasMore = false, _recSongs = [], _recLoading = false, _recObserver = null;
+
 async function loadDiscoverTab(tab) {
   const container = $('discoverContent');
   container.innerHTML = '<div class="loading">加载中…</div>';
+  // 切换非推荐 tab 时清理 observer
+  if (tab !== 'recommend' && _recObserver) { _recObserver.disconnect(); _recObserver = null; }
   try {
     if (tab === 'recommend') {
-      const data = await api('/stats/recommend');
+      // 重置分页状态
+      _recOffset = 0; _recTotal = 0; _recHasMore = false; _recSongs = []; _recLoading = false;
+      if (_recObserver) { _recObserver.disconnect(); _recObserver = null; }
+
+      const data = await api(`/stats/recommend?offset=0&limit=20`);
+      _recOffset = data.songs.length;
+      _recTotal = data.total;
+      _recHasMore = data.hasMore;
+      _recSongs = [...data.songs];
+
       if (!data.songs.length) {
         container.innerHTML = `
           <div class="discover-empty">
@@ -68,11 +82,17 @@ async function loadDiscoverTab(tab) {
         headerHtml = `<div class="discover-based-on">基于你喜欢的：${data.artists.slice(0, 4).map(esc).join(' · ')}</div>`;
       }
 
-      container.innerHTML = `${headerHtml}${songColHeader}<div class="song-list" id="discoverList"></div>`;
+      const sentinelHtml = _recHasMore
+        ? `<div class="rec-loading-sentinel" id="recSentinel"><div class="loading">加载更多推荐…</div></div>`
+        : (_recTotal > 0 ? `<div class="rec-end">已加载全部 ${_recTotal} 首推荐</div>` : '');
+      container.innerHTML = `${headerHtml}${songColHeader}<div class="song-list" id="discoverList"></div>${sentinelHtml}`;
       // 推荐说明 tooltip（立即出现，不走 title 属性延迟）
       const recHelp = container.querySelector('.rec-help');
       if (recHelp) setTooltip(recHelp, recHelp.dataset.tipText);
       renderSongList($('discoverList'), data.songs, { showAdd: true, showCover: true });
+
+      // 无限滚动：监听底部 sentinel 可见即加载更多
+      if (_recHasMore) setupRecObserver(container);
     } else {
       const topId = tab.replace('chart-', '');
       const data = await api(`/stats/chart/${topId}`);
@@ -110,4 +130,114 @@ function renderChartList(container, songs) {
     row.querySelector('[data-act="add"]').onclick = (e) => { e.stopPropagation(); import('./playlist-ui.js').then(({ addSongs }) => addSongs([songs[i]])); };
     row.onclick = () => import('./player.js').then(({ playFromList }) => playFromList(songs, i, 'chart', null));
   });
+}
+
+// ---- 推荐无限滚动 ----
+function setupRecObserver(container) {
+  if (_recObserver) _recObserver.disconnect();
+  const sentinel = container.querySelector('#recSentinel');
+  if (!sentinel) return;
+  _recObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !_recLoading && _recHasMore) {
+      loadMoreRec(container);
+    }
+  }, { rootMargin: '200px' }); // 提前 200px 触发，避免用户等待
+  _recObserver.observe(sentinel);
+}
+
+async function loadMoreRec(container) {
+  if (_recLoading || !_recHasMore) return;
+  _recLoading = true;
+  const sentinel = container.querySelector('#recSentinel');
+  if (sentinel) sentinel.innerHTML = '<div class="loading">加载更多推荐…</div>';
+
+  try {
+    const data = await api(`/stats/recommend?offset=${_recOffset}&limit=20`);
+    _recOffset += data.songs.length;
+    _recHasMore = data.hasMore;
+    _recTotal = data.total;
+
+    if (!data.songs.length) {
+      if (sentinel) sentinel.outerHTML = `<div class="rec-end">已加载全部 ${_recTotal} 首推荐</div>`;
+      _recLoading = false;
+      return;
+    }
+
+    // 追加新行
+    const listContainer = container.querySelector('#discoverList');
+    const prevLen = _recSongs.length;
+    _recSongs.push(...data.songs);
+
+    const frag = document.createDocumentFragment();
+    data.songs.forEach((s, j) => {
+      const i = prevLen + j;
+      const row = buildRecSongRow(s, i);
+      frag.appendChild(row);
+    });
+    listContainer.appendChild(frag);
+    refreshCacheBadges();
+
+    // 更新或移除 sentinel
+    if (_recHasMore) {
+      if (sentinel) sentinel.innerHTML = '<div class="loading" style="opacity:0;height:0;overflow:hidden"></div>';
+      // 重新 observe（sentinel 还在但内容变了，可能位置变化）
+      setupRecObserver(container);
+    } else {
+      if (sentinel) sentinel.outerHTML = `<div class="rec-end">已加载全部 ${_recTotal} 首推荐</div>`;
+      if (_recObserver) { _recObserver.disconnect(); _recObserver = null; }
+    }
+  } catch (e) {
+    if (sentinel) sentinel.innerHTML = `<div class="rec-end" style="color:var(--danger)">加载失败：${esc(e.message)} <button class="btn sm" id="recRetryBtn">重试</button></div>`;
+    const retryBtn = container.querySelector('#recRetryBtn');
+    if (retryBtn) retryBtn.onclick = () => {
+      sentinel.innerHTML = '<div class="loading">加载更多推荐…</div>';
+      setupRecObserver(container);
+      loadMoreRec(container);
+    };
+  }
+  _recLoading = false;
+}
+
+function buildRecSongRow(s, i) {
+  // 歌单标记：初始化渲染时已通过 renderSongList 显示了，追加的行默认不显示歌单标记
+  const bookmark = '<span class="in-pl-placeholder"></span>';
+
+  // 封面
+  const phSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+  const ph = `<span class="song-cover-ph-sm">${phSvg}</span>`;
+  let coverHtml = '';
+  if (s.album_mid) {
+    const coverUrl = albumCover(s.album_mid, 150);
+    coverHtml = `<img class="song-cover-sm" src="${coverUrl}" loading="lazy" data-fb="${esc(ph)}" onerror="this.outerHTML=this.dataset.fb" />`;
+  } else {
+    coverHtml = ph;
+  }
+
+  const div = document.createElement('div');
+  div.className = 'song-row';
+  div.dataset.i = String(i);
+  div.innerHTML = `
+    <span class="idx">${i + 1}</span>
+    <span class="name name-with-cover">${coverHtml}<span class="name-text">${esc(s.name)}</span><span class="cache-badge-slot" data-bvid="${esc(s.bvid || '')}"></span></span>
+    <span class="singer">${esc(s.singer)}</span>
+    <span class="album">${esc(s.album)}</span>
+    ${bookmark}
+    <span class="dur">${fmtDur(s.duration)}</span>
+    <span class="ops">
+      <button class="icon-btn song-more-btn" title="更多操作" data-act="more">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+      </button>
+    </span>`;
+
+  div.onclick = () => import('./player.js').then(({ playFromList }) => playFromList(_recSongs, i, null, null));
+  div.querySelector('[data-act="more"]').onclick = (e) => {
+    e.stopPropagation();
+    import('./ui.js').then(({ openSongMenu }) => openSongMenu(e, _recSongs, i, null, null, div));
+  };
+  div.oncontextmenu = (e) => {
+    e.preventDefault();
+    import('./ui.js').then(({ openSongMenu }) => openSongMenu(e, _recSongs, i, null, null, div));
+  };
+
+  return div;
 }

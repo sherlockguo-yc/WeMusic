@@ -669,19 +669,43 @@ router.get('/recommend', async (req, res) => {
     }
   }
 
+  // ---- Step 5.5: 同歌名去重 — 每首歌名最多保留 2 个版本（按评分降序取前 2） ----
+  const nameGroups = new Map();
+  for (const c of candidateMap.values()) {
+    // 去掉括号内容（如 "晴天 (Live)" → "晴天"）做归一化，避免同名变体各占一行
+    const norm = c.name.replace(/[\(（\[【].*?[\)）\]】]/g, '').trim().toLowerCase();
+    if (!nameGroups.has(norm)) nameGroups.set(norm, []);
+    nameGroups.get(norm).push(c);
+  }
+  const dedupedCandidates = [];
+  for (const group of nameGroups.values()) {
+    group.sort((a, b) => b._candidateScore - a._candidateScore);
+    dedupedCandidates.push(...group.slice(0, 2));
+  }
+  const multiVersionCount = [...nameGroups.values()].filter(g => g.length > 2).length;
+  if (multiVersionCount > 0) {
+    console.log(`[recommend] name-dedup: ${candidateMap.size} candidates → ${dedupedCandidates.length} (${multiVersionCount} songs had >2 versions)`);
+  }
+
   // ---- Step 6: 分桶排序 ----
-  const candidates = [...candidateMap.values()];
+  const candidates = dedupedCandidates;
 
   // 只保留正分候选（不推荐低分内容）
   const high = shuffle(candidates.filter((s) => s._candidateScore >= 1.5));
   const mid  = shuffle(candidates.filter((s) => s._candidateScore >= 0 && s._candidateScore < 1.5));
 
-  const final = [...high.slice(0, 30), ...mid.slice(0, 20)]
-    .slice(0, 50)
+  const full = [...high, ...mid]
     .map(({ _candidateScore, _source, ...s }) => s);
 
+  // 分页：默认每页 20 首
+  const offset = Math.max(0, parseInt(req.query.offset) || 0);
+  const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+  const page   = full.slice(offset, offset + limit);
+
   res.json({
-    songs: final,
+    songs: page,
+    total: full.length,
+    hasMore: offset + limit < full.length,
     artists: topArtists,
     reason: topArtists.length ? 'interest_model' : 'cold_start',
     _stats: {

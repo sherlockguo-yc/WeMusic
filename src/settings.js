@@ -1,5 +1,5 @@
 // ---------------- 主题、设置面板、Sleep Timer、侧边栏拖拽 ----------------
-import { $, toast, debounce, esc, X_ICON, CHEVRON_RIGHT, CHEVRON_DOWN } from './utils.js';
+import { $, toast, debounce, esc, X_ICON, CHEVRON_RIGHT, CHEVRON_DOWN, CACHE_ICON, PIN_ICON } from './utils.js';
 import * as offline from './offlineCache.js';
 import { Auth, api } from './api.js';
 import { state } from './state.js';
@@ -623,11 +623,14 @@ export async function openSettings() {
         // 源信息标签
         const srcLabel = 'B站音频';
         const lyrLabel = e.lyrics ? (e.lyrics.sourceId || '已缓存') : '无';
+        const statusTag = e.pinned
+          ? `<span class="oi-status pinned">${PIN_ICON} 本地缓存</span>`
+          : `<span class="oi-status temp">${CACHE_ICON} 自动缓存</span>`;
         return `
         <div class="offline-item">
           <div class="oi-text">
             <span class="oi-name">${esc(name)}</span>
-            <span class="oi-sub">${sub ? esc(sub) + ' · ' : ''}${esc(srcLabel)} · 歌词 ${esc(lyrLabel)}</span>
+            <span class="oi-sub">${sub ? esc(sub) + ' · ' : ''}${esc(srcLabel)} · 歌词 ${esc(lyrLabel)} · ${statusTag}</span>
           </div>
           <button class="oi-remove" data-del="${esc(e.key)}" title="从离线缓存移除" aria-label="移除">${X_ICON}</button>
         </div>`;

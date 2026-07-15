@@ -138,14 +138,21 @@ export async function fetchAndStore(bvid, token, { pinned = false, videoSource =
       return existing;            // 同态被动，跳过
     }
     if (!existing.pinned && pinned) {
-      // 被动升级钉住：复用音频；lyrics 复用已有，或按需抓取
+      // 被动升级主动缓存：复用音频；lyrics 复用已有，或按需抓取
       const resolvedLyrics = lyrics !== null ? lyrics
         : (song && song.name ? await fetchLyricsForOffline(song.name, song.singer) : existing.lyrics || null);
       const entry = { ...existing, pinned: true, videoSource, lyrics: resolvedLyrics, song: song || existing.song || null, lastAccessed: Date.now() };
       await put(entry);
-      return entry;               // 被动升级钉住，复用音频
+      return entry;               // 被动升级主动缓存，复用音频
     }
-    // existing.pinned && pinned → 落到下方重写
+    if (existing.pinned && pinned) {
+      // 已是主动缓存，复用音频，仅更新元数据（不重抓）
+      const resolvedLyrics = lyrics !== null ? lyrics
+        : (song && song.name ? await fetchLyricsForOffline(song.name, song.singer) : existing.lyrics || null);
+      const entry = { ...existing, videoSource, lyrics: resolvedLyrics, song: song || existing.song || null, lastAccessed: Date.now() };
+      await put(entry);
+      return entry;
+    }
   }
   const url = `/api/play/stream?bvid=${encodeURIComponent(bvid)}&token=${encodeURIComponent(token || '')}`;
   const resp = await fetch(url);
