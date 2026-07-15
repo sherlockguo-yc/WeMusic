@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  songKey, isLive, isExcluded, singerParts, matchSinger,
+  songKey, isLive, singerParts, matchSinger,
   scoreVideo, nameSegments, rank, songNameSuggestsLive,
 } from '../../server/routes/play.js';
 
@@ -33,12 +33,6 @@ describe('songNameSuggestsLive — 歌名是否暗示现场版', () => {
   it('歌名含 演唱会 → true', () => { expect(songNameSuggestsLive('十年 演唱会')).toBe(true); });
   it('普通歌名 → false', () => { expect(songNameSuggestsLive('晴天')).toBe(false); });
   it('空歌名 → false', () => { expect(songNameSuggestsLive('')).toBe(false); });
-});
-
-describe('isExcluded — 黑名单过滤', () => {
-  it('伴奏 → true', () => { expect(isExcluded('晴天 伴奏')).toBe(true); });
-  it('纯音乐 → true', () => { expect(isExcluded('纯音乐')).toBe(true); });
-  it('正常视频 → false', () => { expect(isExcluded('晴天 MV')).toBe(false); });
 });
 
 describe('singerParts — 歌手名拆分', () => {
@@ -128,10 +122,9 @@ describe('nameSegments — 歌名片段', () => {
 });
 
 describe('rank — 综合排序', () => {
-  it('过滤伴奏', () => {
+  it('伴奏不再被硬过滤（应保留并参与排序）', () => {
     const r = rank([mkVideo('晴天 伴奏'), mkVideo('晴天 MV')], '晴天', '周杰伦', 200);
-    expect(r).toHaveLength(1);
-    expect(r[0].title).toBe('晴天 MV');
+    expect(r).toHaveLength(2);
   });
 
   it('有该歌手版本时过滤其他歌手', () => {

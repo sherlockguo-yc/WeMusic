@@ -1,12 +1,12 @@
 ---
-description: 构建时机、代码拆分、URL 处理、新建文件环境检查——覆盖从写代码到部署的完整流程规范
+description: 构建时机、代码拆分、URL 处理、API 路由前缀、新建文件环境检查——覆盖从写代码到部署的完整流程规范（WeMusic 专属工具链）
 alwaysApply: true
 enabled: true
 updatedAt: 2026-07-10T13:54:00.000Z
 provider: 
 ---
 
-# 构建与部署规范
+# 构建与部署规范（WeMusic 专属）
 
 ## 一、何时需要 Build
 
@@ -144,3 +144,25 @@ cat vite.config.js | grep "root"
 2. 停止旧进程 → 启动新进程
 
 由于构建后 chunk hash 会变化，**浏览器需要硬刷新**（Cmd+Shift+R）来清除旧缓存。
+
+## 六、API 端点路由前缀检查
+
+### 规则
+
+新增任何后端 API 端点（`router.get/post/put/delete`）前，**必须**先确认该 `router` 在 `server/index.js` 中的挂载路径（`app.use(path, router)`），再写前端的 `api()` 调用代码。
+
+### 正确流程
+
+1. 在后端 router 文件中新增端点，如 `router.get('/gain', ...)`
+2. 打开 `server/index.js`，找到该 router 的挂载语句：`app.use('/api/play', playRouter)`
+3. 前端调用时拼接完整路径：`api('/play/gain?...')`
+4. 构建后用 `curl` 验证路径可访问
+
+### 常见挂载前缀（本项目的 Express Router）
+
+| Router 文件 | 挂载前缀 |
+|-------------|---------|
+| `routes/play.js` | `/api/play` |
+| `routes/playlist.js` | `/api/playlists` |
+| `routes/stats.js` | `/api/stats` |
+| `routes/auth.js` | `/api/auth` |

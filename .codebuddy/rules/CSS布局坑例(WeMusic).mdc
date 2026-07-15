@@ -1,0 +1,51 @@
+---
+description: WeMusic CSS 布局专属补充——播放器底栏(.player)的 7 次失败史、滚动功能回归检查、#volBar 弹出、Chromium 空 inline-flex bug。通用布局原则见用户级 CSS布局定位原则.mdc
+alwaysApply: true
+enabled: true
+updatedAt: 2026-07-15T00:00:00.000Z
+provider:
+---
+
+# CSS 布局：禁止 Grid/Flex 与 absolute 混用（WeMusic 专属补充）
+
+> 通用原则与诊断/设计/编码/修复/验证各阶段规则、overflow 与 JS 补丁约束，见用户级 `CSS布局定位原则.mdc`。以下仅保留本项目专属的血泪细节。
+
+## 背景（为什么这条规则对本项目至关重要）
+
+播放器底栏（`.player`）在同一区域反复出现"文字覆盖按钮/进度条"的问题 **7 次**。完整故障回放记录在 `docs/CSS布局故障历史.md`。
+
+核心教训：只要还有**一个**子元素游离在 grid/flex 系统之外（用 absolute 独立定位），就还没有真正解决问题——它会在另一个尺寸下换个位置重新冲突。布局重构时不能只搬运 CSS 属性——同一个属性（如 `flex`）在 grid item 和 flex item 上的语义完全不同，必须逐条重新审查而非直接复制旧值。
+
+## 滚动功能回归检查（改 .player 相关属性后必测）
+
+修改 `.player` 或其子元素的 `flex`/`grid`/`overflow`/`position`/`min-width` 后，必须测试：
+1. **超长视频标题自动左右滚动** — `.player-status` 的 `flex-shrink` 必须 > 0，否则 `checkMarquee()` 溢出检测永不触发
+2. **进度条居中** — `getBoundingClientRect()` 测 centerX 偏差 ≤ 3px
+3. **各按钮不互相覆盖** — 检查 `.player-right` 内按钮在窄窗口下可见
+4. **音量滑块弹出** — 点击音量按钮 `#volBar` 应可见可拖动；确认 `.player`/`.player-left`/`.controls` 均无 `overflow: hidden`
+
+**特别禁止**：给 `.player-status` 设 `flex-shrink: 0`（等价于 `flex: 0 0 auto` 等 `flex-shrink=0` 简写）——第二类「无声破坏滚动」的 CSS 属性。
+**特别禁止 2**：文本滚动溢出检测必须用双帧 rAF（参考 `checkMarquee()`），禁止单帧 rAF（`display:none→flex` 需两帧布局计算，单帧会读到 `clientWidth=0`）。
+
+## 快速检查命令
+
+```bash
+grep -n 'position: absolute' public/css/style.css | head -20
+# 若看到 .player 子元素的 absolute，说明又开历史倒车
+```
+
+## Chromium 空 inline-flex 容器高度 bug
+
+空内容 `display: inline-flex` 元素作为 flex item 时产生异常隐式高度（约 120px，与 CSS 高度值无关，是 Chromium 内核 bug）。解决方案：改用独立占位元素：
+
+```css
+.placeholder { display: inline-block; width: 16px; flex: 0 0 16px; height: 16px; align-self: center; }
+```
+
+已应用场景：`.add-pl-check-spacer`。
+
+## 本项目例外
+
+- 移动端 `@media (max-width: 720px)` 下 `.player` 切为 `flex; flex-wrap: wrap` 是有意为之的独立布局模式，不适用 desktop grid 约束。
+- 子元素内部装饰性 absolute（按钮内 SVG、封面 overlay）不违反规则。
+- 垂直居中可单独用 absolute，只要水平位置仍由 grid/flex 决定。

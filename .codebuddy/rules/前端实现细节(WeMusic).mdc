@@ -1,0 +1,71 @@
+---
+description: WeMusic 前端专属约束——song-row 网格模板、.btn 变体、候选测试样本、图片兜底落点文件、弹窗 z-index 表等。通用前端原则见用户级 前端通用开发规范.mdc
+alwaysApply: true
+enabled: true
+updatedAt: 2026-07-15T00:00:00.000Z
+provider:
+---
+
+# WeMusic 前端专属约束（补充用户级通用规范）
+
+> 图标/Lucide、CSS 变量体系、装饰层颜色、UI 控件语义匹配、图片兜底模式、弹窗层级原则、Hover 反馈、列表表头一致性等通用原则，见用户级 `前端通用开发规范.mdc`。以下仅保留 WeMusic 专属实现细节。
+
+## 〇、项目全局视图
+
+在开始任何代码修改前，**先读取 `.project-graph.json`** 了解模块依赖和导出符号。该文件由 `npm run codegraph` 自动生成（每次 build/deploy 前执行），比 grep 更快更准确。
+
+> 注：`.project-graph.json` 覆盖前端 `src/`、服务端 `server/` 与共享 `shared/`，是全项目级依赖图，不仅限于前端。
+
+## 一、按钮变体（本项目 .btn 体系）
+
+- `.btn.green` — 主操作
+- `.btn.sm` — 小按钮
+- `.btn.blue` — 蓝色（Bilibili 相关）
+- 按钮 hover/active 必须通过 CSS 实现，不可仅在 JS 硬编码。
+
+## 二、歌曲列表 Grid 模板（.song-row）
+
+- 所有歌曲列表（搜索、歌单、喜欢、推荐、专辑）必须用统一 `.song-row` + `.song-row-head`。
+- Grid 模板：`28px 1fr 1.2fr 0.8fr 20px 56px 112px`（# / 歌名 / 歌手 / 专辑 / 标记 / 时长 / 操作）。
+- 表头与数据同模板对齐；表头 `.h-ops` 列必须有「操作」文字；歌名/歌手/专辑 left，时长 right。
+
+## 三、候选列表（修改前见 Specs 文档）
+
+- 修改候选逻辑前先检查 `docs/功能规格/` 对应文档。
+- 修改后必须测试：热门歌（晴天）+ 冷门歌（El Hombre）+ 短歌名（Hell）。
+
+## 四、排版类名（本项目）
+
+- 标题用 `.view-title`，副标题用 `.view-sub`。
+- 主要文字 `var(--text)`，次要 `var(--text-dim)`；按钮文字 `font-weight: 600/700`；SVG 图标 `currentColor`。
+
+## 五、图片兜底落点（本项目已修复位置）
+
+外链图片 onerror 必须 fallback 到默认占位（模式见用户级规范）。本项目已修复的位置：
+
+| 文件 | 元素 |
+|------|------|
+| `playlist-ui.js` | `renderSongList()` 列表面板 |
+| `utils.js` | `playlistCoverHtml` 歌单封面 |
+| `search.js:72` | 歌手搜索结果头像 |
+| `search.js:164` | 歌手详情页头像 |
+| `search.js:243` | 专辑详情页封面 |
+| `albums.js` | 收藏专辑卡片封面 |
+| `share.js` | 分享落地页封面 |
+| `report.js` | 周报 Top 歌曲/最爱专辑封面 |
+
+- 例外：`player.js` `updateNpCover` 已有三级兜底（专辑→歌手→默认），不依赖 inline onerror。
+
+## 六、弹窗 z-index（本项目实际值）
+
+| 元素 | z-index | 说明 |
+|------|---------|------|
+| `.modal-mask` | 140 | 所有弹窗基类 |
+| `#mobileQRModal` | 150 | 从设置面板触发的子级弹窗 |
+| `.lyrics-panel` | 130 | 歌词全屏（低于弹窗）|
+| `.queue-drawer` | 120 | 队列抽屉 |
+| `.ctx-menu` | 200 | 右键菜单（最高）|
+
+## 七、搜索栏（本项目行为）
+
+- 搜索建议（history autocompletion）在 focus/input 时自动弹出。

@@ -132,8 +132,6 @@ export const LIVE_KW = [
   '现场', '演唱会', '音乐节', 'live', 'concert', '开演', '演奏会',
   '巡演', 'tour', '现场版', 'livehouse', '路演', '快闪',
 ];
-// 直接过滤掉的关键词（伴奏等，剔除而非降权）
-export const EXCLUDE_KW = ['伴奏', '純音樂', '纯音乐', 'instrumental', 'karaoke', '消音', '人声消除'];
 // 高音质加分词（权重高）
 export const HQ_KW = [
   '无损', '無損', 'flac', 'hi-res', 'hires', 'hi res', '母带', '高音质',
@@ -162,12 +160,6 @@ export function songNameSuggestsLive(name = '') {
   const SONG_LIVE_KW = ['live', '现场', '演唱会', '现场版'];
   const t = name.toLowerCase();
   return SONG_LIVE_KW.some((k) => t.includes(k.toLowerCase()));
-}
-
-// 是否应被直接过滤（含「伴奏」等）
-export function isExcluded(title = '') {
-  const t = title.toLowerCase();
-  return EXCLUDE_KW.some((k) => t.includes(k.toLowerCase()));
 }
 
 // 拆分歌手名为有效片段（用于匹配）
@@ -291,7 +283,6 @@ export function rank(videos, name, singer, expectDur, crowdCompletions = null) {
   // 默认空 Map 兼容单元测试、手动搜索等无众包数据的场景
   const crowd = crowdCompletions || new Map();
   let scored = videos
-    .filter((v) => !isExcluded(v.title))
     // 歌名相关度过滤：歌名中至少一个 ≥2 字符片段必须出现在标题里
     .filter((v) => {
       if (!segs.length) return true;

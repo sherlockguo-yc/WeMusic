@@ -1,0 +1,30 @@
+---
+description: WeMusic 搜索/匹配逻辑修改的专属补充——具体要改哪些文件、必须用哪 3 类歌曲测试。通用方法论见用户级 搜索匹配逻辑方法论.mdc
+alwaysApply: true
+enabled: true
+updatedAt: 2026-07-15T00:00:00.000Z
+provider:
+---
+
+# 搜索/匹配逻辑修改（WeMusic 专属补充）
+
+> 通用前置方法论（复现→根因分析→脚本/curl 验证→方案评估→边界测试）见用户级 `搜索匹配逻辑方法论.mdc`。此处仅保留本项目专属信息。
+
+## 本项目涉及的修改入口
+
+修改以下文件的搜索/匹配/候选评分逻辑时适用：
+- `server/services/qqmusic.js` 的 `searchSongs`
+- `server/services/lyrics.js` 的 `searchLyricsCandidates`
+- `server/routes/play.js` 的 `scoreVideo`
+
+## 复现场景示例
+
+- 搜"外婆"只能找到澎湖湾版（搜索结果被错误版本占据）
+
+## 必须用 3 类歌曲验证
+
+- 热门歌（如 晴天 / 周杰伦）
+- 冷门歌（如 El Hombre）
+- 短歌名 / 特殊字符（如 Hell）
+
+> 若上述文件在 `docs/功能规格/` 有对应文档（如 `play.js` / `lyrics.js` 对应 `候选选择.md`），修改前应先读（见「修改前阅读Specs(WeMusic)」）。`qqmusic.js` 等未单独列映射的文件，按该规则「不确定时 `ls docs/功能规格/`」处理。

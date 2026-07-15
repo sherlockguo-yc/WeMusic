@@ -45,14 +45,12 @@
 - [自建服务器方案](架构/自建服务器方案.md)
 - [部署方案：GitHub Actions 构建 + N150 拉产物](架构/部署方案.md)
 
-## .codebuddy/rules/（AI 会话自动加载）
+## .codebuddy/rules/（WeMusic 项目级，AI 会话自动加载）
 
-- **API端点路由前缀检查.mdc** — 规则
-- **Agent 交互与决策规范.mdc** — Agent 交互与决策规范
-- **CSS布局混用禁止.mdc** — CSS 布局：禁止 Grid/Flex 与 absolute 混用
-- **修改前阅读Specs文档.mdc** — 规则
-- **全局状态对称管理.mdc** — 全局状态对称管理
-- **前端开发规范.mdc** — 〇、项目全局视图
-- **外部命令本地验证.mdc** — 规则
-- **搜索逻辑修改前置检查.mdc** — 搜索逻辑修改前置检查
-- **构建与部署规范.mdc** — 一、何时需要 Build
+> 通用原则见用户级 `~/.codebuddy/rules/`（AI协作规范、前端通用开发规范、CSS布局定位原则、搜索匹配逻辑方法论、外部命令本地验证、全局状态对称管理）。以下为 WeMusic 专属补充。
+
+- **前端实现细节(WeMusic).mdc** — song-row 网格模板、.btn 变体、候选测试样本、图片兜底落点、弹窗 z-index 表
+- **CSS布局坑例(WeMusic).mdc** — 播放器底栏 7 次失败史、滚动功能回归检查、Chromium bug
+- **搜索逻辑案例(WeMusic).mdc** — 搜索/匹配文件入口 + 3 类歌曲测试样本
+- **修改前阅读Specs(WeMusic).mdc** — 修改前检查 docs/功能规格/ 对应文档
+- **构建部署规范(WeMusic).mdc** — 构建时机、代码拆分、URL 处理、API 路由前缀、新建文件检查
