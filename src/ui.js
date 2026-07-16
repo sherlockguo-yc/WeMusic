@@ -225,6 +225,7 @@ function renderDebug(el, d) {
     ${kv('歌手', d.input.singer || '(无)')}
     ${kv('时长', fmtDur(d.input.duration))}
     ${kv('singerFirst', d.input.singerFirst || '(空)')}
+    ${kv('singerExtra', (d.input.singerExtra && d.input.singerExtra.length) ? d.input.singerExtra.join(', ') : '(空)')}
     ${kv('bracketCN', d.input.bracketCN || '(空)')}
   `, true));
 

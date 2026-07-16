@@ -353,13 +353,20 @@ router.post('/resolve', authRequired, async (req, res) => {
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
   try {
     const singerPartsVal = singerParts(singer);  // 小写，用于匹配（debug + singer filter）
-    // singerFirst 用于搜索 query，需要保留原始大小写和完整的第一段名
-    const singerFirstForQuery = (singer || '').split(/[\/、,&\s]+/).filter(s => s.trim().length >= 2)[0]?.trim() || '';
+    // singerFirst/singerRest 用于搜索 query，需要保留原始大小写。
+    // 歌手名可能是"英文名 中文名"组合（如 "G.E.M. 邓紫棋"），B 站视频标题/UP 名对哪个片段
+    // 索引权重更高因人而异（小众翻唱视频常只写中文名），因此每个片段都要单独生成一组 query，
+    // 不能只取第一段——这是本项目一次真实漏召 bug 的根因（"邓紫棋翻唱王菲【我愿意】"只搜 "G.E.M." 系列词永远搜不到）。
+    const singerQueryParts = (singer || '').split(/[\/、,&\s]+/).map(s => s.trim()).filter(s => s.length >= 2);
+    const singerFirstForQuery = singerQueryParts[0] || '';
+    const singerExtraForQuery = singerQueryParts.slice(1).filter(
+      (p) => p.toLowerCase() !== singerFirstForQuery.toLowerCase()
+    );
     // 提取括号内的中文名（如 "El Hombre (笑面人)" → "笑面人"），作为额外搜索词
     const bracketCN = (name.match(/[（(]([^)）]+)[）)]/) || [])[1] || '';
 
     const debug = {
-      input: { name, singer: singer || '', duration: duration || 0, singerFirst: singerFirstForQuery, bracketCN },
+      input: { name, singer: singer || '', duration: duration || 0, singerFirst: singerFirstForQuery, singerExtra: singerExtraForQuery, bracketCN },
       queries: [],
       wave1: null,
       wave2: null,
@@ -379,6 +386,8 @@ router.post('/resolve', authRequired, async (req, res) => {
     }
     queries.push(name);
     if (singerFirstForQuery) queries.push(`${singerFirstForQuery} ${name}`);
+    // 歌手名其余片段（如中英文名并存时的中文名）各补一条纯查询，覆盖只索引到该片段的小众视频
+    for (const extra of singerExtraForQuery) queries.push(`${name} ${extra}`);
     if (bracketCN && singerFirstForQuery) queries.push(`${bracketCN} ${singerFirstForQuery}`);
     if (bracketCN) queries.push(bracketCN);
     debug.queries = [...queries];
@@ -544,6 +553,16 @@ router.get('/search', authRequired, async (req, res) => {
     if (songName && songName !== searchKw) {
       searches.push(searchVideos(songName, 1, 20));
       searches.push(searchVideos(songName, 2, 20));
+    }
+    // 歌手名逐片段补查："英文名 中文名"组合歌手（如 "G.E.M. 邓紫棋"）拼成一个词搜索会被稀释，
+    // B 站对小众翻唱视频常只索引到其中一个片段，因此每个 ≥2 字符片段都单独配歌名搜一次。
+    if (songName && songSinger) {
+      const singerFrags = songSinger.split(/[\/、,&\s]+/).map(s => s.trim()).filter(s => s.length >= 2);
+      for (const frag of singerFrags) {
+        const fragKw = `${songName} ${frag}`;
+        if (fragKw === searchKw) continue;
+        searches.push(searchVideos(fragKw, 1, 20));
+      }
     }
     const results = await Promise.allSettled(searches);
     const seen = new Set();
