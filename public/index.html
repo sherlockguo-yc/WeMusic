@@ -229,8 +229,12 @@
   <!-- 候选换源弹层 -->
   <div class="modal-mask" id="candModal">
     <div class="modal">
-      <h3>选择播放资源（Bilibili）</h3>
-      <div id="candList"></div>
+      <div class="cand-tabs">
+        <button class="cand-tab active" data-tab="candidates">选择播放资源</button>
+        <button class="cand-tab" data-tab="debug">Debug</button>
+      </div>
+      <div id="candList" class="cand-panel active"></div>
+      <div id="candDebug" class="cand-panel"></div>
       <div style="text-align:right;margin-top:12px">
         <button class="btn sm" id="candClose">关闭</button>
       </div>

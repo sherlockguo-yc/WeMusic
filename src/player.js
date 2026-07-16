@@ -623,11 +623,12 @@ export async function prefetchNextBvid() {
         return;
       }
     } catch { console.warn('bvid 缓存读取失败') }
-    const { best, candidates } = await api('/play/resolve', {
+    const { best, candidates, _debug } = await api('/play/resolve', {
       method: 'POST',
       body: { name: song.name, singer: song.singer, duration: song.duration },
     });
     song._candidates = candidates;
+    if (_debug) song._debug = _debug;
     if (best) {
       song.bvid = best.bvid;
       // 优先用 candidates 里同名 bvid 的 title
@@ -704,12 +705,13 @@ export async function playCurrent() {
     $('npCoverWrap').classList.add('loading');
     setStatus('正在从 Bilibili 匹配资源…');
     try {
-      const { best, candidates } = await api('/play/resolve', {
+      const { best, candidates, _debug } = await api('/play/resolve', {
         method: 'POST',
         body: { name: song.name, singer: song.singer, duration: song.duration },
       });
       if (seq !== playSeq) return;
       song._candidates = candidates;
+      if (_debug) song._debug = _debug;
       if (!best) {
         $('playPauseBtn').innerHTML = PLAY_ICON;
         $('npCoverWrap').classList.remove('loading');
@@ -729,6 +731,32 @@ export async function playCurrent() {
       return;
     }
   }
+
+  // 已有 bvid 但缺少 _biliTitle（如分享链接预设了 bvid）→ 补查 resolve 拿标题
+  if (song.bvid && !song._biliTitle) {
+    // 先尝试从已缓存的 candidates 中匹配
+    if (song._candidates) {
+      const m = song._candidates.find(c => c.bvid === song.bvid);
+      if (m?.title) song._biliTitle = m.title;
+    }
+    // 仍未匹配到 → 调 resolve 拉取候选列表
+    if (!song._biliTitle) {
+      try {
+        const { best, candidates, _debug } = await api('/play/resolve', {
+          method: 'POST',
+          body: { name: song.name, singer: song.singer, duration: song.duration },
+        });
+        if (seq !== playSeq) return;
+        song._candidates = candidates;
+        if (_debug) song._debug = _debug;
+        const match = candidates.find(c => c.bvid === song.bvid);
+        song._biliTitle = match?.title || best?.title || '';
+        if (!song._biliDur) song._biliDur = (match?.duration || best?.duration || song.duration);
+        cacheBvid(song);
+      } catch { console.warn('补查 _biliTitle 失败') }
+    }
+  }
+
   if (seq !== playSeq) return;
   // 清理加载态（如果之前进入了 resolve 分支）
   $('npCoverWrap').classList.remove('loading');

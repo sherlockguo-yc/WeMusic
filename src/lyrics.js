@@ -274,7 +274,11 @@ async function openLyricsSwitchModal(song) {
 
   const modal = $('candModal');
   const list = $('candList');
-  modal.querySelector('h3').textContent = '选择歌词版本';
+  // 歌词模式：隐藏 tabs，只显示候选列表
+  const tabsEl = modal.querySelector('.cand-tabs');
+  if (tabsEl) tabsEl.style.display = 'none';
+  modal.querySelectorAll('.cand-panel').forEach(p => p.classList.remove('active'));
+  list.classList.add('active');
 
   const songKey = `${song.name}__${song.singer || ''}`;
 

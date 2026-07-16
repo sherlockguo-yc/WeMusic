@@ -80,7 +80,13 @@ export async function openCandModal() {
   if (!state.current) return toast('请先播放一首歌曲');
   const modal = $('candModal');
   const list = $('candList');
-  modal.querySelector('h3').textContent = '选择播放资源（Bilibili）';
+  const debugPanel = $('candDebug');
+
+  // 视频源模式：显示 tabs
+  const tabsEl = modal.querySelector('.cand-tabs');
+  tabsEl.style.display = 'flex';
+  setActiveTab('candidates');
+
   modal.classList.add('show');
   let candidates = state.current._candidates;
   if (!candidates) {
@@ -91,6 +97,7 @@ export async function openCandModal() {
       const params = new URLSearchParams({ keyword: `${name} ${singer}`, name, singer });
       const r = await api(`/play/search?${params.toString()}`);
       candidates = r.candidates; state.current._candidates = candidates;
+      if (r._debug) state.current._debug = r._debug;
     } catch (e) { list.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   }
   const songKey = `${state.current.name}__${state.current.singer || ''}`;
@@ -161,6 +168,168 @@ export async function openCandModal() {
 
   // 已屏蔽列表事件（折叠/恢复）
   bindBlockedSection(list, api, songKey, 'video', 'cand');
+
+  // 渲染 debug 面板
+  if (state.current._debug) {
+    renderDebug(debugPanel, state.current._debug);
+  } else {
+    debugPanel.innerHTML = '<div class="debug-section-body" style="display:block;padding:24px;text-align:center;color:var(--text-dim)">暂无 debug 数据。播放一首歌曲后将自动获得最近一次匹配的 debug 信息。</div>';
+  }
+
+  // tab 切换
+  modal.querySelectorAll('.cand-tab').forEach(tab => {
+    tab.onclick = () => setActiveTab(tab.dataset.tab);
+  });
+}
+
+function setActiveTab(tabName) {
+  const modal = $('candModal');
+  modal.querySelectorAll('.cand-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+  modal.querySelectorAll('.cand-panel').forEach(p => p.classList.toggle('active', p.id === (tabName === 'candidates' ? 'candList' : 'candDebug')));
+}
+
+function renderDebug(el, d) {
+  if (!d) { el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim)">无 debug 数据</div>'; return; }
+
+  const badge = (v, cls) => `<span class="debug-badge ${cls}">${esc(String(v))}</span>`;
+  // kv: 纯文本键值对（value 会被转义）
+  const kv = (k, v, mono) => `<div class="debug-kv"><span class="dk">${esc(k)}</span><span class="dv${mono ? ' mono' : ''}">${esc(String(v))}</span></div>`;
+  // kvHtml: value 是安全的 HTML（不会被转义）
+  const kvHtml = (k, v, mono) => `<div class="debug-kv"><span class="dk">${esc(k)}</span><span class="dv${mono ? ' mono' : ''}">${v}</span></div>`;
+  const section = (title, body, open) => `
+    <div class="debug-section${open ? ' open' : ''}">
+      <div class="debug-section-header"><span class="debug-arrow">▶</span>${esc(title)}</div>
+      <div class="debug-section-body">${body}</div>
+    </div>`;
+
+  const fmtNum = (n) => n != null ? Number(n).toLocaleString() : '-';
+  const fmtDur = (s) => s != null ? `${s}s` : '(无)';
+
+  const sections = [];
+
+  // 1. 输入参数
+  sections.push(section('输入参数', `
+    ${kv('歌名', d.input.name)}
+    ${kv('歌手', d.input.singer || '(无)')}
+    ${kv('时长', fmtDur(d.input.duration))}
+    ${kv('singerFirst', d.input.singerFirst || '(空)')}
+    ${kv('bracketCN', d.input.bracketCN || '(空)')}
+  `, true));
+
+  // 2. 搜索 query
+  if (d.queries) {
+    const qList = d.queries.map(q => `<div class="debug-query-row"><span class="q-text">${esc(q)}</span></div>`).join('');
+    sections.push(section(`搜索 Query（${d.queries.length} 组）`, qList));
+  }
+
+  // 3. Wave 1
+  if (d.wave1) {
+    const rows = d.wave1.queries.map(q => `<div class="debug-query-row"><span class="q-text">${esc(q.query)}</span>${q.status === 'ok' ? badge(q.resultCount, 'info') : badge('失败', 'fail')}</div>`).join('');
+    sections.push(section(`Wave 1（page=1）— 去重前 ${fmtNum(d.wave1.totalBeforeDedup)} 条，去重后 ${badge(fmtNum(d.wave1.totalAfterDedup), 'ok')} 条`, rows));
+  }
+
+  // 4. Wave 2
+  if (d.wave2) {
+    const rows = d.wave2.queries.map(q => `<div class="debug-query-row"><span class="q-text">${esc(q.query)}</span>${q.status === 'ok' ? badge(q.resultCount, 'info') : badge('失败', 'fail')}</div>`).join('');
+    sections.push(section(`Wave 2（page=2）— 触发条件：Wave1 不足 80 条 — 去重前 ${fmtNum(d.wave2.totalBeforeDedup)} 条，累计去重后 ${badge(fmtNum(d.wave2.totalAfterDedup), 'ok')} 条`, rows));
+  }
+
+  // 5. Rank 过程
+  if (d.rankDebug) {
+    const rd = d.rankDebug;
+    let rankBody = '';
+    rankBody += kvHtml('总原始结果', badge(fmtNum(d.totalRaw), 'info'));
+    rankBody += kv('歌名片段 (segs)', rd.segs.join(' | ') || '(无)');
+
+    // 片段过滤详情
+    const segLoss = rd.beforeSegFilter - rd.afterSegFilter;
+    rankBody += kvHtml('片段过滤', `${fmtNum(rd.beforeSegFilter)} → ${badge(fmtNum(rd.afterSegFilter), segLoss > 0 ? 'warn' : 'ok')}（过滤掉 ${segLoss} 条不包含歌名片段的，保留 ${rd.afterSegFilter} 条）`);
+    rankBody += kv('过滤规则', `歌名「${d.input.name}」拆分为片段：[${rd.segs.join(', ')}]，视频标题必须包含至少一个片段`);
+
+    // 被保留的视频（通过片段过滤的）
+    if (rd.filteredOutSamples && rd.filteredOutSamples.length) {
+      const outList = rd.filteredOutSamples.map((v, i) => `<div class="debug-query-row" style="opacity:.6"><span class="q-text"><span style="color:var(--text-dim)">#${i + 1}</span> ✕ ${esc(v.title)} <span style="color:var(--text-dim)">UP:${esc(v.author)}</span></span></div>`).join('');
+      rankBody += `<div class="debug-kv"><span class="dk">被过滤的 ${rd.filteredOutSamples.length} 条</span><span class="dv" style="flex-direction:column;align-items:flex-start;gap:2px">${outList}</span></div>`;
+    }
+
+    // 通过片段过滤的（保留的）
+    if (rd.afterSegSamples && rd.afterSegSamples.length) {
+      const inList = rd.afterSegSamples.map((v, i) => `<div class="debug-query-row"><span class="q-text"><span style="color:var(--accent)">#${i + 1}</span> ✓ ${esc(v.title)} <span style="color:var(--text-dim)">UP:${esc(v.author)}</span></span></div>`).join('');
+      rankBody += `<div class="debug-kv"><span class="dk">通过的 ${rd.afterSegSamples.length} 条</span><span class="dv" style="flex-direction:column;align-items:flex-start;gap:2px">${inList}</span></div>`;
+    }
+    rankBody += kvHtml('进入歌手筛选', `${badge(fmtNum(rd.afterSegFilter), 'ok')} 条`);
+
+    // 歌手筛选详情
+    if (rd.singerParts && rd.singerParts.length) {
+      const singerLoss = rd.afterSegFilter - rd.afterSingerFilter;
+      rankBody += kv('歌手拆分', `${rd.singerParts.join(' / ')}（检查视频标题或 UP 主名是否包含以上任意一个）`);
+      rankBody += kvHtml('歌手筛选', rd.singerFiltered
+        ? `${fmtNum(rd.afterSegFilter)} 条 → ${badge(fmtNum(rd.afterSingerFilter), 'ok')} 条匹配（过滤掉 ${singerLoss} 条不匹配歌手的）`
+        : '未触发（所有候选都不匹配歌手名，保留全部进入下一轮）');
+
+      // 匹配歌手的视频
+      if (rd.singerOkSamples && rd.singerOkSamples.length) {
+        const okList = rd.singerOkSamples.map((v, i) => `<div class="debug-query-row"><span class="q-text"><span style="color:var(--accent)">#${i + 1}</span> ✓ ${esc(v.title)} <span style="color:var(--text-dim)">UP:${esc(v.author)}</span></span></div>`).join('');
+        rankBody += `<div class="debug-kv"><span class="dk">匹配的 ${rd.singerOkSamples.length} 条</span><span class="dv" style="flex-direction:column;align-items:flex-start;gap:2px">${okList}</span></div>`;
+      }
+
+      // 不匹配歌手的视频
+      if (rd.singerNotOkSamples && rd.singerNotOkSamples.length) {
+        const noList = rd.singerNotOkSamples.map((v, i) => `<div class="debug-query-row" style="opacity:.6"><span class="q-text">✕ ${esc(v.title)} <span style="color:var(--text-dim)">UP:${esc(v.author)}</span></span></div>`).join('');
+        rankBody += `<div class="debug-kv"><span class="dk">不匹配的 ${rd.singerNotOkSamples.length} 条</span><span class="dv" style="flex-direction:column;align-items:flex-start;gap:2px">${noList}</span></div>`;
+      }
+    } else {
+      rankBody += kv('歌手筛选', '未触发（singer 为空，跳过歌手过滤）');
+      rankBody += kvHtml('通过歌手筛选', `${badge(fmtNum(rd.afterSingerFilter), 'ok')} 条进入下一轮`);
+    }
+
+    rankBody += kv('Live 调整', rd.nameSuggestsLive
+      ? '歌名含 Live 关键词 → 取消现场惩罚 + 现场版 +30 提权'
+      : '普通歌名 → 非现场版优先');
+    rankBody += kvHtml('rank 后', `${badge(fmtNum(rd.scoredCount), rd.scoredCount > 0 ? 'ok' : 'warn')} 条候选`);
+    sections.push(section('Rank 排序过程', rankBody, true));
+  }
+
+  // 6. Top 评分明细
+  if (d.topSamples && d.topSamples.length) {
+    const thead = `<tr><th>#</th><th class="col-title">标题</th><th>歌名</th><th>歌手<br>标题/UP</th><th>时长<br>(diff)</th><th>播放<br>加权</th><th>高清<br>词</th><th>官方<br>MV</th><th>优<br>质</th><th>降<br>权</th><th>UP<br>匹配</th><th>得分</th><th>现场</th></tr>`;
+    const tbody = d.topSamples.map((v, i) => {
+      const bd = v.breakdown || {};
+      const durLabel = bd.durDiff != null ? `${bd.durDiff}s` : '-';
+      const durCls = bd.durMatch > 0 ? 'pos' : (bd.durMatch < 0 ? 'neg' : '');
+      return `<tr>
+        <td>${i + 1}</td>
+        <td class="col-title" title="${esc(v.title)}"><a href="https://www.bilibili.com/video/${esc(v.bvid || '')}" target="_blank">${esc(v.title.slice(0, 40))}</a></td>
+        <td>${bd.nameMatch != null ? badge(bd.nameMatch, bd.nameMatch >= 50 ? 'ok' : 'info') : '-'}</td>
+        <td>${bd.singerInTitle ? badge(bd.singerInTitle, 'ok') : (bd.singerInAuthor ? badge(bd.singerInAuthor, 'info') : '-')}</td>
+        <td class="${durCls}">${durLabel}<br><small>${bd.durMatch > 0 ? '+' : ''}${bd.durMatch || 0}</small></td>
+        <td>${fmtNum(v.play)}<br><small>+${bd.playWeight || 0}</small></td>
+        <td>${bd.hqKw && bd.hqKw.length ? badge('+'+bd.hqBonus, 'ok') + '<br><small>' + esc(bd.hqKw.join(',')) + '</small>' : '-'}</td>
+        <td>${bd.officialMV > 0 ? badge('+'+bd.officialMV, 'ok') : '-'}</td>
+        <td>${bd.goodKw > 0 ? badge('+'+bd.goodKw, 'info') + (bd.goodKwList && bd.goodKwList.length ? '<br><small>' + esc(bd.goodKwList.join(',')) + '</small>' : '') : '-'}</td>
+        <td>${bd.badKw && bd.badKw < 0 ? badge(bd.badKw, 'fail') + (bd.badKwList && bd.badKwList.length ? '<br><small>' + esc(bd.badKwList.join(',')) + '</small>' : '') : '-'}</td>
+        <td>${bd.authorMatch > 0 ? badge('+'+bd.authorMatch, 'info') : '-'}</td>
+        <td><strong>${Math.round(v.score)}</strong></td>
+        <td>${v.live ? badge('是', 'warn') : '-'}</td>
+      </tr>`;
+    }).join('');
+    sections.push(section(`Top ${d.topSamples.length} 评分明细`, `<table class="debug-score-table">${thead}${tbody}</table>`, true));
+  }
+
+  // 7. 黑名单
+  if (d.blockedCount != null) {
+    sections.push(section('黑名单过滤', `
+      ${kvHtml('已屏蔽源数', badge(fmtNum(d.blockedCount), d.blockedCount > 0 ? 'warn' : 'ok'))}
+      ${kvHtml('过滤后候选', badge(fmtNum(d.cleanCount), 'ok'))}
+    `));
+  }
+
+  el.innerHTML = sections.join('');
+
+  // 折叠/展开
+  el.querySelectorAll('.debug-section-header').forEach(hdr => {
+    hdr.onclick = () => hdr.parentElement.classList.toggle('open');
+  });
 }
 
 // ---- 换源 ----

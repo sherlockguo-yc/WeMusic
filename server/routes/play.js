@@ -178,64 +178,87 @@ export function matchSinger(v, parts) {
 }
 
 export function scoreVideo(v, name, singer, expectDur) {
+  return Math.round(scoreBreakdown(v, name, singer, expectDur).total);
+}
+
+/** 返回评分明细（debug 用），scoreVideo 内部复用此函数 */
+function scoreBreakdown(v, name, singer, expectDur) {
   const title = v.title || '';
   const t = title.toLowerCase();
-  let score = 0;
+  const bd = {
+    nameMatch: 0,
+    singerInTitle: 0,
+    singerInAuthor: 0,
+    durMatch: 0, durDiff: 0,
+    playWeight: 0, playCount: v.play || 0,
+    hqBonus: 0, hqKw: [],
+    officialMV: 0,
+    goodKw: 0, goodKwList: [],
+    authorMatch: 0,
+    badKw: 0, badKwList: [],
+    total: 0,
+  };
 
   // — 歌名匹配 —
-  if (name && title.includes(name)) score += 50;
+  if (name && title.includes(name)) bd.nameMatch = 50;
   else if (name) {
     const hit = [...name].filter((c) => title.includes(c)).length;
-    score += Math.round((hit / Math.max(1, name.length)) * 30);
+    bd.nameMatch = Math.round((hit / Math.max(1, name.length)) * 30);
   }
 
   // — 歌手匹配：标题或 UP 主名包含歌手名 —
   if (singer) {
     const s = singer.split(/[\/、,&]/)[0].trim();
     if (s) {
-      if (title.includes(s)) score += 30;
-      else if ((v.author || '').includes(s)) score += 20;
+      if (title.includes(s)) bd.singerInTitle = 30;
+      else if ((v.author || '').includes(s)) bd.singerInAuthor = 20;
     }
   }
 
   // — 时长匹配 —
   if (expectDur > 0 && v.duration > 0) {
     const diff = Math.abs(v.duration - expectDur);
-    if (diff <= 10) score += 40;
-    else if (diff <= 25) score += 22;
-    else if (diff <= 60) score += 6;
-    else score -= 25;
+    bd.durDiff = diff;
+    if (diff <= 10) bd.durMatch = 40;
+    else if (diff <= 25) bd.durMatch = 22;
+    else if (diff <= 60) bd.durMatch = 6;
+    else bd.durMatch = -25;
   }
 
   // — 播放量加权（对数尺度，播放越多权重越大，分支更清晰） —
   const pl = v.play || 1;
-  if (pl >= 1e7) score += 55;
-  else if (pl >= 1e6) score += 40;
-  else if (pl >= 1e5) score += 25;
-  else if (pl >= 1e4) score += 12;
-  else score += Math.min(6, Math.log10(pl) * 2.5);
+  if (pl >= 1e7) bd.playWeight = 55;
+  else if (pl >= 1e6) bd.playWeight = 40;
+  else if (pl >= 1e5) bd.playWeight = 25;
+  else if (pl >= 1e4) bd.playWeight = 12;
+  else bd.playWeight = Math.round(Math.min(6, Math.log10(pl) * 2.5) * 100) / 100;
 
   // — 品质信号 —
-  // 高音质关键词：大幅加分（无损/母带等）
-  if (HQ_KW.some((k) => t.includes(k))) score += 30;
-  // 官方 MV 是最高优先级信号（单独判断，比通用 GOOD_KW 更重）
+  for (const k of HQ_KW) {
+    if (t.includes(k)) bd.hqKw.push(k);
+  }
+  if (bd.hqKw.length) bd.hqBonus = 30;
+
   const isOfficial = t.includes('官方');
   const isMV = t.includes('mv');
-  if (isOfficial && isMV) score += 42;  // 官方 MV 最高
-  else if (isOfficial) score += 28;       // 官方（非 MV）
-  else if (isMV) score += 20;             // MV（非官方标注）
-  // 其它优质信号
+  if (isOfficial && isMV) bd.officialMV = 42;
+  else if (isOfficial) bd.officialMV = 28;
+  else if (isMV) bd.officialMV = 20;
+
   for (const k of GOOD_KW) {
-    if (k === '官方' || k === 'mv') continue; // 已单独处理
-    if (t.includes(k)) score += 10;
+    if (k === '官方' || k === 'mv') continue;
+    if (t.includes(k)) { bd.goodKwList.push(k); bd.goodKw += 10; }
   }
-  // UP 主名完全匹配歌手名 → 可能是官方频道
-  if (singer && v.author && v.author.toLowerCase() === singer.toLowerCase()) score += 18;
+
+  if (singer && v.author && v.author.toLowerCase() === singer.toLowerCase()) bd.authorMatch = 18;
 
   // — 降权 —
-  for (const k of BAD_KW) if (t.includes(k)) score -= 14;
+  for (const k of BAD_KW) {
+    if (t.includes(k)) { bd.badKwList.push(k); bd.badKw -= 14; }
+  }
 
-  return Math.round(score);
+  bd.total = bd.nameMatch + bd.singerInTitle + bd.singerInAuthor + bd.durMatch + bd.playWeight + bd.hqBonus + bd.officialMV + bd.goodKw + bd.authorMatch + bd.badKw;
+  return bd;
 }
 
 // 从歌名中提取「长度 ≥ 2 的片段」（中文按 2 字切，拉丁按单词）
@@ -322,35 +345,56 @@ export function rank(videos, name, singer, expectDur, crowdCompletions = null) {
 }
 
 /**
- * 为一首歌匹配最佳 Bilibili 视频
+ * 为一首歌匹配最佳 Bilibili 视频（含 debug 信息）
  * body: { name, singer, duration }
  */
 router.post('/resolve', authRequired, async (req, res) => {
   const { name, singer = '', duration = 0 } = req.body || {};
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
   try {
-    const singerFirst = singer.split(/[\/、,&]/)[0].trim();
+    const singerPartsVal = singerParts(singer);  // 小写，用于匹配（debug + singer filter）
+    // singerFirst 用于搜索 query，需要保留原始大小写和完整的第一段名
+    const singerFirstForQuery = (singer || '').split(/[\/、,&\s]+/).filter(s => s.trim().length >= 2)[0]?.trim() || '';
     // 提取括号内的中文名（如 "El Hombre (笑面人)" → "笑面人"），作为额外搜索词
     const bracketCN = (name.match(/[（(]([^)）]+)[）)]/) || [])[1] || '';
+
+    const debug = {
+      input: { name, singer: singer || '', duration: duration || 0, singerFirst: singerFirstForQuery, bracketCN },
+      queries: [],
+      wave1: null,
+      wave2: null,
+      totalRaw: 0,
+      rankDebug: null,
+      topSamples: [],
+      blockedCount: 0,
+      cleanCount: 0,
+    };
+
     // 分层并行查询：Wave 1 — 全部 query 首页并行打出；Wave 2 — 不够时再补第二页
     const queries = [];
-    if (singerFirst) {
-      queries.push(`${name} ${singerFirst}`);
-      queries.push(`${name} ${singerFirst} MV`);
-      queries.push(`${name} ${singerFirst} 官方`);
+    if (singerFirstForQuery) {
+      queries.push(`${name} ${singerFirstForQuery}`);
+      queries.push(`${name} ${singerFirstForQuery} MV`);
+      queries.push(`${name} ${singerFirstForQuery} 官方`);
     }
     queries.push(name);
-    if (singerFirst) queries.push(`${singerFirst} ${name}`);
-    // 括号内中文名 + 歌手作为兜底（如 "笑面人 G.E.M. 邓紫棋"）
-    if (bracketCN && singerFirst) queries.push(`${bracketCN} ${singerFirst}`);
+    if (singerFirstForQuery) queries.push(`${singerFirstForQuery} ${name}`);
+    if (bracketCN && singerFirstForQuery) queries.push(`${bracketCN} ${singerFirstForQuery}`);
     if (bracketCN) queries.push(bracketCN);
+    debug.queries = [...queries];
 
     const seen = new Set();
     let all = [];
 
     // Wave 1：所有 query × page 1 并行请求
     const w1 = await Promise.allSettled(queries.map((q) => searchVideos(q, 1, 20)));
-    for (const r of w1) {
+    const w1Counts = [];
+    let w1TotalBeforeDedup = 0;
+    for (let i = 0; i < w1.length; i++) {
+      const r = w1[i];
+      const cnt = r.status === 'fulfilled' ? r.value.length : 0;
+      w1TotalBeforeDedup += cnt;
+      w1Counts.push({ query: queries[i], status: r.status === 'fulfilled' ? 'ok' : 'rejected', resultCount: cnt });
       if (r.status !== 'fulfilled') continue;
       for (const v of r.value) {
         if (seen.has(v.bvid)) continue;
@@ -358,11 +402,18 @@ router.post('/resolve', authRequired, async (req, res) => {
         all.push(v);
       }
     }
+    debug.wave1 = { queries: w1Counts, totalBeforeDedup: w1TotalBeforeDedup, totalAfterDedup: all.length };
 
     // Wave 2：如果还不够 80 条，所有 query × page 2 并行请求
     if (all.length < 80) {
       const w2 = await Promise.allSettled(queries.map((q) => searchVideos(q, 2, 20)));
-      for (const r of w2) {
+      const w2Counts = [];
+      let w2TotalBeforeDedup = 0;
+      for (let i = 0; i < w2.length; i++) {
+        const r = w2[i];
+        const cnt = r.status === 'fulfilled' ? r.value.length : 0;
+        w2TotalBeforeDedup += cnt;
+        w2Counts.push({ query: queries[i], status: r.status === 'fulfilled' ? 'ok' : 'rejected', resultCount: cnt });
         if (r.status !== 'fulfilled') continue;
         for (const v of r.value) {
           if (seen.has(v.bvid)) continue;
@@ -370,7 +421,10 @@ router.post('/resolve', authRequired, async (req, res) => {
           all.push(v);
         }
       }
+      debug.wave2 = { queries: w2Counts, totalBeforeDedup: w2TotalBeforeDedup, totalAfterDedup: all.length };
     }
+
+    debug.totalRaw = all.length;
 
     if (all.length === 0) {
       const allFailed = w1.every((r) => r.status === 'rejected');
@@ -378,26 +432,94 @@ router.post('/resolve', authRequired, async (req, res) => {
       return res.status(404).json({ error: '未在 Bilibili 找到该歌曲的视频' });
     }
 
-    console.log(`[video:resolve] "${name}" / "${singerFirst}" — ${all.length} raw results (W1:${w1.filter(r=>r.status==='fulfilled').length}q), segs:${nameSegments(name).join('|')}`);
+    console.log(`[video:resolve] "${name}" / "${singerFirstForQuery}" — ${all.length} raw results (W1:${w1.filter(r=>r.status==='fulfilled').length}q), segs:${nameSegments(name).join('|')}`);
 
     const sk = songKey(name, singer);
     const videoCompletions = getCrowdCompletions('video', sk);
     const ranked = rank(all, name, singer, duration, videoCompletions);
+
+    // 收集 rank 内部的 debug 信息
+    const segs = nameSegments(name);
+    const crowd = videoCompletions || new Map();
+
+    // 重放 segment 过滤（计算过滤前后数量 + 收集被过滤掉的视频样例）
+    const afterSegFilter = [];
+    const filteredOut = [];
+    if (segs.length) {
+      for (const v of all) {
+        const t = (v.title || '').toLowerCase();
+        if (segs.some(s => t.includes(s.toLowerCase()))) afterSegFilter.push(v);
+        else filteredOut.push(v);
+      }
+    } else {
+      afterSegFilter.push(...all);
+    }
+
+    // 重放 singer 过滤
+    let singerFilterCount = afterSegFilter.length;
+    let singerOkSamples = [], singerNotOkSamples = [];
+    if (singerPartsVal.length) {
+      const singerOk = [], singerNotOk = [];
+      for (const v of afterSegFilter) {
+        if (matchSinger(v, singerPartsVal)) singerOk.push(v);
+        else singerNotOk.push(v);
+      }
+      if (singerOk.length) {
+        singerFilterCount = singerOk.length;
+        singerOkSamples = singerOk.map(v => ({ title: v.title, author: v.author || '' }));
+        singerNotOkSamples = singerNotOk.map(v => ({ title: v.title, author: v.author || '' }));
+      }
+    }
+
+    const nameSuggestsLive = songNameSuggestsLive(name);
+
+    debug.rankDebug = {
+      segs: [...segs],
+      beforeSegFilter: all.length,
+      afterSegFilter: afterSegFilter.length,
+      afterSegSamples: afterSegFilter.map(v => ({ title: v.title, author: v.author || '' })),
+      filteredOutSamples: filteredOut.map(v => ({ title: v.title, author: v.author || '' })),
+      singerParts: [...singerPartsVal],
+      singerFiltered: singerPartsVal.length > 0 && singerFilterCount !== afterSegFilter.length,
+      afterSingerFilter: singerFilterCount,
+      singerOkSamples,
+      singerNotOkSamples,
+      nameSuggestsLive,
+      scoredCount: ranked.length,
+    };
+
+    // 取 top 5 的评分明细
+    debug.topSamples = ranked.slice(0, 5).map(v => {
+      const bd = scoreBreakdown(v, name, singer, duration);
+      return {
+        bvid: v.bvid,
+        title: v.title.slice(0, 60),
+        author: v.author || '',
+        play: v.play || 0,
+        duration: v.duration,
+        score: v.score,
+        live: v.live,
+        singerOk: v.singerOk,
+        breakdown: bd,
+      };
+    });
+
     console.log(`[video:resolve] after rank: ${ranked.length} scored (crowd:${videoCompletions.size} sources), blocked:${getBlockedSet(req.user.id, sk, 'video').size}`);
 
     // 过滤掉用户已拉黑的视频源
     const blocked = getBlockedSet(req.user.id, songKey(name, singer), 'video');
+    debug.blockedCount = blocked.size;
     const clean = ranked.filter((v) => !blocked.has(v.bvid));
+    debug.cleanCount = clean.length;
+
     if (clean.length === 0) {
       return res.status(404).json({ error: '所有候选视频均已被屏蔽，如需解除请刷新页面后重新搜索' });
     }
-    // best 也应该从干净列表里选，避免自动播放到已拉黑的源
-    // 歌名含 live 关键词时（如 "XXX (Live)"），现场版反而是正确答案，不强制选非现场
     const nameImpliesLive = songNameSuggestsLive(name);
     const best = nameImpliesLive ? clean[0] : (clean.find((v) => !v.live) || clean[0]);
     const top5 = clean.slice(0, 5).map((v) => `[${v.score}] ${v.title.slice(0,40)} live:${v.live}`).join(' | ');
     console.log(`[video:resolve] top5 after clean: ${top5}`);
-    res.json({ best, candidates: clean.slice(0, 25) });
+    res.json({ best, candidates: clean.slice(0, 25), _debug: debug });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
@@ -435,7 +557,56 @@ router.get('/search', authRequired, async (req, res) => {
     // 过滤被拉黑的视频源
     const blocked = getBlockedSet(req.user.id, sk, 'video');
     const clean = ranked.filter((v) => !blocked.has(v.bvid));
-    res.json({ candidates: clean });
+
+    // 手动搜索的 debug（精简版）
+    const segs = nameSegments(songName);
+    const afterSegFilter = [];
+    const filteredOut = [];
+    if (segs.length) {
+      for (const v of all) {
+        const t = (v.title || '').toLowerCase();
+        if (segs.some(s => t.includes(s.toLowerCase()))) afterSegFilter.push(v);
+        else filteredOut.push(v);
+      }
+    } else { afterSegFilter.push(...all); }
+    const parts = singerParts(songSinger);
+    let singerFilterCount = afterSegFilter.length;
+    const singerOkSamples = [], singerNotOkSamples = [];
+    if (parts.length) {
+      const so = [], sno = [];
+      for (const v of afterSegFilter) {
+        if (matchSinger(v, parts)) so.push(v); else sno.push(v);
+      }
+      if (so.length) {
+        singerFilterCount = so.length;
+        singerOkSamples.push(...so.map(v => ({ title: v.title, author: v.author || '' })));
+        singerNotOkSamples.push(...sno.map(v => ({ title: v.title, author: v.author || '' })));
+      }
+    }
+    const debug = {
+      input: { searchKw, name: songName, singer: songSinger },
+      totalRaw: all.length,
+      rankDebug: {
+        segs: [...segs],
+        beforeSegFilter: all.length,
+        afterSegFilter: afterSegFilter.length,
+        afterSegSamples: afterSegFilter.map(v => ({ title: v.title, author: v.author || '' })),
+        filteredOutSamples: filteredOut.map(v => ({ title: v.title, author: v.author || '' })),
+        singerParts: [...parts],
+        singerFiltered: parts.length > 0 && singerFilterCount !== afterSegFilter.length,
+        afterSingerFilter: singerFilterCount,
+        singerOkSamples,
+        singerNotOkSamples,
+        scoredCount: ranked.length,
+      },
+      topSamples: ranked.slice(0, 5).map(v => {
+        const bd = scoreBreakdown(v, songName, songSinger, 0);
+        return { bvid: v.bvid, title: v.title.slice(0, 60), author: v.author || '', play: v.play || 0, duration: v.duration, score: v.score, live: v.live, singerOk: v.singerOk, breakdown: bd };
+      }),
+      blockedCount: blocked.size,
+      cleanCount: clean.length,
+    };
+    res.json({ candidates: clean, _debug: debug });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
