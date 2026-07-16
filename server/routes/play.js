@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { execFile } from 'node:child_process';
 import { authRequired } from '../middleware/auth.js';
-import { searchVideos, getAudioStream, fetchAudio, getVideoPages, getVideoTitle, evictAudioStream } from '../services/bilibili.js';
+import { searchVideos, getAudioStream, fetchAudio, getVideoPages, getVideoTitle, getVideoInfo, stripHtml, evictAudioStream } from '../services/bilibili.js';
 import { config } from '../config.js';
 import db from '../db.js';
 import { getCrowdCompletions, crowdBonus } from '../services/crowd.js';
@@ -536,13 +536,19 @@ router.get('/search', authRequired, async (req, res) => {
   try {
     const searchKw = keyword || `${songName} ${songSinger}`;
     // 搜索 2 页并行（共 40 条），增加候选丰富度
-    const [r1, r2] = await Promise.allSettled([
+    const searches = [
       searchVideos(searchKw, 1, 20),
       searchVideos(searchKw, 2, 20),
-    ]);
+    ];
+    // 追加纯歌名搜索：覆盖标题只含歌名不含歌手的翻唱视频（如「邓紫棋翻唱王菲【我愿意】」）
+    if (songName && songName !== searchKw) {
+      searches.push(searchVideos(songName, 1, 20));
+      searches.push(searchVideos(songName, 2, 20));
+    }
+    const results = await Promise.allSettled(searches);
     const seen = new Set();
     const all = [];
-    for (const r of [r1, r2]) {
+    for (const r of results) {
       if (r.status !== 'fulfilled') continue;
       for (const v of r.value) {
         if (seen.has(v.bvid)) continue;
@@ -607,6 +613,22 @@ router.get('/search', authRequired, async (req, res) => {
       cleanCount: clean.length,
     };
     res.json({ candidates: clean, _debug: debug });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+/**
+ * 查询单个视频元数据（换源弹窗补查当前播放 bvid 用）
+ * GET /api/play/video?bvid=BVxxx
+ */
+router.get('/video', authRequired, async (req, res) => {
+  const { bvid } = req.query;
+  if (!bvid) return res.status(400).json({ error: '缺少 bvid' });
+  try {
+    const info = await getVideoInfo(bvid);
+    if (!info) return res.status(404).json({ error: '视频不存在' });
+    res.json(info);
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

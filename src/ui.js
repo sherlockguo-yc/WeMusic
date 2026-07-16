@@ -100,8 +100,20 @@ export async function openCandModal() {
       if (r._debug) state.current._debug = r._debug;
     } catch (e) { list.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   }
-  const songKey = `${state.current.name}__${state.current.singer || ''}`;
+
+  // 确保当前播放的 bvid 始终在候选列表中（防止搜索漏召，如分享链接预设了 bvid）
   const currentBvid = state.current.bvid || '';
+  if (currentBvid && !candidates.some(c => c.bvid === currentBvid)) {
+    try {
+      const info = await api(`/play/video?bvid=${encodeURIComponent(currentBvid)}`);
+      if (info) {
+        info._fetched = true; // 标记为单独补查的，便于后续排查
+        candidates = [info, ...candidates];
+      }
+    } catch { /* 静默：搜不到比完全没有好 */ }
+  }
+
+  const songKey = `${state.current.name}__${state.current.singer || ''}`;
 
   // 拉取用户已屏蔽的源（含 metadata）
   const blockedList = await fetchBlockedList(api, songKey, 'video');

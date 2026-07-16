@@ -252,6 +252,30 @@ export async function getVideoTitle(bvid) {
   return json?.data?.title || '';
 }
 
+/** 获取视频完整元数据（换源弹窗补查当前 bvid 用） */
+export async function getVideoInfo(bvid) {
+  const res = await fetch(
+    `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`,
+    { headers: { 'User-Agent': UA, Referer: 'https://www.bilibili.com/' } }
+  );
+  const json = await res.json();
+  const v = json?.data;
+  if (!v) return null;
+  return {
+    bvid: v.bvid || bvid,
+    aid: v.aid,
+    title: stripHtml(v.title || ''),
+    author: v.owner?.name || '',
+    mid: v.owner?.mid,
+    duration: v.duration || 0,
+    play: v.stat?.view || 0,
+    danmaku: v.stat?.danmaku || 0,
+    pic: v.pic ? (v.pic.startsWith('http') ? v.pic : `https:${v.pic}`) : '',
+    arcurl: `https://www.bilibili.com/video/${bvid}`,
+    pubdate: v.pubdate || 0,
+  };
+}
+
 /**
  * 通过 WBI 签名接口获取 DASH 纯音频流（高音质、体积小，但对游客易被 412 风控）。
  */
