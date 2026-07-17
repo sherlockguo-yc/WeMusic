@@ -263,6 +263,8 @@ button.topbar-btn {
 
 /* 列表 */
 .section-head { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 10px; }
+.offline-section-head { justify-content: flex-start; align-items: stretch; gap: calc(var(--font-size) * 0.5); }
+.offline-section-head h2 { display: flex; align-items: center; }
 .section-head.album-head { justify-content: flex-start; gap: 14px; }
 .section-head h2 { font-size: 16px; }
 .song-list { display: flex; flex-direction: column; gap: 2px; }
@@ -294,12 +296,13 @@ button.topbar-btn {
 .cache-badge svg { width: 13px; height: 13px; }
 
 /* 离线缓存页面 & 设置页：离线缓存管理区 */
-.offline-page-bar { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--font-size) * 0.5); margin: var(--font-size) 0 calc(var(--font-size) * 0.8); }
+.offline-page-bar { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--font-size) * 0.5); margin: calc(var(--font-size) * 0.4) 0 calc(var(--font-size) * 0.8); }
+.offline-page-bar .view-sub { display: inline-flex; align-items: center; flex-wrap: wrap; gap: calc(var(--font-size) * 0.15); margin: 0; }
 .offline-page-list { display: flex; flex-direction: column; gap: calc(var(--font-size) * 0.4); }
 .offline-bar { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--font-size) * 0.5); margin-bottom: 6px; }
-.offline-stat { display: flex; align-items: center; gap: 6px; font-size: var(--font-size); color: var(--text); }
-.offline-stat #offlineUsed { color: var(--accent); font-weight: 600; }
-.offline-limit-sel { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px 6px; font-size: var(--font-size); cursor: pointer; }
+.offline-stat { display: flex; align-items: center; gap: 4px; font-size: var(--font-size); color: var(--text); }
+.offline-stat .offline-used { color: var(--accent); font-weight: 600; }
+.offline-limit-sel { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 6px; font-size: var(--font-size); cursor: pointer; height: auto; vertical-align: middle; }
 .offline-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .offline-head { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 6px; cursor: pointer; color: var(--text); font-size: var(--font-size); user-select: none; }
 .offline-head:hover { color: var(--accent); }
@@ -307,7 +310,8 @@ button.topbar-btn {
 .offline-head .offline-chevron svg { flex-shrink: 0; }
 .offline-list-wrap { margin-top: 4px; }
 .offline-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
-.offline-item { display: flex; align-items: center; gap: calc(var(--font-size) * 0.6); padding: calc(var(--font-size) * 0.5) calc(var(--font-size) * 0.6); border: 1px solid var(--border); border-radius: var(--radius); font-size: var(--font-size); }
+.offline-item { display: flex; align-items: center; gap: calc(var(--font-size) * 0.6); padding: calc(var(--font-size) * 0.5) calc(var(--font-size) * 0.6); border: 1px solid var(--border); border-radius: var(--radius); font-size: var(--font-size); cursor: pointer; }
+.offline-item:hover { border-color: var(--accent); background: var(--bg-soft); }
 .offline-item .oi-cover { width: 40px; height: 40px; border-radius: var(--radius); object-fit: cover; flex-shrink: 0; background: var(--bg-soft); }
 .offline-item .oi-cover-ph { width: 40px; height: 40px; border-radius: var(--radius); background: var(--bg-soft); display: flex; align-items: center; justify-content: center; color: var(--text-dim); flex-shrink: 0; }
 .offline-item .oi-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -320,6 +324,9 @@ button.topbar-btn {
 .offline-item .oi-remove { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: calc(var(--font-size) * 2); height: calc(var(--font-size) * 2); border: none; background: transparent; color: var(--text-dim); border-radius: var(--radius); cursor: pointer; padding: 0; }
 .offline-item .oi-remove:hover { color: var(--danger); background: var(--bg-soft); }
 .offline-item .oi-remove svg { flex-shrink: 0; }
+.offline-item .oi-item-ops { display: flex; align-items: center; gap: calc(var(--font-size) * 0.4); flex-shrink: 0; }
+.offline-item .oi-pin-btn { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.offline-item .oi-pin-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
 .song-row .ops { display: flex; gap: 6px; justify-content: flex-start; }
 .icon-btn {
   width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);

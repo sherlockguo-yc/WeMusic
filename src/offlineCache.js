@@ -116,7 +116,7 @@ export async function findBvidBySong(name, singer) {
 //  - 已有钉住 + 本次钉住 → 重写（更新 videoSource/lyrics）
 //  - 已有被动 + 本次被动 → 同态，跳过
 //  - 无音频 → 抓取整包
-// 抓取歌词整包用于离线落盘：返回 { lines, candidates, sourceId, song, artist }。
+// 抓取歌词整包用于离线落盘：返回 { lines, candidates, sourceId, song, artist, album_mid }。
 // 失败静默返回 null（不阻断音频落盘）。
 export async function fetchLyricsForOffline(name, singer) {
   try {
@@ -128,6 +128,7 @@ export async function fetchLyricsForOffline(name, singer) {
       sourceId: data.sourceId || null,
       song: data.song || null,
       artist: data.artist || null,
+      album_mid: data.album_mid || '',
     };
   } catch (e) {
     console.warn('[offline] 抓取歌词失败', name, singer, e.message);
@@ -136,6 +137,11 @@ export async function fetchLyricsForOffline(name, singer) {
 }
 
 export async function fetchAndStore(bvid, token, { pinned = false, videoSource = null, lyrics = null, song = null } = {}) {
+  // 如果歌词元数据里有 album_mid，充实到 song 对象上（离线页封面依赖此字段）
+  const enrichSong = (s, resolvedLyrics) => {
+    if (s && !s.album_mid && resolvedLyrics?.album_mid) return { ...s, album_mid: resolvedLyrics.album_mid };
+    return s;
+  };
   const existing = await get(bvid);
   if (existing && existing.audio) {
     if (existing.pinned && !pinned) {
@@ -149,7 +155,7 @@ export async function fetchAndStore(bvid, token, { pinned = false, videoSource =
       // 被动升级主动缓存：复用音频；lyrics 复用已有，或按需抓取
       const resolvedLyrics = lyrics !== null ? lyrics
         : (song && song.name ? await fetchLyricsForOffline(song.name, song.singer) : existing.lyrics || null);
-      const entry = { ...existing, pinned: true, videoSource, lyrics: resolvedLyrics, song: song || existing.song || null, lastAccessed: Date.now() };
+      const entry = { ...existing, pinned: true, videoSource, lyrics: resolvedLyrics, song: enrichSong(song || existing.song || null, resolvedLyrics), lastAccessed: Date.now() };
       await put(entry);
       return entry;               // 被动升级主动缓存，复用音频
     }
@@ -157,7 +163,7 @@ export async function fetchAndStore(bvid, token, { pinned = false, videoSource =
       // 已是主动缓存，复用音频，仅更新元数据（不重抓）
       const resolvedLyrics = lyrics !== null ? lyrics
         : (song && song.name ? await fetchLyricsForOffline(song.name, song.singer) : existing.lyrics || null);
-      const entry = { ...existing, videoSource, lyrics: resolvedLyrics, song: song || existing.song || null, lastAccessed: Date.now() };
+      const entry = { ...existing, videoSource, lyrics: resolvedLyrics, song: enrichSong(song || existing.song || null, resolvedLyrics), lastAccessed: Date.now() };
       await put(entry);
       return entry;
     }
@@ -170,7 +176,7 @@ export async function fetchAndStore(bvid, token, { pinned = false, videoSource =
   const resolvedLyrics = lyrics !== null ? lyrics
     : (song && song.name ? await fetchLyricsForOffline(song.name, song.singer) : null);
   const entry = {
-    key: bvid, audio: blob, videoSource, lyrics: resolvedLyrics, song: song || null,
+    key: bvid, audio: blob, videoSource, lyrics: resolvedLyrics, song: enrichSong(song || null, resolvedLyrics),
     pinned, lastAccessed: Date.now(), size: blob.size, createdAt: Date.now(),
   };
   await put(entry);

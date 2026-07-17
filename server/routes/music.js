@@ -90,6 +90,32 @@ router.get('/song-background', async (req, res) => {
   }
 });
 
+// 批量反查 album_mid（离线页存量回填）
+router.post('/album-backfill', async (req, res) => {
+  const { items } = req.body || {};
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: '请提供 items 数组' });
+  try {
+    const results = await Promise.all(items.map(async (it) => {
+      const { sourceId, name, singer } = it;
+      if (!sourceId || !name) return { sourceId, album_mid: '' };
+      try {
+        // 用歌名+歌手搜 smartbox，取第一首匹配的 album_mid
+        const kw = singer ? `${name} ${singer.split('/')[0]}` : name;
+        const url = 'https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?format=json&key=' + encodeURIComponent(kw);
+        const json = await (await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' } })).json();
+        const songs = json?.data?.song?.itemlist || [];
+        const matched = songs.find(s => s.name?.toLowerCase() === name.toLowerCase()) || songs[0];
+        return { sourceId, album_mid: matched?.albummid || '' };
+      } catch {
+        return { sourceId, album_mid: '' };
+      }
+    }));
+    res.json({ results });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // 解析歌单链接（自动识别 QQ 音乐 / 网易云音乐）
 router.post('/parse-playlist', async (req, res) => {
   const { url } = req.body || {};

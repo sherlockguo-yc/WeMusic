@@ -23,6 +23,7 @@ export default class QQLyricsProvider extends LyricsProvider {
         rawId: s.mid,
         name: s.name,
         artist: s.singer || '',
+        album_mid: s.albummid || '',
         _raw: s,
       }));
     } catch {

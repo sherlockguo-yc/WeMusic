@@ -189,6 +189,7 @@ async function searchQQCandidates(name, singer = '') {
         rawId: mid, mid,
         name: s.name,
         artist: s.artist,
+        album_mid: s.album_mid || s._raw?.albummid || '',
         quality: quality + bonus,
         source: LyricsSource.QQ,
       });
@@ -356,7 +357,7 @@ export async function searchLyricsCandidates(name, singer = '') {
     verified.push({ ...c, raw });
   }
   console.log(`[lyrics:candidates] verified: ${verified.length} valid, ${emptyCount} empty, failed:${lyricResults.filter(r => r.status === 'rejected').length}`);
-  return verified.slice(0, 12).map((c) => ({ id: c.id, name: c.name, artist: c.artist, quality: c.quality, source: c.source }));
+  return verified.slice(0, 12).map((c) => ({ id: c.id, name: c.name, artist: c.artist, quality: c.quality, source: c.source, album_mid: c.album_mid || '' }));
 }
 
 /**

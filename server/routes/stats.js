@@ -773,6 +773,10 @@ router.get('/lyrics', async (req, res) => {
       const resp = { ...cached };
       // 过滤掉被拉黑的歌词源
       if (resp.candidates) resp.candidates = resp.candidates.filter((c) => !blockedIds.includes(String(c.id)));
+      // 旧缓存可能没有 album_mid，从候选人中补全
+      if (!resp.album_mid && resp.sourceId && resp.candidates?.length) {
+        resp.album_mid = (resp.candidates.find(c => String(c.id) === String(resp.sourceId)) || {}).album_mid || '';
+      }
       // 若主 sourceId 被屏蔽，从 cleanCandidates 中取最优替代并重新拉取歌词
       if (resp.sourceId && blockedIds.includes(String(resp.sourceId))) {
         const replacement = resp.candidates?.[0];
@@ -827,7 +831,7 @@ router.get('/lyrics', async (req, res) => {
     }
 
     const result = finalMain
-      ? { ...finalMain, candidates: cleanCandidates }
+      ? { ...finalMain, candidates: cleanCandidates, album_mid: (cleanCandidates.find(c => String(c.id) === String(finalMain.sourceId)) || {}).album_mid || '' }
       : {
           lines: [],
           candidates: cleanCandidates,
