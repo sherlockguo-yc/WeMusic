@@ -101,6 +101,14 @@ export async function statusOf(bvid) {
   return e.pinned ? 'pinned' : 'temp';
 }
 
+// 当 song.bvid 缺失时，按歌名+歌手降级匹配 IndexedDB 中的缓存条目，返回 bvid
+export async function findBvidBySong(name, singer) {
+  if (!name) return null;
+  const all = await list();
+  const entry = all.find(e => e.song?.name === name && e.song?.singer === singer && e.audio);
+  return entry?.key || null;
+}
+
 // 落盘：经同源代理抓取完整字节。
 // 关键规则（防"听过即存"误降级用户钉住项）：
 //  - 已有钉住 + 本次被动 → 保留钉住，仅刷新 lastAccessed，不重抓、不降级

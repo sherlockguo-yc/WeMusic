@@ -82,7 +82,7 @@ export async function loadPlaylists() {
 }
 
 export function setActiveNav(id) {
-  ['navDiscover', 'navHistory', 'navStats', 'navLikes', 'navSavedAlbums'].forEach((n) => {
+  ['navDiscover', 'navHistory', 'navStats', 'navLikes', 'navSavedAlbums', 'navOffline'].forEach((n) => {
     const el = $(n); if (el) el.classList.toggle('active', n === id);
   });
 }
@@ -274,19 +274,28 @@ export function renderSongList(container, songs, opts = {}) {
     const i = Number(row.dataset.i);
     row.onclick = () => import('./player.js').then(({ playFromList }) => playFromList(songs, i, context, playlistId));
     row.querySelectorAll('[data-act]').forEach((btn) => {
-      btn.onclick = (e) => {
+      btn.onclick = async (e) => {
         e.stopPropagation();
         const act = btn.dataset.act;
         if (act === 'more') {
           // 显示 "..." 更多菜单
           const song = songs[i];
+          // 当 song.bvid 缺失时，按歌名+歌手降级匹配 IndexedDB 缓存
+          let effectiveBvid = song.bvid || '';
+          if (!effectiveBvid && song.name) {
+            try {
+              const { findBvidBySong } = await import('./offlineCache.js');
+              effectiveBvid = await findBvidBySong(song.name, song.singer) || '';
+            } catch { /* 查询失败不影响菜单 */ }
+          }
+          const hasBvid = !!effectiveBvid;
           const rect = btn.getBoundingClientRect();
           const menu = document.getElementById('ctxMenu');
           const items = [
             showAdd ? { act: 'add', label: `${ADD_ICON} 添加到歌单` } : null,
             song.song_mid ? { act: 'share', label: `${SHARE_ICON} 分享` } : null,
             showDelete ? { act: 'del', label: `${DEL_ICON} 从歌单移除`, danger: true } : null,
-            { act: 'cacheoffline', label: `${CACHE_ICON} 缓存到本地`, dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
+            { act: 'cacheoffline', label: `${CACHE_ICON} 缓存到本地`, dim: !hasBvid, dimTip: '请先播放一次以匹配资源' },
           ].filter(Boolean);
           menu.innerHTML = items.map((it) =>
             `<div class="ctx-item${it.danger ? ' danger' : ''}${it.dim ? ' dim' : ''}" data-act="${it.act}"${it.dimTip ? ` data-dim-tip="${esc(it.dimTip)}"` : ''}>${it.label}</div>`
@@ -306,7 +315,7 @@ export function renderSongList(container, songs, opts = {}) {
               else if (a === 'cacheoffline') {
                 import('./offlineCache.js').then(({ fetchAndStore }) => {
                   toast('正在缓存到本地…');
-                  fetchAndStore(song.bvid, Auth.token, { pinned: true, videoSource: { bvid: song.bvid }, lyrics: null, song: { name: song.name, singer: song.singer } })
+                  fetchAndStore(effectiveBvid, Auth.token, { pinned: true, videoSource: { bvid: effectiveBvid }, lyrics: null, song: { name: song.name, singer: song.singer, album_mid: song.album_mid } })
                     .then(() => { toast('已缓存到本地'); window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
                     .catch(e => toast('缓存失败：' + e.message));
                 });

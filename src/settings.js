@@ -1,6 +1,5 @@
 // ---------------- 主题、设置面板、Sleep Timer、侧边栏拖拽 ----------------
-import { $, toast, debounce, esc, X_ICON, CHEVRON_RIGHT, CHEVRON_DOWN, CACHE_ICON, PIN_ICON } from './utils.js';
-import * as offline from './offlineCache.js';
+import { $, toast, debounce, esc } from './utils.js';
 import { Auth, api } from './api.js';
 import { state } from './state.js';
 
@@ -56,6 +55,9 @@ const FONTS = {
   rounded: '"SF Pro Rounded", "PingFang SC", -apple-system, system-ui, sans-serif',
   hei:     '"Hiragino Sans GB", "PingFang SC", "Microsoft YaHei", "STHeiti", sans-serif',
   kai:     '"KaiTi", "STKaiti", "TW-Kai", "BiauKai", serif',
+  'zcool-kuaile':  '"ZCOOL KuaiLe", "PingFang SC", "Microsoft YaHei", sans-serif',
+  'zcool-qingke':  '"ZCOOL QingKe HuangYou", "KaiTi", "STKaiti", serif',
+  'ma-shan-zheng': '"Ma Shan Zheng", "KaiTi", "STKaiti", serif',
 };
 
 export function applyFont(key) {
@@ -69,16 +71,11 @@ applyFont(localStorage.getItem('wemusic_font') || 'default');
 
 const PALETTES = {
   green:            '#2ab758',
-  'klein-blue':     '#002FA7',
   burgundy:         '#800020',
   'mummy-brown':    '#8F4B28',
   'prussian-blue':  '#003153',
-  'bondi-blue':     '#0095B6',
   'titian-red':     '#B05923',
-  'matte-haze-blue':'#4A4E69',
   'cream-oat':      '#F2E9E4',
-  'deep-business-blue': '#003366',
-  'tech-blue':      '#0066CC',
   'matte-gold':     '#D4AF37',
   charcoal:         '#222222',
   'deep-gray':      '#444444',
@@ -602,66 +599,6 @@ export async function openSettings() {
   }
 
   updateSleepHint();
-
-  // 离线缓存管理区
-  try {
-    // 一次性迁移旧条目：补全 song 字段，无法回填的自动删除
-    const mig = await offline.migrateOldEntries();
-    if (mig.updated || mig.deleted) {
-      console.log('[offline] 迁移完成:', JSON.stringify(mig));
-      if (mig.deleted) toast(`已清理 ${mig.deleted} 条无歌名旧缓存`);
-    }
-    const renderOffline = async () => {
-      const s = await offline.stats();
-      $('offlineUsed').textContent = (s.used / 1024 / 1024 / 1024).toFixed(2) + ' GB';
-      const items = await offline.list();
-      $('offlineCount').textContent = items.length;
-      $('offlineList').innerHTML = items.length ? items.map(e => {
-        // 多级回退取歌名：显式 song → 歌词包内 song → 视频源标题 → BV 号
-        const name = e.song?.name || e.lyrics?.song?.name || e.videoSource?.title || e.key;
-        const sub = e.song?.singer || e.lyrics?.song?.artist || '';
-        // 源信息标签
-        const srcLabel = 'B站音频';
-        const lyrLabel = e.lyrics ? (e.lyrics.sourceId || '已缓存') : '无';
-        const statusTag = e.pinned
-          ? `<span class="oi-status pinned">${PIN_ICON} 本地缓存</span>`
-          : `<span class="oi-status temp">${CACHE_ICON} 自动缓存</span>`;
-        return `
-        <div class="offline-item">
-          <div class="oi-text">
-            <span class="oi-name">${esc(name)}</span>
-            <span class="oi-sub">${sub ? esc(sub) + ' · ' : ''}${esc(srcLabel)} · 歌词 ${esc(lyrLabel)} · ${statusTag}</span>
-          </div>
-          <button class="oi-remove" data-del="${esc(e.key)}" title="从离线缓存移除" aria-label="移除">${X_ICON}</button>
-        </div>`;
-      }).join('') : '<div class="empty">暂无离线缓存</div>';
-      $('offlineList').querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
-        await offline.remove(b.dataset.del);
-        window.dispatchEvent(new CustomEvent('offline_cache_changed'));
-        renderOffline();
-      });
-    };
-    // 缓存列表默认折叠，点击标题展开/收起（状态不随重新渲染重置）
-    const head = $('offlineHead');
-    const wrap = $('offlineListWrap');
-    const setFold = (open) => {
-      if (open) { wrap.removeAttribute('hidden'); head.setAttribute('aria-expanded', 'true'); head.querySelector('.offline-chevron').innerHTML = CHEVRON_DOWN; }
-      else { wrap.setAttribute('hidden', ''); head.setAttribute('aria-expanded', 'false'); head.querySelector('.offline-chevron').innerHTML = CHEVRON_RIGHT; }
-    };
-    head.onclick = () => setFold(wrap.hasAttribute('hidden'));
-    head.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFold(wrap.hasAttribute('hidden')); } };
-    await renderOffline();
-    const limitSel = $('offlineLimitSel');
-    if (limitSel) {
-      limitSel.value = String(Math.round(offline.getLimitBytes() / 1024 / 1024 / 1024));
-      limitSel.onchange = () => { offline.setLimitBytes(Number(limitSel.value) * 1024 ** 3); renderOffline(); };
-    }
-    $('offlineClearAuto').onclick = async () => { await offline.clearAuto(); renderOffline(); toast('已清空自动缓存'); };
-    $('offlineClearAll').onclick = async () => {
-      const { uiConfirm } = await import('./utils.js');
-      if (await uiConfirm('确定清空全部离线缓存（含主动缓存）？')) { await offline.clearAll(); renderOffline(); toast('已清空全部'); }
-    };
-  } catch (e) { console.warn('离线缓存面板渲染失败', e); }
 
   // 定时停止按钮
   const customWrap = $('sleepCustomWrap');

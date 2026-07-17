@@ -17,6 +17,10 @@
   <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="/css/admin.css" />
+  <!-- 艺术字体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=ZCOOL+QingKe+HuangYou&family=Ma+Shan+Zheng&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div class="app">
@@ -30,6 +34,7 @@
         <div class="side-nav-item" id="navStats" title="我的数据"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg> 我的数据</div>
         <div class="side-nav-item" id="navLikes" title="我喜欢的"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 我喜欢的</div>
         <div class="side-nav-item" id="navSavedAlbums" title="我的专辑"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg> 我的专辑</div>
+        <div class="side-nav-item" id="navOffline" title="离线缓存"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg> 离线缓存</div>
         
       </div>
       <div class="side-section">
@@ -361,27 +366,6 @@
             </div>
           </div>
         </div>
-        <div class="settings-section" id="offlineSection">
-          <div class="settings-label">离线缓存</div>
-          <div class="offline-bar">
-            <div class="offline-stat"><span id="offlineUsed">0 MB</span> / <select id="offlineLimitSel" class="offline-limit-sel">
-              <option value="2">2 GB</option>
-              <option value="5">5 GB</option>
-              <option value="10">10 GB</option>
-            </select></div>
-            <div class="offline-actions">
-              <button class="btn sm" id="offlineClearAuto">清空自动缓存</button>
-              <button class="btn sm blue" id="offlineClearAll">清空全部</button>
-            </div>
-          </div>
-          <div class="offline-head" id="offlineHead" role="button" tabindex="0" aria-expanded="false">
-            <span class="offline-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
-            <span>已缓存 <span id="offlineCount">0</span> 首</span>
-          </div>
-          <div class="offline-list-wrap" id="offlineListWrap" hidden>
-            <div class="offline-list" id="offlineList"></div>
-          </div>
-        </div>
         <div class="settings-section">
           <div class="settings-label">配色方案</div>
           <div class="settings-row theme-options">
@@ -393,16 +377,16 @@
           <div class="palette-section-label">系统颜色</div>
           <div class="settings-row palette-options" id="systemPalettes">
             <label class="palette-item active" data-palette="green"><span class="palette-swatch" style="background:#2ab758"></span><span class="palette-name">森林绿</span></label>
-            <label class="palette-item" data-palette="klein-blue"><span class="palette-swatch" style="background:#002FA7"></span><span class="palette-name">克莱因蓝</span></label>
+
             <label class="palette-item" data-palette="burgundy"><span class="palette-swatch" style="background:#800020"></span><span class="palette-name">勃艮第酒红</span></label>
             <label class="palette-item" data-palette="mummy-brown"><span class="palette-swatch" style="background:#8F4B28"></span><span class="palette-name">木乃伊棕</span></label>
             <label class="palette-item" data-palette="prussian-blue"><span class="palette-swatch" style="background:#003153"></span><span class="palette-name">普鲁士蓝</span></label>
-            <label class="palette-item" data-palette="bondi-blue"><span class="palette-swatch" style="background:#0095B6"></span><span class="palette-name">邦迪海水蓝</span></label>
+
             <label class="palette-item" data-palette="titian-red"><span class="palette-swatch" style="background:#B05923"></span><span class="palette-name">复古提香橙红</span></label>
-            <label class="palette-item" data-palette="matte-haze-blue"><span class="palette-swatch" style="background:#4A4E69"></span><span class="palette-name">哑光雾霾蓝</span></label>
+
             <label class="palette-item" data-palette="cream-oat"><span class="palette-swatch" style="background:#F2E9E4"></span><span class="palette-name">奶油燕麦</span></label>
-            <label class="palette-item" data-palette="deep-business-blue"><span class="palette-swatch" style="background:#003366"></span><span class="palette-name">深海商务蓝</span></label>
-            <label class="palette-item" data-palette="tech-blue"><span class="palette-swatch" style="background:#0066CC"></span><span class="palette-name">标准科技蓝</span></label>
+
+
             <label class="palette-item" data-palette="matte-gold"><span class="palette-swatch" style="background:#D4AF37"></span><span class="palette-name">哑光金</span></label>
             <label class="palette-item" data-palette="charcoal"><span class="palette-swatch" style="background:#222222"></span><span class="palette-name">炭黑灰</span></label>
             <label class="palette-item" data-palette="deep-gray"><span class="palette-swatch" style="background:#444444"></span><span class="palette-name">中性深灰</span></label>
@@ -468,6 +452,9 @@
             <button class="font-opt" data-font="rounded">圆体风格</button>
             <button class="font-opt" data-font="hei">冬青黑体</button>
             <button class="font-opt" data-font="kai">楷体</button>
+            <button class="font-opt" data-font="zcool-kuaile">站酷快乐体</button>
+            <button class="font-opt" data-font="zcool-qingke">站酷庆科体</button>
+            <button class="font-opt" data-font="ma-shan-zheng">马山正体</button>
           </div>
         </div>
         <div class="settings-section">

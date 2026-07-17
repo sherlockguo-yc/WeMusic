@@ -12,4 +12,5 @@ export function initStats() {
     const el = $('navSavedAlbums');
     if (el) el.addEventListener('click', openSavedAlbums);
   });
+  import('./offline-page.js').then(({ openOfflinePage }) => { $('navOffline').onclick = openOfflinePage; });
 }

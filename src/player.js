@@ -919,7 +919,7 @@ function _setPlayStatus() {
 // 边播边后台落盘（被动，pinned=false）；失败静默。完成后广播刷新角标。
 function _cacheCurrent(bvid) {
   const cur = state.current;
-  const song = cur && cur.name ? { name: cur.name, singer: cur.singer } : null;
+  const song = cur && cur.name ? { name: cur.name, singer: cur.singer, album_mid: cur.album_mid } : null;
   offline.fetchAndStore(bvid, Auth.token, { pinned: false, videoSource: { bvid }, song })
     .then(() => { window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
     .catch(e => console.warn('[offline] 后台缓存失败', bvid, e.message));

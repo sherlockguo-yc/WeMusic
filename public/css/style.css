@@ -293,7 +293,9 @@ button.topbar-btn {
 .cache-badge.temp   { color: var(--text-dim); opacity: 0.7; } /* 被动临时：弱化（灰度） */
 .cache-badge svg { width: 13px; height: 13px; }
 
-/* 设置页：离线缓存管理区 */
+/* 离线缓存页面 & 设置页：离线缓存管理区 */
+.offline-page-bar { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--font-size) * 0.5); margin: var(--font-size) 0 calc(var(--font-size) * 0.8); }
+.offline-page-list { display: flex; flex-direction: column; gap: calc(var(--font-size) * 0.4); }
 .offline-bar { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--font-size) * 0.5); margin-bottom: 6px; }
 .offline-stat { display: flex; align-items: center; gap: 6px; font-size: var(--font-size); color: var(--text); }
 .offline-stat #offlineUsed { color: var(--accent); font-weight: 600; }
@@ -306,6 +308,8 @@ button.topbar-btn {
 .offline-list-wrap { margin-top: 4px; }
 .offline-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .offline-item { display: flex; align-items: center; gap: calc(var(--font-size) * 0.6); padding: calc(var(--font-size) * 0.5) calc(var(--font-size) * 0.6); border: 1px solid var(--border); border-radius: var(--radius); font-size: var(--font-size); }
+.offline-item .oi-cover { width: 40px; height: 40px; border-radius: var(--radius); object-fit: cover; flex-shrink: 0; background: var(--bg-soft); }
+.offline-item .oi-cover-ph { width: 40px; height: 40px; border-radius: var(--radius); background: var(--bg-soft); display: flex; align-items: center; justify-content: center; color: var(--text-dim); flex-shrink: 0; }
 .offline-item .oi-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .offline-item .oi-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .offline-item .oi-sub { font-size: calc(var(--font-size) * 0.82); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

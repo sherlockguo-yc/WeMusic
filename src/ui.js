@@ -8,8 +8,17 @@ export function closeCtxMenu() { $('ctxMenu').classList.remove('show'); }
 document.addEventListener('click', closeCtxMenu);
 document.addEventListener('scroll', closeCtxMenu, true);
 
-export function openSongMenu(evt, songs, i, context, playlistId, row) {
+export async function openSongMenu(evt, songs, i, context, playlistId, row) {
   const song = songs[i]; if (!song) return;
+  // 当 song.bvid 缺失时，按歌名+歌手降级匹配 IndexedDB 缓存（自动缓存过的歌刷新后 bvid 丢失，但仍可钉住）
+  let effectiveBvid = song.bvid || '';
+  if (!effectiveBvid && song.name) {
+    try {
+      const { findBvidBySong } = await import('./offlineCache.js');
+      effectiveBvid = await findBvidBySong(song.name, song.singer) || '';
+    } catch { /* 查询失败不影响菜单，继续按无 bvid 处理 */ }
+  }
+  const hasBvid = !!effectiveBvid;
   const menu = $('ctxMenu');
   const inPlaylist = context === 'playlist';
   const items = [
@@ -18,10 +27,10 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
     { label: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 添加到歌单', act: 'add' },
     { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> 分享', act: 'share', dim: !song.song_mid, dimTip: '该歌曲不支持分享' },
     { sep: true },
-    { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 复制 Bilibili 链接', act: 'copy', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
+    { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 复制 Bilibili 链接', act: 'copy', dim: !hasBvid, dimTip: '请先播放一次以匹配资源' },
     { label: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> 在 Bilibili 搜索此歌', act: 'search' },
     { sep: true },
-    { label: CACHE_ICON + ' 缓存到本地', act: 'cacheoffline', dim: !song.bvid, dimTip: '请先播放一次以匹配资源' },
+    { label: CACHE_ICON + ' 缓存到本地', act: 'cacheoffline', dim: !hasBvid, dimTip: '请先播放一次以匹配资源' },
   ];
   if (inPlaylist) items.push({ sep: true }, { label: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 从歌单移除', act: 'del', danger: true });
   menu.innerHTML = items.map((it) =>
@@ -45,7 +54,7 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
       else if (act === 'add') import('./playlist-ui.js').then(({ addSongs }) => addSongs([song]));
       else if (act === 'share') import('./share.js').then(({ openShareModal }) => openShareModal(song));
       else if (act === 'del') import('./playlist-ui.js').then(({ deleteSong }) => deleteSong(playlistId, song.id, row));
-      else if (act === 'copy') copyBiliLink(song);
+      else if (act === 'copy') copyBiliLink(song, effectiveBvid);
       else if (act === 'search') {
         const kw = `${song.name} ${(song.singer || '').split('/')[0]}`.trim();
         window.open(`https://search.bilibili.com/all?keyword=${encodeURIComponent(kw)}`, '_blank');
@@ -53,7 +62,7 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
       else if (act === 'cacheoffline') {
         import('./offlineCache.js').then(({ fetchAndStore }) => {
           toast('正在缓存到本地…');
-          fetchAndStore(song.bvid, Auth.token, { pinned: true, videoSource: { bvid: song.bvid }, lyrics: null, song: { name: song.name, singer: song.singer } })
+          fetchAndStore(effectiveBvid, Auth.token, { pinned: true, videoSource: { bvid: effectiveBvid }, lyrics: null, song: { name: song.name, singer: song.singer, album_mid: song.album_mid } })
             .then(() => { toast('已缓存到本地'); window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
             .catch(e => toast('缓存失败：' + e.message));
         });
@@ -62,9 +71,10 @@ export function openSongMenu(evt, songs, i, context, playlistId, row) {
   });
 }
 
-async function copyBiliLink(song) {
-  if (!song.bvid) return toast('该歌曲尚未匹配资源，先播放一次');
-  const link = `https://www.bilibili.com/video/${song.bvid}`;
+async function copyBiliLink(song, overrideBvid) {
+  const bvid = overrideBvid || song.bvid;
+  if (!bvid) return toast('该歌曲尚未匹配资源，先播放一次');
+  const link = `https://www.bilibili.com/video/${bvid}`;
   try { await navigator.clipboard.writeText(link); toast('已复制 Bilibili 链接'); }
   catch {
     const ta = document.createElement('textarea');
@@ -491,18 +501,27 @@ export function initUI() {
     await toggleDislike(state.current, $('npDislikeBtn'));
     updateNpDislikeBtn();
   };
-  $('npMoreBtn').onclick = (e) => {
+  $('npMoreBtn').onclick = async (e) => {
     e.stopPropagation();
     if (!state.current) return toast('当前没有播放的歌曲');
     const song = state.current;
+    // 当 song.bvid 缺失时，降级匹配 IndexedDB 缓存
+    let effectiveBvid = song.bvid || '';
+    if (!effectiveBvid && song.name) {
+      try {
+        const { findBvidBySong } = await import('./offlineCache.js');
+        effectiveBvid = await findBvidBySong(song.name, song.singer) || '';
+      } catch { /* 查询失败不影响菜单 */ }
+    }
+    const hasBvid = !!effectiveBvid;
     const btn = $('npMoreBtn');
     const rect = btn.getBoundingClientRect();
     const menu = $('ctxMenu');
     menu.innerHTML = `
       <div class="ctx-item" id="ctxNpAdd"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> 添加到歌单</div>
       ${song.song_mid ? `<div class="ctx-item" id="ctxNpShare"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> 分享</div>` : ''}
-      ${song.bvid ? `<div class="ctx-item" id="ctxNpCopy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 复制 Bilibili 链接</div>` : ''}
-      ${song.bvid ? `<div class="ctx-item" id="ctxNpCache">${CACHE_ICON} 缓存到本地</div>` : ''}`;
+      ${hasBvid ? `<div class="ctx-item" id="ctxNpCopy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> 复制 Bilibili 链接</div>` : ''}
+      ${hasBvid ? `<div class="ctx-item" id="ctxNpCache">${CACHE_ICON} 缓存到本地</div>` : ''}`;
     menu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
     menu.style.top = (rect.top - menu.offsetHeight - 4) + 'px';
     menu.classList.add('show');
@@ -510,14 +529,14 @@ export function initUI() {
     const shareBtn = document.getElementById('ctxNpShare');
     if (shareBtn) shareBtn.onclick = () => { menu.classList.remove('show'); import('./share.js').then(({ openShareModal }) => openShareModal(song)); };
     const cpBtn = document.getElementById('ctxNpCopy');
-    if (cpBtn) cpBtn.onclick = () => { menu.classList.remove('show'); copyBiliLink(song); };
+    if (cpBtn) cpBtn.onclick = () => { menu.classList.remove('show'); copyBiliLink(song, effectiveBvid); };
     const cacheBtn = document.getElementById('ctxNpCache');
     if (cacheBtn) cacheBtn.onclick = () => {
       menu.classList.remove('show');
       import('./offlineCache.js').then(({ fetchAndStore }) => {
         toast('正在缓存到本地…');
-        fetchAndStore(song.bvid, Auth.token, { pinned: true, videoSource: { bvid: song.bvid }, lyrics: null, song: { name: song.name, singer: song.singer } })
-          .then(() => { toast('已缓存到本地（钉住）'); window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
+        fetchAndStore(effectiveBvid, Auth.token, { pinned: true, videoSource: { bvid: effectiveBvid }, lyrics: null, song: { name: song.name, singer: song.singer, album_mid: song.album_mid } })
+          .then(() => { toast('已缓存到本地'); window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
           .catch(e => toast('缓存失败：' + e.message));
       });
     };
