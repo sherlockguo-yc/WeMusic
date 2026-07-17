@@ -644,7 +644,7 @@ export async function openSettings() {
   $('settingsModal').classList.add('show');
   // 内容溢出时显示底部滚动提示
   import('./utils.js').then(({ setupScrollHint }) => {
-    setupScrollHint($('settingsModal').querySelector('.modal'));
+    setupScrollHint($('settingsModal').querySelector('.modal-content'));
   });
 }
 

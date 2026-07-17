@@ -2065,7 +2065,14 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 }
 .modal h3 { margin-bottom: 12px; }
 /* 设置面板：比通用 modal 更宽，避免离线用量行换行 */
-.modal.settings-modal { max-width: 480px; }
+.modal.settings-modal { max-width: 480px; overflow: hidden; padding: 0; }
+/* overflow: hidden + border-radius 真正裁剪到圆角，内容滚动交给内部 .modal-content */
+/* 用 80vh 直接限制，避免 max-height: 100% 的循环依赖（父容器高度由内容决定） */
+.modal.settings-modal .modal-content {
+  overflow-y: auto;
+  max-height: 80vh;
+  padding: 18px;
+}
 
 /* 打赏弹窗：双码并排 */
 .donate-qrs { display: flex; flex-direction: column; gap: 20px; align-items: center; }
@@ -2079,7 +2086,6 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   height: 48px; margin-top: -48px; /* 用负 margin 叠在内容末尾 */
   padding-bottom: 8px;
   background: linear-gradient(to bottom, transparent 0%, var(--bg-card) 75%);
-  border-radius: 0 0 14px 14px;
   pointer-events: none;
   transition: opacity .3s;
   z-index: 1;
