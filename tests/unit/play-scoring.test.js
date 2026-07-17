@@ -114,6 +114,11 @@ describe('nameSegments — 歌名片段', () => {
     expect(segs).toContain('晴天');
     expect(segs).toContain('live');
   });
+  it('+ 分隔 medley 歌名 → 拆分为独立片段', () => {
+    const segs = nameSegments('The Voice Within+Get Over You');
+    expect(segs).toContain('the voice within');
+    expect(segs).toContain('get over you');
+  });
   it('空 → []', () => { expect(nameSegments('')).toEqual([]); });
   it('混合中英 → 以空格为整体单词', () => {
     const segs = nameSegments('Love Story');

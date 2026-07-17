@@ -254,7 +254,7 @@ export function renderSongList(container, songs, opts = {}) {
     return `
     <div class="song-row" data-i="${i}">
       <span class="idx">${i + 1}</span>
-      <span class="name${showCover ? ' name-with-cover' : ''}">${coverHtml}<span class="name-text">${esc(s.name)}</span><span class="cache-badge-slot" data-bvid="${esc(s.bvid || '')}"></span></span>
+      <span class="name${showCover ? ' name-with-cover' : ''}">${coverHtml}<span class="name-text">${esc(s.name)}</span><span class="cache-badge-slot" data-bvid="${esc(s.bvid || '')}" data-name="${esc(s.name)}" data-singer="${esc(s.singer || '')}"></span></span>
       <span class="singer">${esc(s.singer)}</span>
       <span class="album">${esc(s.album)}</span>
       ${bookmark}

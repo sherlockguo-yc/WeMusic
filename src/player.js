@@ -641,6 +641,7 @@ export async function prefetchNextBvid() {
 }
 
 export async function playFromList(songs, index, context, playlistId) {
+  _resolveFailCount = 0;  // 新播放列表，重置连续失败计数
   // 队列中有待播歌时，提示替换
   const hasPending = state.queueIndex >= 0 && state.queue.length > state.queueIndex + 1;
   state.queue = songs;
@@ -715,7 +716,17 @@ export async function playCurrent() {
       if (!best) {
         $('playPauseBtn').innerHTML = PLAY_ICON;
         $('npCoverWrap').classList.remove('loading');
-        setStatus('未找到合适资源，可点「换源」'); toast('⚠ 未找到合适资源，可点换源'); return;
+        _resolveFailCount++;
+        if (_resolveFailCount >= 5 || state.playMode === 'single' || state.queue.length <= 1) {
+          stopPlayback();
+          const reason = _resolveFailCount >= 5 ? '，已连续跳过 5 首' : '';
+          setStatus('未找到合适资源'); toast('⚠ 未找到合适资源' + reason);
+          _resolveFailCount = 0;
+          return;
+        }
+        setStatus('未找到合适资源，已自动跳过'); toast('⚠ 未找到合适资源，自动切下一首');
+        playNext(true);
+        return;
       }
       song.bvid = best.bvid;
       // 优先用 candidates 里同名 bvid 的 title（B 站偶尔返回 best.title 为空时回查）
@@ -723,11 +734,21 @@ export async function playCurrent() {
       song._biliTitle = match?.title || best.title || '';
       song._biliDur = (match?.duration || best.duration || song.duration);
       cacheBvid(song);
+      _resolveFailCount = 0;  // resolve 成功，重置连续失败计数
     } catch (e) {
       if (seq !== playSeq) return;
       $('playPauseBtn').innerHTML = PLAY_ICON;
       $('npCoverWrap').classList.remove('loading');
-      setStatus('匹配失败：' + esc(e.message));
+      _resolveFailCount++;
+      if (_resolveFailCount >= 5 || state.playMode === 'single' || state.queue.length <= 1) {
+        stopPlayback();
+        const reason = _resolveFailCount >= 5 ? '，已连续跳过 5 首' : '';
+        setStatus('匹配失败：' + esc(e.message)); toast('⚠ 匹配失败' + reason);
+        _resolveFailCount = 0;
+        return;
+      }
+      setStatus('匹配失败，已自动跳过'); toast('⚠ 匹配失败：' + esc(e.message) + '，自动切下一首');
+      playNext(true);
       return;
     }
   }
@@ -782,6 +803,7 @@ let _cacheUse = null;
 let _weakFallback = false;   // 当前曲目是否已经从「直连 CDN」降级到「服务端代理」
 let _healthCheckId = null;   // play() 成功后 5s 健康检查 setTimeout ID
 let _stalledTimer = null;    // stalled 事件 3s 兜底切歌 setTimeout ID
+let _resolveFailCount = 0;   // 连续 resolve 失败计数，≥5 首后停止自动跳过
 let _volume = 0.8;           // 用户手动设置的音量（0~1），持久化，前后台/是否展开视频都用同一个值
 
 // ---- 音量归一化：AudioContext + GainNode ----

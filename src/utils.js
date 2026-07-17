@@ -28,12 +28,26 @@ export function cacheBadgeHtml(status) {
 export async function refreshCacheBadges() {
   let entries = null;
   try { entries = await offline.list(); } catch { return; }
-  const map = new Map(entries.map(e => [e.key, e]));
+  const byBvid = new Map();
+  const byNameSinger = new Map();   // name__singer → entry（bvid 为空时降级匹配）
+  for (const e of entries) {
+    byBvid.set(e.key, e);
+    const ns = e.song?.name && e.song?.singer ? `${e.song.name}__${e.song.singer}` : null;
+    if (ns) byNameSinger.set(ns, e);  // 同歌名+歌手覆盖写（后缓存的最准）
+  }
   document.querySelectorAll('.cache-badge-slot[data-bvid]').forEach((slot) => {
     const bvid = slot.dataset.bvid;
-    const e = bvid ? map.get(bvid) : null;
-    const st = e && e.audio ? (e.pinned ? 'pinned' : 'temp') : null;
-    slot.innerHTML = cacheBadgeHtml(st);
+    if (bvid) {
+      const e = byBvid.get(bvid);
+      const st = e && e.audio ? (e.pinned ? 'pinned' : 'temp') : null;
+      slot.innerHTML = cacheBadgeHtml(st);
+    } else {
+      // 搜索/歌手/专辑结果无 bvid → 按歌名+歌手降级匹配本地缓存
+      const key = `${slot.dataset.name || ''}__${slot.dataset.singer || ''}`;
+      const e = key ? byNameSinger.get(key) : null;
+      const st = e && e.audio ? (e.pinned ? 'pinned' : 'temp') : null;
+      slot.innerHTML = cacheBadgeHtml(st);
+    }
   });
 }
 

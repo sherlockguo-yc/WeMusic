@@ -270,7 +270,7 @@ export function nameSegments(name) {
   let buf = '';
   for (const c of name) {
     // 括号字符：结束当前 buffer，不并入任何 segment
-    if (/[()（）]/.test(c)) {
+    if (/[()（）+]/.test(c)) {
       if (buf.trim()) segs.push(buf.trim());
       buf = '';
       continue;
