@@ -96,9 +96,33 @@ fi
 # 校验：解压出的 .version 应与远端一致
 STAGE_VER=$(cat "$STAGE/.version" 2>/dev/null)
 if [ "$STAGE_VER" != "$REMOTE_VER" ]; then
-  echo "[$(date)] 版本校验失败: 包内=$STAGE_VER 期望=$REMOTE_VER" >> "$LOG"
-  log_event "deploy" "error" "版本校验失败"
-  rm -rf "$STAGE" "$TMP"; exit 0
+  echo "[$(date)] 版本校验失败（可能是镜像缓存过期）: 包内=$STAGE_VER 期望=$REMOTE_VER" >> "$LOG"
+  log_event "deploy" "error" "版本校验失败（镜像缓存），尝试直连 GitHub 重试"
+
+  # 镜像可能缓存了旧版本，跳过镜像直连 GitHub 重试一次
+  rm -rf "$STAGE" "$TMP"
+  if curl -sSL --max-time 60 --connect-timeout 20 -o "$TMP" "$URL" 2>/dev/null && file "$TMP" | grep -q "gzip"; then
+    log_event "download" "ok" "直连下载完成 $REMOTE_VER"
+    rm -rf "$STAGE" && mkdir -p "$STAGE"
+    if tar -xzf "$TMP" -C "$STAGE"; then
+      STAGE_VER=$(cat "$STAGE/.version" 2>/dev/null)
+      if [ "$STAGE_VER" = "$REMOTE_VER" ]; then
+        echo "[$(date)] 直连下载版本校验通过" >> "$LOG"
+      else
+        echo "[$(date)] 直连下载版本校验仍失败: 包内=$STAGE_VER 期望=$REMOTE_VER" >> "$LOG"
+        log_event "deploy" "error" "直连版本校验仍失败"
+        rm -rf "$STAGE" "$TMP"; exit 0
+      fi
+    else
+      echo "[$(date)] 直连下载解压失败" >> "$LOG"
+      log_event "deploy" "error" "直连解压失败"
+      rm -rf "$STAGE" "$TMP"; exit 0
+    fi
+  else
+    echo "[$(date)] 直连下载失败" >> "$LOG"
+    log_event "deploy" "error" "直连下载失败"
+    rm -f "$TMP"; exit 0
+  fi
 fi
 
 # 同步到运行目录（--delete 清理旧文件，但保护 data/ 和 .env）
