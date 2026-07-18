@@ -159,8 +159,7 @@ export function biliEmbed(bvid, startSec = 0) {
 
 export function albumCover(albumMid, size = 300) {
   if (!albumMid) return '';
-  // 用 + 'https:' + '//y.qq.com' 拼接，避免 Vite minifier 误把 https:// 识别为协议相对 URL 而被去除
-  return 'https:' + '//' + 'y.qq.com/music/photo_new/T002R' + size + 'x' + size + 'M000' + albumMid + '.jpg';
+  return `https://y.qq.com/music/photo_new/T002R${size}x${size}M000${albumMid}.jpg`;
 }
 
 export function singerAvatar(mid, size = 150) {

@@ -62,7 +62,7 @@ function normalizeNeteaseSong(track) {
  * @returns {{ name: string, total: number, songs: Array }}
  */
 export async function parseNeteasePlaylist(playlistId) {
-  const url = 'https:' + '//' + `music.163.com/api/playlist/detail?id=${playlistId}`;
+  const url = `https://music.163.com/api/playlist/detail?id=${playlistId}`;
   const res = await fetch(url, { headers: HEADERS });
   const json = await res.json();
   if (json.code !== 200) {

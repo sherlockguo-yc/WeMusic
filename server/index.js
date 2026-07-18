@@ -74,7 +74,7 @@ app.get('/api/share/meta', (req, res) => {
   }
 
   const amid = row?.album_mid || albumMid || '';
-  const coverURL = amid ? 'https:' + '//' + 'y.qq.com/music/photo_new/T002R300x300M000' + amid + '.jpg' : null;
+  const coverURL = amid ? `https://y.qq.com/music/photo_new/T002R300x300M000${amid}.jpg` : null;
 
   res.json({
     name: row?.name || '',

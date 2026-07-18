@@ -41,7 +41,7 @@ function sourceTypeOf(sourceId) {
  */
 function coverURL(albumMid) {
   if (!albumMid) return null;
-  return 'https:' + '//' + 'y.qq.com/music/photo_new/T002R300x300M000' + albumMid + '.jpg';
+  return `https://y.qq.com/music/photo_new/T002R300x300M000${albumMid}.jpg`;
 }
 
 /**
