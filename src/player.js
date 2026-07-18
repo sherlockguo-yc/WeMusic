@@ -423,7 +423,8 @@ export function saveSession() {
     try {
       const q = state.queue.slice(0, 800).map((s) => ({
         id: s.id, song_mid: s.song_mid, name: s.name, singer: s.singer,
-        album: s.album, album_mid: s.album_mid, duration: s.duration, bvid: s.bvid,
+        singer_mid: s.singer_mid, album: s.album, album_mid: s.album_mid,
+        duration: s.duration, bvid: s.bvid,
         _biliTitle: s._biliTitle, _biliDur: s._biliDur,
       }));
       const data = { queue: q, queueIndex: state.queueIndex };

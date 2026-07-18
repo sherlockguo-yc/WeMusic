@@ -1,5 +1,5 @@
 // ---------------- 歌词全屏页（含换源支持） ----------------
-import { $, esc, albumCover, toast, PLAY_ICON, PAUSE_ICON, fetchBlockedList, blockedSectionHtml, bindBlockedSection, saveBlockedMeta } from './utils.js';
+import { $, esc, albumCover, singerAvatar, toast, PLAY_ICON, PAUSE_ICON, fetchBlockedList, blockedSectionHtml, bindBlockedSection, saveBlockedMeta } from './utils.js';
 import { api } from './api.js';
 import { state } from './state.js';
 import { LyricsSource } from './platform.js';
@@ -8,11 +8,11 @@ import * as offline from './offlineCache.js';
 // 无封面时的占位图标（音乐符号，240x240 画布上居中）
 const PLACEHOLDER_COVER_SVG = 'data:image/svg+xml,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none">' +
-  '<rect width="240" height="240" fill="%23a0a0a0" opacity=".12" rx="0"/>' +
+  '<rect width="240" height="240" fill="#a0a0a0" opacity=".12" rx="0"/>' +
   '<g transform="translate(72,56)">' +
-  '<path d="M18 126V39l84-14v91" stroke="%236b6b6b" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>' +
-  '<circle cx="30" cy="126" r="21" fill="%236b6b6b"/>' +
-  '<circle cx="90" cy="112" r="21" fill="%236b6b6b"/>' +
+  '<path d="M18 126V39l84-14v91" stroke="#6b6b6b" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<circle cx="30" cy="126" r="21" fill="#6b6b6b"/>' +
+  '<circle cx="90" cy="112" r="21" fill="#6b6b6b"/>' +
   '</g></svg>'
 );
 
@@ -98,25 +98,31 @@ export function updateLyricsPanelMeta(song) {
   $('lpTitle').textContent = `${song.name} · ${(song.singer || '').split('/')[0]}`;
   $('lpSongName').textContent = song.name || '';
   $('lpSongSinger').textContent = song.singer || '';
-  const cover = song.album_mid ? albumCover(song.album_mid, 500) : '';
+
+  // 三级兜底：专辑封面 → 歌手头像 → 默认音乐图标
+  const albumUrl = song.album_mid ? albumCover(song.album_mid, 500) : '';
+  const singerUrl = song.singer_mid ? singerAvatar(song.singer_mid, 500) : '';
   const coverImg = $('lpCoverImg');
-  if (cover) {
-    coverImg.src = cover;
+  const bg = $('lpBg');
+
+  function tryCover(url, fallback) {
+    if (!url) return fallback();
+    coverImg.src = url;
     coverImg.style.display = 'block';
     coverImg.removeAttribute('data-no-cover');
-  } else {
-    // 兜底：无封面时展示音乐图标占位
-    coverImg.src = PLACEHOLDER_COVER_SVG;
-    coverImg.style.display = 'block';
-    coverImg.setAttribute('data-no-cover', '');
+    bg.style.backgroundImage = `url(${url})`;
+    coverImg.onerror = () => { coverImg.onerror = null; fallback(); };
   }
-  const bg = $('lpBg');
-  if (cover) {
-    bg.style.backgroundImage = `url(${cover})`;
-  } else {
-    // 兜底：无封面时用渐变背景替代
-    bg.style.backgroundImage = 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg) 100%)';
-  }
+
+  tryCover(albumUrl, () => {
+    tryCover(singerUrl, () => {
+      // 最后兜底：默认音乐图标 + 渐变背景
+      coverImg.src = PLACEHOLDER_COVER_SVG;
+      coverImg.style.display = 'block';
+      coverImg.setAttribute('data-no-cover', '');
+      bg.style.backgroundImage = 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg) 100%)';
+    });
+  });
 
   _uiP.then(({ heartOutline, heartFilled }) => {
   const isLiked = song.song_mid && state.likedMids && state.likedMids.has(song.song_mid);

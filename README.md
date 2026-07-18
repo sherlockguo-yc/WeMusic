@@ -20,7 +20,7 @@
 - 粘贴 QQ 音乐链接自动解析导入；按歌手/专辑整张添加。
 - 右键歌单编辑名称与简介、删除（带确认）。
 - 歌单内拖拽排序持久化，导出/导入 JSON。
-- 表头 # / 歌名 / 歌手 / 专辑 / 时长，严格对齐。
+- 表头 # / 歌名 / 歌手 / 专辑 / 标记 / 时长 / 操作，7 列 Grid 严格对齐。
 
 ### 专辑收藏
 - 歌手页 → 专辑详情 →「收藏专辑」，侧边栏「我的专辑」永久保存。
@@ -92,12 +92,12 @@
 
 ```bash
 npm install && npm run build && cp .env.example .env
-npm start                     # 启动服务 + 前端自动构建（vite build --watch）
-npm run deploy                # 构建 + 重启 + E2E
-npm test                      # 单元 + API + 依赖检查（git push 自动运行）
+npm start                     # nodemon（自动重启）+ Vite watch 构建
+npm run deploy                # 构建 + 重启 + 健康检查 + E2E 验证
+npm test                      # 单元测试 + 依赖检查
 ```
 
-`npm start` 会同时启动 Express 服务器和 Vite 构建监听。修改 `src/` 下任意文件后，Vite 自动重新打包到 `public/dist/`，刷新页面即可看到最新效果，无需手动 `npm run build`。
+`npm start` 使用 concurrently 同时启动 nodemon（监听 `server/` 自动重启）和 Vite watch 构建（监听 `src/` 自动打包到 `public/dist/`）。修改源码后刷新页面即可看到最新效果，无需手动构建或重启。
 
 ### 手机访问
 - **扫码**：「设置 → 移动端访问」或 `http://localhost:5174/qr`
@@ -154,7 +154,7 @@ npm start                      # 默认监听 5174，可用 .env 的 PORT 覆盖
 | 音频流 / Webhook | token 认证 / WEBHOOK_SECRET |
 | 输入校验 | duration≤24h, played≤duration |
 
-**环境变量（`.env`）**：`PORT` / `JWT_SECRET` / `ALLOW_REGISTER` / `ADMIN_USERNAME` / `WEBHOOK_SECRET` / `WEBHOOK_PORT`
+**环境变量（`.env`）**：`PORT` / `JWT_SECRET` / `ALLOW_REGISTER` / `SUPER_ADMIN` / `WEBHOOK_SECRET` / `WEBHOOK_PORT`
 
 ---
 
@@ -187,9 +187,9 @@ WeMusic/
 ├── server/                   # Express 后端
 │   ├── index.js / config.js / db.js / webhook.js
 │   ├── routes/              # auth / music / play / playlist / stats / admin
-│   ├── services/            # bilibili / qqmusic / netease / lyrics / crowd / poster
-│   └── middleware/          # 鉴权 / 限流
-├── scripts/                  # build-restart / e2e / codegraph / check-deps / mobile-open / promote-admin
+│   ├── services/            # bilibili / qqmusic / netease / lyrics / lyrics-providers / crowd / poster
+│   └── middleware/          # auth（鉴权）/ admin（管理员权限）
+├── scripts/                  # build-restart / e2e / codegraph / check-deps / mobile-open / promote-admin / restart-n150 / wemusic-update
 ├── tests/                    # 单元测试 + API 集成测试
 ├── docker-compose.yml / Dockerfile
 ├── data/                     # SQLite 数据库（运行时生成）
@@ -202,5 +202,5 @@ WeMusic/
 
 - iframe 跨域导致同步进度/画质/音量不可控。
 - 自动连播靠定时器，MV 时长不一致时可能偏差。
-- 单用户 SQLite 架构，不支持多并发。
-- QQ 音乐专辑封面统一 500px 尺寸确保兼容。
+- SQLite 写入串行化，高并发下性能受限。
+- QQ 音乐专辑封面仅支持特定尺寸（90/150/300/500/800），非标尺寸返回 404。
