@@ -22,8 +22,10 @@ if [ -n "$PID" ]; then
   log_event "restart" "ok" "已停止旧进程 PID $PID"
 fi
 
-# 启动（node 从 .env 读取配置）
+# 启动
 cd "$DIR" || exit 1
+# 加载持久化凭据（如 GITHUB_TOKEN）—— .env 受 rsync --exclude 保护，跨版本持久
+[ -f "$DIR/.env" ] && . "$DIR/.env"
 nohup node server/index.js > "$LOG" 2>&1 &
 sleep 2
 NEWPID=$(lsof -ti:$PORT 2>/dev/null)

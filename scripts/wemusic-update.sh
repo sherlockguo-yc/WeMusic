@@ -17,6 +17,9 @@ LOG="/tmp/wemusic-update.log"
 EVENTS="$DIR/data/deploy-events.jsonl"
 API="https://api.github.com/repos/$REPO/releases/tags/latest"
 
+# 加载持久化凭据（.env 受 rsync --exclude 保护），GITHUB_TOKEN 用于将 API 额度从 60→5000/hr
+[ -f "$DIR/.env" ] && . "$DIR/.env"
+
 # 写入结构化部署事件
 log_event() {
   local stage="$1" status="$2" message="$3"
@@ -26,7 +29,11 @@ log_event() {
 }
 
 # 查询 latest release，从 body "Auto build <sha>" 提取 sha
-BODY=$(curl -sS -H "Cache-Control: no-cache" --connect-timeout 10 "$API" 2>/dev/null)
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  BODY=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" -H "Cache-Control: no-cache" --max-time 30 --connect-timeout 10 "$API" 2>/dev/null)
+else
+  BODY=$(curl -sS -H "Cache-Control: no-cache" --max-time 30 --connect-timeout 10 "$API" 2>/dev/null)
+fi
 REMOTE_VER=$(echo "$BODY" | grep -m1 '"body"' | sed -E 's/.*Auto build ([a-f0-9]+).*/\1/')
 
 if [ -z "$REMOTE_VER" ] || [ "$REMOTE_VER" = "$BODY" ]; then
@@ -51,7 +58,7 @@ TMP="/tmp/wemusic-latest.tar.gz"
 DOWNLOAD_OK=0
 
 for i in 1 2 3 4 5; do
-  if curl -sSL --connect-timeout 15 -o "$TMP" "$MIRROR_URL" 2>/dev/null && file "$TMP" | grep -q "gzip"; then
+  if curl -sSL --max-time 60 --connect-timeout 15 -o "$TMP" "$MIRROR_URL" 2>/dev/null && file "$TMP" | grep -q "gzip"; then
     DOWNLOAD_OK=1
     break
   fi
@@ -60,7 +67,7 @@ done
 
 if [ "$DOWNLOAD_OK" -ne 1 ]; then
   for i in 1 2 3 4 5 6 7 8; do
-    if curl -sSL --connect-timeout 20 -o "$TMP" "$URL" 2>/dev/null && file "$TMP" | grep -q "gzip"; then
+    if curl -sSL --max-time 60 --connect-timeout 20 -o "$TMP" "$URL" 2>/dev/null && file "$TMP" | grep -q "gzip"; then
       DOWNLOAD_OK=1
       break
     fi
@@ -101,6 +108,6 @@ rsync -a --delete --exclude 'data' --exclude '.env' "$STAGE/" "$DIR/"
 rm -rf "$STAGE" "$TMP"
 log_event "deploy" "ok" "文件同步完成 $REMOTE_VER"
 
-# 重启
-bash "$DIR/restart.sh" >> "$LOG" 2>&1
+# 重启（200>&- 关闭锁 fd，避免 node 进程继承后永久持有锁）
+bash "$DIR/restart.sh" 200>&- >> "$LOG" 2>&1
 echo "[$(date)] 部署完成 → $REMOTE_VER" >> "$LOG"
