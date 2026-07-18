@@ -111,7 +111,14 @@ router.get('/export/:userId', (req, res) => {
     feedback,
   };
 
-  res.setHeader('Content-Disposition', `attachment; filename="wemusic-${user.username}-export.json"`);
+  // RFC 5987：filename 必须是 ASCII，含中文/非 Latin1 字符会导致 Node setHeader 抛
+  // "Invalid character in header content" → 500。用 ASCII fallback + UTF-8 编码的中文名。
+  const asciiName = `wemusic-user${userId}-export.json`;
+  const utf8Name = `wemusic-${user.username}-export.json`;
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(utf8Name)}`,
+  );
   res.json(exportData);
 });
 
