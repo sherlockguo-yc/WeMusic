@@ -2068,10 +2068,12 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .modal.settings-modal { max-width: 480px; overflow: hidden; padding: 0; }
 /* overflow: hidden + border-radius 真正裁剪到圆角，内容滚动交给内部 .modal-content */
 /* 用 80vh 直接限制，避免 max-height: 100% 的循环依赖（父容器高度由内容决定） */
+/* 底部 padding 设为 0，让 modal-scroll-hint 通过 sticky bottom: 0 覆盖到 modal 圆角底部，
+   否则 padding 范围内（最后 18px）的内容永远在 hint 之外、出现文字透出 */
 .modal.settings-modal .modal-content {
   overflow-y: auto;
   max-height: 80vh;
-  padding: 18px;
+  padding: 18px 18px 0 18px;
 }
 
 /* 打赏弹窗：双码并排 */
@@ -2083,12 +2085,13 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .modal-scroll-hint {
   position: sticky; bottom: 0; left: 0; right: 0;
   display: flex; align-items: flex-end; justify-content: center;
-  height: 48px; margin-top: -48px; /* 用负 margin 叠在内容末尾 */
-  padding-bottom: 8px;
-  background: linear-gradient(to bottom, transparent 0%, var(--bg-card) 75%);
+  /* 高度 = 渐变区(60px) + 视觉留白(18px，等同 modal 底部 padding) + V 形 SVG 上方间距(8px) */
+  height: 86px; margin-top: -86px;
+  padding-bottom: 26px; /* 18px 等同原 padding + 8px V 形底部间距 */
+  background: linear-gradient(to bottom, transparent 0%, var(--bg-card) 40%);
   pointer-events: none;
   transition: opacity .3s;
-  z-index: 1;
+  z-index: 10; /* 高于其他 modal 内容，确保最上层 */
 }
 .modal-scroll-hint svg {
   opacity: .5; animation: scrollHintBounce 2s ease-in-out infinite;
