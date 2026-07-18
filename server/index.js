@@ -75,7 +75,10 @@ app.use(express.json({ limit: '256kb' }));
 // ============================================================
 // API 路由
 // ============================================================
-app.use('/api/auth', authLimiter, authRouter); // 登录注册额外限流
+// 登录 / 注册单独限流，其他 auth 端点（/me, /preferences, /avatar, /session 等）不受影响
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth', authRouter);
 app.use('/api/music', musicRouter);
 app.use('/api/playlists', playlistRouter);
 app.use('/api/play', playRouter);
