@@ -9,6 +9,7 @@ import playlistRouter from './routes/playlist.js';
 import playRouter from './routes/play.js';
 import statsRouter from './routes/stats.js';
 import adminRouter from './routes/admin.js';
+import migrationRouter from './routes/migration.js';
 import { searchLyricsCandidates } from './services/lyrics.js';
 import { shortNameToSourceType } from '../shared/constants.js';
 
@@ -58,7 +59,14 @@ const authLimiter = rateLimit({
 });
 
 // ============================================================
-// 请求体解析（限制大小，防止超大 payload 攻击）
+// 数据迁移路由：需要在全局 json 解析之前挂载，因为导入操作
+// 的请求体可能很大（含大量播放记录），需要 50mb 的 body limit。
+// 该路由自己消费请求并响应，不会传递到后续中间件。
+// ============================================================
+app.use('/api/migration', express.json({ limit: '50mb' }), migrationRouter);
+
+// ============================================================
+// 请求体解析（其他路由，限制大小防止超大 payload 攻击）
 // ============================================================
 app.use(express.json({ limit: '256kb' }));
 

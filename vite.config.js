@@ -25,6 +25,7 @@ export default defineConfig({
           lyrics: [resolve(__dirname, 'src/lyrics.js')],
           player: [resolve(__dirname, 'src/player.js')],
           playlist: [resolve(__dirname, 'src/playlist-ui.js')],
+          migration: [resolve(__dirname, 'src/admin/migration.js')],
         },
       },
     },
