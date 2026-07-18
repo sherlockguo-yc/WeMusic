@@ -7,6 +7,9 @@ dotenv.config();
 const PORT = Number(process.env.WEBHOOK_PORT) || 9001;
 const DEPLOY_AGENT = `${homedir()}/deploy-agent.sh`;
 
+// 频率限制：同一项目 60 秒内最多触发一次部署
+const lastDeploy = new Map();
+
 function runDeploy(project, version) {
   console.log(`[${new Date().toISOString()}] 部署 ${project} v${version} ...`);
   const cmd = `bash "${DEPLOY_AGENT}" --deploy ${project} ${version}`;
@@ -55,6 +58,14 @@ const server = http.createServer(async (req, res) => {
       if (!validProjects.includes(project)) {
         return sendJSON(res, 400, { error: `Unknown project: ${project}` });
       }
+
+      // 频率限制：同一项目 60 秒内只接受一次部署
+      const now = Date.now();
+      const last = lastDeploy.get(project) || 0;
+      if (now - last < 60_000) {
+        return sendJSON(res, 429, { error: 'Rate limited', retryAfter: Math.ceil((60_000 - (now - last)) / 1000) });
+      }
+      lastDeploy.set(project, now);
 
       console.log(`[${new Date().toISOString()}] 收到部署请求: ${project} v${version}`);
       sendJSON(res, 202, { message: 'Deploy triggered', project, version });
