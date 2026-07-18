@@ -25,7 +25,7 @@ function fail(msg) {
 }
 
 // 1. 构建前端
-log('1/3', '构建前端 (vite build) ...');
+log('1/4', '构建前端 (vite build) ...');
 try {
   execSync('npx vite build', { stdio: 'inherit', cwd });
   ok('构建完成');
@@ -33,8 +33,15 @@ try {
   fail('构建失败，请检查上面的错误');
 }
 
-// 2. 杀掉旧进程
-log('2/3', `停止端口 ${PORT} 上的旧进程 ...`);
+// 2. 清理 3 天前的旧 chunk（防止 dist/ 膨胀）
+log('2/4', '清理旧 chunk ...');
+try {
+  execSync('find public/dist/chunks -name "*.js" -mtime +3 -delete 2>/dev/null || true', { cwd });
+  ok('清理完成');
+} catch { /* 忽略清理错误 */ }
+
+// 3. 杀掉旧进程
+log('3/4', `停止端口 ${PORT} 上的旧进程 ...`);
 try {
   const pids = execSync(`lsof -ti:${PORT} 2>/dev/null || true`, { encoding: 'utf-8' }).trim();
   if (pids) {
@@ -49,8 +56,8 @@ try {
   console.warn('停止旧进程时出错（可忽略）:', e.message);
 }
 
-// 3. 启动新进程
-log('3/3', '启动新进程 ...');
+// 4. 启动新进程
+log('4/4', '启动新进程 ...');
 const child = spawn('node', ['server/index.js'], {
   cwd,
   detached: true,
@@ -72,9 +79,9 @@ try {
   console.warn(`健康检查失败: ${e.message}，请查看日志: tail -f ${LOG}`);
 }
 
-// 4. 自动化验证（非必需，可用 SKIP_VERIFY=1 跳过）
+// 5. 自动化验证（非必需，可用 SKIP_VERIFY=1 跳过）
 if (!SKIP_VERIFY) {
-  log('4/4', '运行自动化验证 ...');
+  log('5/5', '运行自动化验证 ...');
   try {
     execSync('node scripts/e2e.js', { cwd, stdio: 'inherit', timeout: 60000 });
   } catch (e) {

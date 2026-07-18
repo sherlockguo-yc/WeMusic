@@ -20,9 +20,9 @@ CSS 位于 `public/css/style.css`，由 `public/index.html` 通过 `<link rel="s
 | JS 源码 | `src/*.js` | ✅ 需要，构建后输出到 `public/dist/` |
 | 服务端 | `server/*.js` | 不需要构建，但需要重启（nodemon 自动处理） |
 
-**修改完 JS 源码后**：运行 `npx vite build` 或等待 `vite build --watch` 自动构建。
+**修改完 JS 源码后**：运行 `bash restart.sh`（自动构建 + 重启服务）。
 
-**修改完 CSS/HTML 后**：不要运行 `vite build`，直接刷新浏览器即可。
+**修改完 CSS/HTML 后**：直接刷新浏览器即可，不需要构建或重启。
 
 ## 二、外链 URL 拼接
 
@@ -137,13 +137,25 @@ cat vite.config.js | grep "root"
 | 无 type | `'src'` | ❌ 不能 | CJS（CommonJS） |
 | 无 type | `'.'` | ✅ 可以 | CJS |
 
-## 五、部署后验证
+## 五、部署命令
 
-`npm run deploy` 会执行：
-1. `vite build` → 清理旧 dist → 重新构建（hash 会变化）
-2. 停止旧进程 → 启动新进程
+### `bash restart.sh`（开发环境，推荐）
 
-由于构建后 chunk hash 会变化，**浏览器需要硬刷新**（Cmd+Shift+R）来清除旧缓存。
+1. `vite build` → 生成新 chunk（**不清理旧 chunk**，旧缓存仍可访问）
+2. 清理 3 天前的旧 chunk → 防止 dist/ 膨胀
+3. 停止旧进程 → 启动 nodemon（监听 `server/` 自动重启）
+
+### `npm run deploy`（生产部署，调用 `scripts/build-restart.js`）
+
+1. `vite build` → 生成新 chunk（不清理旧 chunk）
+2. codegraph → 生成 `.project-graph.json`
+3. 停止旧进程 → 启动新进程（`node server/index.js`，无 nodemon）
+4. 健康检查
+
+### 缓存策略
+
+- `emptyOutDir: false`：旧 chunk 不会在构建时被删除，缓存的旧客户端仍能正常加载
+- 一般情况下无需硬刷新；如果遇到 UI 异常，`Cmd+Shift+R` 硬刷新即可
 
 ## 六、API 端点路由前缀检查
 

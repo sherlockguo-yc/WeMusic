@@ -5,6 +5,17 @@ import { state } from './state.js';
 import { LyricsSource } from './platform.js';
 import * as offline from './offlineCache.js';
 
+// 无封面时的占位图标（音乐符号，240x240 画布上居中）
+const PLACEHOLDER_COVER_SVG = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none">' +
+  '<rect width="240" height="240" fill="%23a0a0a0" opacity=".12" rx="0"/>' +
+  '<g transform="translate(72,56)">' +
+  '<path d="M18 126V39l84-14v91" stroke="%236b6b6b" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<circle cx="30" cy="126" r="21" fill="%236b6b6b"/>' +
+  '<circle cx="90" cy="112" r="21" fill="%236b6b6b"/>' +
+  '</g></svg>'
+);
+
 // 预加载 player 模块（避免在 setInterval 中重复 import，解决循环依赖）
 const _playerP = import('./player.js');
 const _uiP = import('./ui.js');
@@ -15,6 +26,13 @@ export let lyricsCandidates = []; // 当前候选列表
 export let lyricsCurrentSourceId = null; // 当前使用的网易云 songId
 let _lyricsUISyncId = null;  // UI 同步 setInterval ID
 let _lyricsSyncId = null;    // 进度同步 setInterval ID
+
+// 用户滚动状态管理：区分主动滚动与自动滚动
+let _userScrolling = false;      // 用户是否正在主动滚动歌词
+let _scrollIdleTimer = null;     // 闲置倒计时 setTimeout ID
+let _ignoreScrollUntil = 0;      // 时间戳，在此之前忽略 scroll 事件（过滤程序触发的滚动）
+const SCROLL_IDLE_MS = 3000;     // 闲置超时：3 秒
+
 export function setLyricsFor(v) { lyricsFor = v; }
 
 // ---- localStorage 缓存：song_mid → netease_song_id ----
@@ -82,11 +100,23 @@ export function updateLyricsPanelMeta(song) {
   $('lpSongSinger').textContent = song.singer || '';
   const cover = song.album_mid ? albumCover(song.album_mid, 500) : '';
   const coverImg = $('lpCoverImg');
-  if (cover) { coverImg.src = cover; coverImg.style.display = 'block'; }
-  else { coverImg.style.display = 'none'; }
+  if (cover) {
+    coverImg.src = cover;
+    coverImg.style.display = 'block';
+    coverImg.removeAttribute('data-no-cover');
+  } else {
+    // 兜底：无封面时展示音乐图标占位
+    coverImg.src = PLACEHOLDER_COVER_SVG;
+    coverImg.style.display = 'block';
+    coverImg.setAttribute('data-no-cover', '');
+  }
   const bg = $('lpBg');
-  if (cover) bg.style.backgroundImage = `url(${cover})`;
-  else bg.style.backgroundImage = 'none';
+  if (cover) {
+    bg.style.backgroundImage = `url(${cover})`;
+  } else {
+    // 兜底：无封面时用渐变背景替代
+    bg.style.backgroundImage = 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg) 100%)';
+  }
 
   _uiP.then(({ heartOutline, heartFilled }) => {
   const isLiked = song.song_mid && state.likedMids && state.likedMids.has(song.song_mid);
@@ -135,6 +165,9 @@ export function openLyricsPanel() {
   }
   panel.classList.add('show');
   document.body.style.overflow = 'hidden';
+  // 重置滚动状态：打开面板时恢复自动跟随
+  _userScrolling = false;
+  if (_scrollIdleTimer) { clearTimeout(_scrollIdleTimer); _scrollIdleTimer = null; }
   if (state.current) {
     updateLyricsPanelMeta(state.current);
     loadLyrics(state.current);
@@ -176,9 +209,13 @@ export function openLyricsPanel() {
 }
 
 export function closeLyricsPanel() {
-  // 清除 initLyrics 中启动的两个同步定时器
+  // 清除定时器
   if (_lyricsUISyncId) { clearInterval(_lyricsUISyncId); _lyricsUISyncId = null; }
   if (_lyricsSyncId) { clearInterval(_lyricsSyncId); _lyricsSyncId = null; }
+  // 重置滚动状态
+  _userScrolling = false;
+  if (_scrollIdleTimer) { clearTimeout(_scrollIdleTimer); _scrollIdleTimer = null; }
+  _ignoreScrollUntil = 0;
   const panel = $('lyricsPanel');
   // 关闭时同步更新 origin，让动画缩回当前封面位置
   const cover = $('npCover');
@@ -232,6 +269,18 @@ async function doLoadLyrics(song, forceSourceId) {
     const params = `name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}${forceSourceId ? `&sourceId=${forceSourceId}` : ''}`;
     const data = await api(`/stats/lyrics?${params}`);
 
+    // 纯音乐检测：歌名命中关键词，跳过歌词搜索
+    if (data.instrumental) {
+      lyricsLines = [];
+      lyricsFor = key;
+      lyricsCandidates = [];
+      lyricsCurrentSourceId = null;
+      _userScrolling = false;
+      if (_scrollIdleTimer) { clearTimeout(_scrollIdleTimer); _scrollIdleTimer = null; }
+      $('lpBody').innerHTML = '<div class="lp-placeholder lp-instrumental">纯音乐，暂无歌词</div>';
+      return true;
+    }
+
     lyricsLines = data.lines || [];
     lyricsFor = key;
     lyricsCandidates = data.candidates || [];
@@ -252,6 +301,9 @@ async function doLoadLyrics(song, forceSourceId) {
 }
 
 function renderLyricsLines() {
+  // 新歌词加载时重置滚动状态，恢复自动跟随
+  _userScrolling = false;
+  if (_scrollIdleTimer) { clearTimeout(_scrollIdleTimer); _scrollIdleTimer = null; }
   if (!lyricsLines.length) {
     $('lpBody').innerHTML = '<div class="lp-placeholder">暂无歌词</div>';
     return;
@@ -376,10 +428,46 @@ export function syncLyrics(sec) {
   const lines = $('lpBody').querySelectorAll('.lp-line');
   lines.forEach((el, i) => el.classList.toggle('active', i === idx));
   if (lines[idx] && $('lyricsPanel').classList.contains('show')) {
+    // 用户主动滚动时跳过自动滚动，允许自由浏览
+    if (_userScrolling) return;
     const body = $('lpBody');
     const lineTop = lines[idx].offsetTop;
+    // 标记程序触发的滚动，让 scroll 事件处理器忽略此次滚动
+    _ignoreScrollUntil = Date.now() + 600;
     body.scrollTo({ top: lineTop - body.clientHeight / 2 + lines[idx].clientHeight / 2, behavior: 'smooth' });
   }
+}
+
+// ---- 用户滚动检测与自动跟随恢复 ----
+
+/**
+ * lpBody 的 scroll 事件处理器。
+ * 过滤程序触发的滚动（syncLyrics 的 scrollTo），
+ * 检测到用户主动滚动时暂停自动跟随，并启动闲置倒计时。
+ */
+function _onLyricsScroll() {
+  // 忽略程序触发的滚动（syncLyrics 设置了 _ignoreScrollUntil）
+  if (Date.now() < _ignoreScrollUntil) return;
+
+  _userScrolling = true;
+
+  // 重置闲置倒计时：每次滚动都重新计时
+  if (_scrollIdleTimer) clearTimeout(_scrollIdleTimer);
+  _scrollIdleTimer = setTimeout(_resumeAutoScroll, SCROLL_IDLE_MS);
+}
+
+/**
+ * 闲置倒计时到期后，平滑恢复自动跟随到当前播放位置。
+ */
+function _resumeAutoScroll() {
+  _userScrolling = false;
+  _scrollIdleTimer = null;
+  // 立即滚动回当前播放行
+  _playerP.then(({ elapsed, autoTimer, timerPaused }) => {
+    if (!autoTimer || timerPaused) return;
+    if (!lyricsLines.length) return;
+    syncLyrics(elapsed);
+  });
 }
 
 export function initLyrics() {
@@ -402,4 +490,7 @@ export function initLyrics() {
     toast(result ? '已暂停自动连播' : '继续自动连播');
   };
   _playerP.then(({ bindSeekBar }) => bindSeekBar($('lpSeekBar'), $('lpCurTime')));
+
+  // 歌词滚动监听：检测用户主动滚动以暂停/恢复自动跟随
+  $('lpBody').addEventListener('scroll', _onLyricsScroll, { passive: true });
 }

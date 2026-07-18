@@ -7,7 +7,7 @@ export default defineConfig({
   base: '/dist/',
   build: {
     outDir: '../public/dist',
-    emptyOutDir: true,
+    emptyOutDir: false, // 不清理旧 chunk：避免构建后旧客户端缓存引用失效 404
     target: 'es2020',
     minify: 'esbuild',
     rollupOptions: {

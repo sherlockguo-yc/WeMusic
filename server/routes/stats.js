@@ -4,7 +4,7 @@
 import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
-import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache, qqFetchLyric, parseLrc } from '../services/lyrics.js';
+import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache, qqFetchLyric, parseLrc, isInstrumental } from '../services/lyrics.js';
 import { getTopList, searchSongs, searchSongsForRecommend, findSingerMid } from '../services/qqmusic.js';
 import { renderPosterPNG } from '../services/poster.js';
 import { POSTER_THEMES } from '../../shared/poster-template.js';
@@ -749,6 +749,7 @@ router.get('/lyrics', async (req, res) => {
 
   try {
     // 1. 若指定了 sourceId，直接按该 id 拉取（不缓存，换源操作）
+    //    用户显式选择歌词源，跳过纯音乐检测
     //    但若该 sourceId 已被屏蔽，fall through 到正常流程（让系统选最优非屏蔽源）
     if (sourceId) {
       const blockedIds = getBlockedIds();
@@ -765,7 +766,15 @@ router.get('/lyrics', async (req, res) => {
       console.log(`[lyrics:route] sourceId=${sourceId} is blocked, falling through to auto-pick`);
     }
 
-    // 2. 检查缓存（同名同歌手 24h 内复用）
+    // 2. 纯音乐检测：歌名命中关键词 → 跳过搜索，避免无意义的 API 调用
+    if (isInstrumental(name)) {
+      console.log(`[lyrics:route] instrumental detected for "${name}" — skipping search`);
+      const result = { instrumental: true, lines: [], candidates: [] };
+      setLyricCache(cacheKey, result);
+      return res.json(result);
+    }
+
+    // 3. 检查缓存（同名同歌手 24h 内复用）
     const blockedIds = getBlockedIds();
     const cached = getLyricCache(cacheKey);
     if (cached) {
@@ -799,7 +808,7 @@ router.get('/lyrics', async (req, res) => {
     }
     console.log(`[lyrics:route] cache MISS for "${cacheKey}" — fetching fresh`);
 
-    // 3. 拉取主结果 + 候选列表
+    // 4. 拉取主结果 + 候选列表
     const [main, candidates] = await Promise.all([
       fetchLyrics(name, singer || '').catch(() => null),
       searchLyricsCandidates(name, singer || ''),

@@ -213,6 +213,32 @@ async function searchQQCandidates(name, singer = '') {
   return verified;
 }
 
+// ---- 纯音乐检测 ----
+
+/** 纯音乐关键词（高精度、低误判） */
+const INSTRUMENTAL_PATTERNS = [
+  /纯音乐/,
+  /伴奏/,
+  /无人声/,
+  /器乐(?!团|队)/,
+  /\bBGM\b/i,
+  /背景音乐/,
+  /\binstrumental\b/i,
+  /\bkaraoke\b/i,
+  /\boff[- ]?vocal\b/i,
+  /\borchestral\b/i,
+  /\bsymphony\b/i,
+];
+
+/**
+ * 根据歌名判断是否可能是纯音乐。
+ * 命中关键词则直接返回 true，跳过后续的歌词源搜索。
+ */
+export function isInstrumental(name) {
+  if (!name) return false;
+  return INSTRUMENTAL_PATTERNS.some((p) => p.test(name));
+}
+
 // ---- 公开 API ----
 
 /**
