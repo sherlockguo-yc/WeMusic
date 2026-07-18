@@ -24,7 +24,9 @@ fi
 
 # 启动主服务
 cd "$DIR" || exit 1
-# 加载持久化凭据（如 GITHUB_TOKEN）—— .env 受 rsync --exclude 保护，跨版本持久
+# 统一凭据（GITHUB_TOKEN 等，用于 API 查询提升限流额度）
+[ -f "$HOME/.deploy-env" ] && . "$HOME/.deploy-env"
+# 服务专属配置（.env 受 rsync --exclude 保护，跨版本持久）
 [ -f "$DIR/.env" ] && . "$DIR/.env"
 nohup node server/index.js > "$LOG" 2>&1 &
 sleep 2
