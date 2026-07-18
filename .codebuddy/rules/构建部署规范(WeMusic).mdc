@@ -26,35 +26,27 @@ CSS 位于 `public/css/style.css`，由 `public/index.html` 通过 `<link rel="s
 
 ## 二、外链 URL 拼接
 
-Vite/esbuild minifier 会将源码中的 `https://` 误识别为「协议相对 URL」而压缩成 `/`，导致外部资源 404。
+> ⚠️ 历史误解纠正：当前 Vite/esbuild（`minify:'esbuild'`）**不会**把 `https://` 压缩为协议相对 URL `/`。已用真实 `vite build` 验证，`public/dist/chunks` 产物中 `https://y.qq.com/...` 完整保留；且 `'https:' + '//' + x` 这种拼接写法会被 esbuild 直接合并回 `"https://" + x`，与裸写 `https://` 产物**完全一致**（`utils.js` 中既有裸写 `https://` 也有拼接写法，两者构建后都正常）。
 
-### 错误做法
+**结论**：外链 URL 直接用裸 `https://` 即可，无需拼接绕过。
 
 ```js
+// ✅ 推荐：可读性最好，esbuild 原样保留
 return `https://y.qq.com/music/photo_new/${id}.jpg`;
-// minify 后变成: "/y.qq.com/music/photo_new/${id}.jpg"
 ```
 
-### 正确做法
+**仅当实测确认 URL 被改写时才用绕过**（验证方法见下）：
 
-**方法 1：字符串拼接**
 ```js
+// 方法 1：字符串拼接（产物与裸写一致，仅作历史兼容）
 return 'https:' + '//' + 'y.qq.com/music/photo_new/' + id + '.jpg';
-```
-
-**方法 2：URL 构造器**
-```js
+// 方法 2：URL 构造器
 return new URL(`/music/photo_new/${id}.jpg`, 'https://y.qq.com').href;
-```
-
-**方法 3：转义反斜杠**（不推荐，可读性差）
-```js
-return `https:\/\/y.qq.com/path/${id}`;
 ```
 
 ### 验证
 
-构建后用 `grep -oE '.{30}y.qq.com.{40}' dist/app.js` 检查，URL 必须以 `https://` 开头。
+构建后用 `grep -oE '.{30}y\.qq\.com.{40}' dist/chunks/*.js` 检查，URL 必须以 `https://` 开头。若发现被改写成 `/y.qq.com/...`（协议相对 URL，导致 404），再采用上面的绕过写法。
 
 ### 已知外链域名
 
@@ -89,7 +81,9 @@ export const PLAY_ICON = '<svg ...>'; // 会被 minifier 重命名为 const v=v 
 | lyrics | src/lyrics.js | 首屏 |
 | stats | src/stats.js | 懒加载 |
 | search | src/search.js | 首屏 |
-| admin | src/admin.js | 懒加载 |
+| migration | src/admin/migration.js | 懒加载 |
+
+> 注：管理面板主模块 `src/admin-panel.js` **不是** manualChunks 条目，它由 `main.js` 通过 `import('./admin-panel.js')` 动态导入、由 Rollup 自动拆分（懒加载）；`migration` chunk 同理由 `admin-panel.js` 内部 `import('./admin/migration.js')` 触发。两者均为懒加载，但仅 `migration` 显式列在 `manualChunks` 中。
 
 **规则：**
 - **不要在这些模块中定义 `export const`**，会被 minifier 重命名导致 TDZ 错误（`const v=v, x=x`）
@@ -99,7 +93,7 @@ export const PLAY_ICON = '<svg ...>'; // 会被 minifier 重命名为 const v=v 
 
 ### base 路径
 
-`base: '/dist/'` — 所有构建产物的 URL 前缀。HTML 中 `<script src="/dist/app.js">` 与该配置必须一致。
+`base: '/dist/'` — 所有构建产物的 URL 前缀。当前有两个构建入口：`public/index.html` 引用 `/dist/app.js`、`public/login.html` 引用 `/dist/login.js`，均须与该配置一致。
 
 修改 `base` 值时，同步更新 `public/index.html` 和 `public/login.html` 中的 `<script>` src。
 
@@ -178,3 +172,8 @@ cat vite.config.js | grep "root"
 | `routes/playlist.js` | `/api/playlists` |
 | `routes/stats.js` | `/api/stats` |
 | `routes/auth.js` | `/api/auth` |
+| `routes/music.js` | `/api/music` |
+| `routes/admin.js` | `/api/admin` |
+| `routes/migration.js` | `/api/migration` |
+
+> 注：`/api/migration` 在 `server/index.js` 中挂载时带有 `express.json({ limit: '50mb' })` 前置中间件（导入播放记录请求体较大），其余路由默认 `256kb`。新增该路由端点时无需重复加 body limit。
