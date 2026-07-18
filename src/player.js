@@ -1361,6 +1361,17 @@ export function initPlayer() {
       collapseVideo();
     }
   });
+
+  // 桌面歌词按钮
+  $('dtLyricsBtn').onclick = async () => {
+    const { openDesktopLyrics, closeDesktopLyrics, isOpen } = await import('./desktop-lyrics.js');
+    if (isOpen()) {
+      closeDesktopLyrics();
+    } else {
+      if (!state.current) return toast('请先播放一首歌曲');
+      openDesktopLyrics();
+    }
+  };
 }
 
 // 导出可被外部（歌词页、键盘快捷键）调用的暂停切换函数

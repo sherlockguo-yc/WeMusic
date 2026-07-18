@@ -3,6 +3,14 @@
 # 查询 GitHub 固定 tag "latest" 的 release → 从 body 提取 sha → 与本地 .version 比对 → 有新版则部署
 # 本脚本放在 ~/ 下，不在 ~/wemusic/ 内，避免被 rsync --delete 清除
 
+set -e
+
+LOCK_FILE="/tmp/wemusic-update.lock"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+  exit 0  # 另一个实例正在运行
+fi
+
 REPO="sherlockguo-yc/WeMusic"
 DIR="$HOME/wemusic"
 LOG="/tmp/wemusic-update.log"
@@ -24,11 +32,33 @@ fi
 
 echo "[$(date)] 发现新版本 $REMOTE_VER (当前: $LOCAL_VER)，开始部署" >> "$LOG"
 
-# 下载产物（固定 tag latest）
+# 下载产物 — 优先 ghproxy.net 镜像
 URL="https://github.com/$REPO/releases/download/latest/wemusic.tar.gz"
+MIRROR_URL="https://ghproxy.net/$URL"
 TMP="/tmp/wemusic-latest.tar.gz"
-if ! curl -sSL --connect-timeout 30 -o "$TMP" "$URL"; then
-  echo "[$(date)] 下载失败: $URL" >> "$LOG"
+DOWNLOAD_OK=0
+
+for i in 1 2 3 4 5; do
+  if curl -sSL --connect-timeout 15 -o "$TMP" "$MIRROR_URL" 2>/dev/null && file "$TMP" | grep -q "gzip"; then
+    DOWNLOAD_OK=1
+    break
+  fi
+  sleep 3
+done
+
+if [ "$DOWNLOAD_OK" -ne 1 ]; then
+  for i in 1 2 3 4 5 6 7 8; do
+    if curl -sSL --connect-timeout 20 -o "$TMP" "$URL" 2>/dev/null && file "$TMP" | grep -q "gzip"; then
+      DOWNLOAD_OK=1
+      break
+    fi
+    sleep 3
+  done
+fi
+
+if [ "$DOWNLOAD_OK" -ne 1 ]; then
+  echo "[$(date)] 下载失败（镜像+直连均重试后失败）" >> "$LOG"
+  rm -f "$TMP"
   exit 0
 fi
 
