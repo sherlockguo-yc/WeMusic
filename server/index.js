@@ -75,6 +75,11 @@ app.use(express.json({ limit: '256kb' }));
 // ============================================================
 // API 路由
 // ============================================================
+// 诊断中间件：记录 auth 请求的 IP 信息（排查限流误判）
+app.use('/api/auth', (req, res, next) => {
+  console.log(`[auth-ip] path=${req.path} ip="${req.ip}" ips=${JSON.stringify(req.ips)} xff="${req.get('x-forwarded-for') || ''}"`);
+  next();
+});
 // 登录 / 注册单独限流，其他 auth 端点（/me, /preferences, /avatar, /session 等）不受影响
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
