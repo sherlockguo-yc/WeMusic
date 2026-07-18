@@ -22,7 +22,7 @@ if [ -n "$PID" ]; then
   log_event "restart" "ok" "已停止旧进程 PID $PID"
 fi
 
-# 启动
+# 启动主服务
 cd "$DIR" || exit 1
 # 加载持久化凭据（如 GITHUB_TOKEN）—— .env 受 rsync --exclude 保护，跨版本持久
 [ -f "$DIR/.env" ] && . "$DIR/.env"
@@ -36,4 +36,11 @@ else
   echo "[$(date)] 启动失败，查看 $LOG"
   log_event "restart" "error" "启动失败"
   tail -5 "$LOG"
+fi
+
+# 如果 webhook 服务在运行，同步重启（更新 webhook.js 代码）
+WEBHOOK_PID=$(lsof -ti:9001 2>/dev/null)
+if [ -n "$WEBHOOK_PID" ]; then
+  bash "$HOME/webhook-start.sh" > /dev/null 2>&1 &
+  echo "[$(date)] webhook 同步重启"
 fi

@@ -1,54 +1,43 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { exec } from 'node:child_process';
+import { homedir } from 'node:os';
 import dotenv from 'dotenv';
 dotenv.config();
 
 const PORT = Number(process.env.WEBHOOK_PORT) || 9001;
 const SECRET = process.env.WEBHOOK_SECRET || '';
-const ROOT_DIR = new URL('..', import.meta.url).pathname;
+const DEPLOY_AGENT = `${homedir()}/deploy-agent.sh`;
 
 if (!SECRET) {
   console.error('[webhook] 未配置 WEBHOOK_SECRET 环境变量，webhook 服务将拒绝所有请求');
 }
 
-/**
- * 验证 GitHub Webhook 签名 (HMAC-SHA256)
- */
-function verifySignature(payload, signature) {
-  if (!signature) return false;
-  const expected = 'sha256=' + crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+function verifyToken(token) {
+  return SECRET && token === SECRET;
 }
 
-/**
- * 执行部署脚本
- */
-function runDeploy() {
-  console.log(`[${new Date().toISOString()}] 开始部署...`);
+function verifyGitHubSignature(payload, signature) {
+  if (!signature || !SECRET) return false;
+  const expected = 'sha256=' + crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch {
+    return false;
+  }
+}
 
-  const commands = [
-    `cd ${ROOT_DIR}`,
-    'git pull origin master 2>&1',
-    'npm install 2>&1',
-    'npm run build 2>&1',
-  ];
-  const script = commands.join(' && ');
-
-  console.log(`[${new Date().toISOString()}] 执行: ${commands.map((c, i) => (i > 0 ? c : Object.fromEntries([['cd', '']])[c] || c)).join(' && ')} 的实际命令`);
-
-  exec(script, { cwd: ROOT_DIR, timeout: 120_000 }, (err, stdout, stderr) => {
+function runDeploy(project, version) {
+  console.log(`[${new Date().toISOString()}] 部署 ${project} v${version} ...`);
+  const cmd = `bash "${DEPLOY_AGENT}" --deploy ${project} ${version}`;
+  exec(cmd, { timeout: 180_000 }, (err, stdout, stderr) => {
     if (err) {
-      console.error(`[${new Date().toISOString()}] 部署失败:`, err.message);
+      console.error(`[${new Date().toISOString()}] ${project} 部署失败:`, err.message);
       if (stderr) console.error('stderr:', stderr);
       return;
     }
-    console.log(`[${new Date().toISOString()}] 部署成功!`);
+    console.log(`[${new Date().toISOString()}] ${project} 部署完成`);
     if (stdout) console.log(stdout.trim());
-    if (stderr) console.warn(stderr.trim());
-
-    // 重启主服务：优先用 pm2，否则用 build-restart 脚本
-    exec('pm2 reload wemusic 2>&1 || pm2 restart wemusic 2>&1 || node scripts/build-restart.js 2>&1', { cwd: ROOT_DIR });
   });
 }
 
@@ -57,9 +46,6 @@ function sendJSON(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
-/**
- * 收集请求 body
- */
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -69,48 +55,98 @@ function readBody(req) {
   });
 }
 
-// === 创建 HTTP Server ===
+// ── HTTP Server ──
 
 const server = http.createServer(async (req, res) => {
-  // 只处理 POST /webhook
+  // POST /deploy — CI workflow 主动通知部署
+  if (req.method === 'POST' && req.url === '/deploy') {
+    try {
+      const body = await readBody(req);
+      let data;
+      try { data = JSON.parse(body); } catch { data = {}; }
+
+      // 认证：优先 Header token，其次 body token
+      const headerToken = (req.headers['x-deploy-token'] || '').trim();
+      const bodyToken = (data.token || '').trim();
+      const token = headerToken || bodyToken;
+
+      if (!verifyToken(token)) {
+        console.warn(`[${new Date().toISOString()}] 认证失败`);
+        return sendJSON(res, 403, { error: 'Unauthorized' });
+      }
+
+      const project = data.project;
+      const version = data.version;
+      if (!project || !version) {
+        return sendJSON(res, 400, { error: 'Missing project or version' });
+      }
+
+      // 支持的项目白名单
+      const validProjects = ['wemusic', 'wemonitor'];
+      if (!validProjects.includes(project)) {
+        return sendJSON(res, 400, { error: `Unknown project: ${project}` });
+      }
+
+      console.log(`[${new Date().toISOString()}] 收到部署请求: ${project} v${version}`);
+      sendJSON(res, 202, { message: 'Deploy triggered', project, version });
+      runDeploy(project, version);
+    } catch (err) {
+      console.error(`[${new Date().toISOString()}] 处理异常:`, err.message);
+      sendJSON(res, 500, { error: 'Internal server error' });
+    }
+    return;
+  }
+
+  // POST /webhook — 兼容 GitHub 原生 webhook（GitHub 推送到 master 时触发）
   if (req.method === 'POST' && req.url === '/webhook') {
     try {
       const signature = req.headers['x-hub-signature-256'];
       const event = req.headers['x-github-event'];
       const body = await readBody(req);
 
-      // 验证签名
-      if (!verifySignature(body, signature)) {
-        console.warn(`[${new Date().toISOString()}] 签名验证失败`);
+      if (event === 'ping') {
+        return sendJSON(res, 200, { message: 'pong' });
+      }
+
+      if (!verifyGitHubSignature(body, signature)) {
+        console.warn(`[${new Date().toISOString()}] GitHub 签名验证失败`);
         return sendJSON(res, 403, { error: 'Invalid signature' });
       }
 
-      // 只处理 push 事件
       if (event !== 'push') {
-        return sendJSON(res, 200, { message: `Ignored event: ${event}` });
+        return sendJSON(res, 200, { message: `Ignored: ${event}` });
       }
 
-      // 推送事件：触发部署
-      console.log(`[${new Date().toISOString()}] 收到 push 事件`);
+      // 从 payload 推断项目名
+      let payload;
+      try { payload = JSON.parse(body); } catch { payload = {}; }
+      const repoName = (payload.repository?.full_name || '').toLowerCase();
+      let project;
+      if (repoName.includes('wemusic')) project = 'wemusic';
+      else if (repoName.includes('wemonitor')) project = 'wemonitor';
+      else return sendJSON(res, 400, { error: 'Unknown repo' });
 
-      // 立即返回 202，不等待部署完成（避免 GitHub webhook 超时）
-      sendJSON(res, 202, { message: 'Deploy triggered' });
-
-      // 异步执行部署
-      runDeploy();
+      console.log(`[${new Date().toISOString()}] GitHub push → ${project}`);
+      sendJSON(res, 202, { message: 'Deploy triggered', project });
+      // GitHub webhook 模式：传空版本，让 deploy-agent 自己查最新版
+      runDeploy(project, '');
     } catch (err) {
-      console.error(`[${new Date().toISOString()}] Webhook 处理异常:`, err.message);
+      console.error(`[${new Date().toISOString()}] Webhook 异常:`, err.message);
       sendJSON(res, 500, { error: 'Internal server error' });
     }
     return;
   }
 
-  // 其他请求：404
+  // GET /health
+  if (req.method === 'GET' && req.url === '/health') {
+    return sendJSON(res, 200, { status: 'ok', projects: ['wemusic', 'wemonitor'] });
+  }
+
   sendJSON(res, 404, { error: 'Not found' });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n  Webhook 服务已启动 ✅`);
-  console.log(`  监听端口: http://0.0.0.0:${PORT}/webhook`);
-  console.log();
+server.listen(PORT, '127.0.0.1', () => {
+  console.log(`[webhook] 服务已启动 ✅`);
+  console.log(`[webhook] 端口: ${PORT}`);
+  console.log(`[webhook] 端点: POST /deploy, POST /webhook, GET /health`);
 });
