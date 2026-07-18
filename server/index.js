@@ -57,6 +57,8 @@ const authLimiter = rateLimit({
   message: { error: '登录尝试过于频繁，请 15 分钟后再试' },
   skip: (req) => req.ip === '127.0.0.1' || req.ip === '::1',
 });
+// 挂载到 app，供 admin 路由通过 req.app.get('authLimiter') 访问以重置限流
+app.set('authLimiter', authLimiter);
 
 // ============================================================
 // 数据迁移路由：需要在全局 json 解析之前挂载，因为导入操作
