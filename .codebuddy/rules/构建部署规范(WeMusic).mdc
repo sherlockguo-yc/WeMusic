@@ -177,3 +177,53 @@ cat vite.config.js | grep "root"
 | `routes/migration.js` | `/api/migration` |
 
 > 注：`/api/migration` 在 `server/index.js` 中挂载时带有 `express.json({ limit: '50mb' })` 前置中间件（导入播放记录请求体较大），其余路由默认 `256kb`。新增该路由端点时无需重复加 body limit。
+
+## 七、N150 部署系统：新仓库接入
+
+N150 使用统一部署代理 `deploy-agent.sh` + webhook 推送，替代了每个项目独立的 cron 更新脚本。新仓库接入零 secret 配置。
+
+### 部署架构
+
+```
+git push → CI 构建 Release → curl POST webhook → deploy-agent 下载 tar.gz → rsync → 重启
+                                                      ↑
+                                              cron 兜底（每分钟）
+```
+
+### 接入步骤（2 步）
+
+**1. N150 上 `~/.deploy-projects.conf` 加一行：**
+
+```
+项目名|GitHub仓库|部署目录|端口|tag模式|产物文件名
+```
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| 项目名 | 唯一标识 | `wemusic` |
+| 仓库 | `owner/repo` | `sherlockguo-yc/WeMusic` |
+| 目录 | N150 上的运行目录 | `$HOME/wemusic` |
+| 端口 | 服务端口（用于日志标识，不影响部署） | `5174` |
+| tag 模式 | `latest` 固定用 latest tag / `sha` 动态用 commit SHA | `latest` |
+| 产物文件名 | Release 中的 tar.gz 文件名 | `wemusic.tar.gz` |
+
+**2. CI workflow 末尾加通知步骤：**
+
+```yaml
+- name: Notify N150
+  continue-on-error: true
+  run: |
+    curl -sS -X POST https://wemusic.sherlockguo.com/deploy \
+      -H "Content-Type: application/json" \
+      -d "{\"project\":\"项目名\",\"version\":\"${{ steps.ver.outputs.sha }}\"}" \
+      --max-time 10 --connect-timeout 5 || true
+```
+
+### 安全模型
+
+- 无需 GitHub Secret 或 token
+- 端点只能下载已发布的 GitHub Release，无法注入代码或执行命令
+- 项目名白名单（`webhook.js` 中 `validProjects` 数组，新增项目时需同步更新）
+- 频率限制：同一项目 60 秒内最多触发一次部署
+- `deploy-agent.sh` 使用 flock 锁防止并发部署
+- 同版本自动跳过，不重复下载

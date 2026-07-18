@@ -1,14 +1,32 @@
 import http from 'node:http';
 import { exec } from 'node:child_process';
 import { homedir } from 'node:os';
+import { readFileSync, existsSync } from 'node:fs';
 import dotenv from 'dotenv';
 dotenv.config();
 
 const PORT = Number(process.env.WEBHOOK_PORT) || 9001;
 const DEPLOY_AGENT = `${homedir()}/deploy-agent.sh`;
+const CONF = `${homedir()}/.deploy-projects.conf`;
 
 // 频率限制：同一项目 60 秒内最多触发一次部署
 const lastDeploy = new Map();
+
+// 从配置文件读取支持的项目列表
+function loadProjects() {
+  if (!existsSync(CONF)) return [];
+  const lines = readFileSync(CONF, 'utf-8').split('\n');
+  return lines
+    .map(line => line.trim())
+    .filter(line => line && !line.startsWith('#'))
+    .map(line => line.split('|')[0])
+    .filter(Boolean);
+}
+
+let validProjects = loadProjects();
+
+// 每 5 分钟刷新一次项目列表（配置文件可能被更新）
+setInterval(() => { validProjects = loadProjects(); }, 300_000);
 
 function runDeploy(project, version) {
   console.log(`[${new Date().toISOString()}] 部署 ${project} v${version} ...`);
@@ -54,7 +72,6 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 400, { error: 'Missing project or version' });
       }
 
-      const validProjects = ['wemusic', 'wemonitor'];
       if (!validProjects.includes(project)) {
         return sendJSON(res, 400, { error: `Unknown project: ${project}` });
       }
@@ -79,7 +96,7 @@ const server = http.createServer(async (req, res) => {
 
   // GET /health
   if (req.method === 'GET' && req.url === '/health') {
-    return sendJSON(res, 200, { status: 'ok', projects: ['wemusic', 'wemonitor'] });
+    return sendJSON(res, 200, { status: 'ok', projects: validProjects });
   }
 
   sendJSON(res, 404, { error: 'Not found' });
