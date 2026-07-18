@@ -1,5 +1,4 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import { config, PUBLIC_DIR } from './config.js';
 import db from './db.js'; // 初始化数据库
 
@@ -33,37 +32,8 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
-// 全局频率限制：防止扫描、暴力请求（每 IP 每分钟最多 120 次）
-// ============================================================
-const globalLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 120,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: '请求过于频繁，请稍后再试' },
-  skip: (req) => req.ip === '127.0.0.1' || req.ip === '::1', // 本机不限流
-});
-app.use('/api', globalLimiter);
-
-// ============================================================
-// 登录 / 注册：严格限流，防暴力破解
-// 每 IP 15 分钟内最多尝试 10 次
-// ============================================================
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: '登录尝试过于频繁，请 15 分钟后再试' },
-  skip: (req) => req.ip === '127.0.0.1' || req.ip === '::1',
-});
-// 挂载到 app，供 admin 路由通过 req.app.get('authLimiter') 访问以重置限流
-app.set('authLimiter', authLimiter);
-
-// ============================================================
 // 数据迁移路由：需要在全局 json 解析之前挂载，因为导入操作
 // 的请求体可能很大（含大量播放记录），需要 50mb 的 body limit。
-// 该路由自己消费请求并响应，不会传递到后续中间件。
 // ============================================================
 app.use('/api/migration', express.json({ limit: '50mb' }), migrationRouter);
 
@@ -75,14 +45,6 @@ app.use(express.json({ limit: '256kb' }));
 // ============================================================
 // API 路由
 // ============================================================
-// 诊断中间件：记录 auth 请求的 IP 信息（排查限流误判）
-app.use('/api/auth', (req, res, next) => {
-  console.log(`[auth-ip] path=${req.path} ip="${req.ip}" ips=${JSON.stringify(req.ips)} xff="${req.get('x-forwarded-for') || ''}"`);
-  next();
-});
-// 登录 / 注册单独限流，其他 auth 端点（/me, /preferences, /avatar, /session 等）不受影响
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
 app.use('/api/auth', authRouter);
 app.use('/api/music', musicRouter);
 app.use('/api/playlists', playlistRouter);

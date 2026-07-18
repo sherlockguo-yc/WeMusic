@@ -290,19 +290,6 @@ router.get('/health', requireRole('viewer'), (req, res) => {
   });
 });
 
-// ============ 重置登录限流（按 IP） ============
-router.post('/reset-auth-limiter', requireRole('admin'), (req, res) => {
-  const { ip } = req.body || {};
-  if (!ip) return res.status(400).json({ error: '缺少 IP 参数' });
-  const limiter = req.app.get('authLimiter');
-  if (!limiter?.store?.resetKey) {
-    return res.status(500).json({ error: '限流器存储不可用' });
-  }
-  limiter.store.resetKey(ip);
-  audit('reset_auth_limiter', req.user.username, ip, '', req.ip);
-  res.json({ ok: true, message: `已解除 ${ip} 的登录限流` });
-});
-
 // ============ 工具函数 ============
 function audit(action, operator, target, detail, ip) {
   try {
