@@ -499,4 +499,16 @@ export function initLyrics() {
 
   // 歌词滚动监听：检测用户主动滚动以暂停/恢复自动跟随
   $('lpBody').addEventListener('scroll', _onLyricsScroll, { passive: true });
+
+  // 点击歌词行跳转播放进度（事件委托）
+  $('lpBody').addEventListener('click', (e) => {
+    const line = e.target.closest('.lp-line');
+    if (!line) return;
+    const i = Number(line.dataset.i);
+    if (!lyricsLines[i] || lyricsLines[i].time < 0) return;
+    // 重置滚动状态：用户点击是明确的导航意图，恢复自动跟随
+    _userScrolling = false;
+    if (_scrollIdleTimer) { clearTimeout(_scrollIdleTimer); _scrollIdleTimer = null; }
+    _playerP.then(({ seekTo }) => seekTo(lyricsLines[i].time));
+  });
 }
