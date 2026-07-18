@@ -180,14 +180,14 @@ cat vite.config.js | grep "root"
 
 ## 七、N150 部署系统：新仓库接入
 
-N150 使用统一部署代理 `deploy-agent.sh` + webhook 推送，替代了每个项目独立的 cron 更新脚本。新仓库接入零 secret 配置。
+N150 使用统一部署代理 `deploy-agent.sh` + webhook 推送。新仓库接入零 secret 配置，无需新增 cron 条目。
 
 ### 部署架构
 
 ```
 git push → CI 构建 Release → curl POST webhook → deploy-agent 下载 tar.gz → rsync → 重启
                                                       ↑
-                                              cron 兜底（每分钟）
+                                    cron 兜底（每 2 分钟，一条检查所有项目）
 ```
 
 ### 接入步骤（2 步）
@@ -223,7 +223,7 @@ git push → CI 构建 Release → curl POST webhook → deploy-agent 下载 tar
 
 - 无需 GitHub Secret 或 token
 - 端点只能下载已发布的 GitHub Release，无法注入代码或执行命令
-- 项目名白名单（`webhook.js` 中 `validProjects` 数组，新增项目时需同步更新）
+- 项目名白名单（webhook.js 从 `~/.deploy-projects.conf` 动态读取，新增项目自动生效）
 - 频率限制：同一项目 60 秒内最多触发一次部署
 - `deploy-agent.sh` 使用 flock 锁防止并发部署
 - 同版本自动跳过，不重复下载
