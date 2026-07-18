@@ -289,7 +289,10 @@ async function doLoadLyrics(song, forceSourceId) {
 
     lyricsLines = data.lines || [];
     lyricsFor = key;
-    lyricsCandidates = data.candidates || [];
+    // 换源快速通道（带 sourceId 请求）响应里不含 candidates 字段，
+    // 此时必须保留已有候选列表，否则会被清空导致下次打开弹窗重新拉取，
+    // 重新拉取时不带 sourceId 会走"自动选最优源"逻辑，把用户刚选的源覆盖回默认值。
+    if (data.candidates) lyricsCandidates = data.candidates;
     lyricsCurrentSourceId = data.sourceId || forceSourceId || null;
 
     if (!lyricsLines.length && lyricsCandidates.length && data.error) {
@@ -314,7 +317,10 @@ function renderLyricsLines() {
     $('lpBody').innerHTML = '<div class="lp-placeholder">暂无歌词</div>';
     return;
   }
-  $('lpBody').innerHTML = lyricsLines.map((l, i) => `<div class="lp-line" data-i="${i}">${esc(l.text)}</div>`).join('');
+  $('lpBody').innerHTML = lyricsLines.map((l, i) => {
+    const trans = l.transText ? `<span class="lp-trans">${esc(l.transText)}</span>` : '';
+    return `<div class="lp-line" data-i="${i}">${esc(l.text)}${trans}</div>`;
+  }).join('');
 }
 
 // ---- 歌词换源弹层 ----
@@ -364,7 +370,10 @@ async function openLyricsSwitchModal(song) {
   modal.classList.add('show');
 
   // 关闭时恢复标题
-  const restoreTitle = () => { modal.querySelector('h3').textContent = '选择播放资源（Bilibili）'; };
+  const restoreTitle = () => {
+    const h3 = modal.querySelector('h3');
+    if (h3) h3.textContent = '选择播放资源（Bilibili）';
+  };
 
   // 辅助函数：按 data-id 从 candidates 数组查找候选（替代不稳定数组下标）
   const findById = (id) => lyricsCandidates.find(c => String(c.id) === String(id));
@@ -506,9 +515,10 @@ export function initLyrics() {
     if (!line) return;
     const i = Number(line.dataset.i);
     if (!lyricsLines[i] || lyricsLines[i].time < 0) return;
+    const sec = Math.round(lyricsLines[i].time);
     // 重置滚动状态：用户点击是明确的导航意图，恢复自动跟随
     _userScrolling = false;
     if (_scrollIdleTimer) { clearTimeout(_scrollIdleTimer); _scrollIdleTimer = null; }
-    _playerP.then(({ seekTo }) => seekTo(lyricsLines[i].time));
+    _playerP.then(({ seekTo }) => seekTo(sec));
   });
 }

@@ -4,7 +4,7 @@
 import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
-import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache, qqFetchLyric, parseLrc, isInstrumental } from '../services/lyrics.js';
+import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache, qqFetchLyric, parseLrc, parseLrcWithTrans, isInstrumental } from '../services/lyrics.js';
 import { getTopList, searchSongs, searchSongsForRecommend, findSingerMid } from '../services/qqmusic.js';
 import { renderPosterPNG } from '../services/poster.js';
 import { POSTER_THEMES } from '../../shared/poster-template.js';
@@ -728,12 +728,12 @@ async function fetchLyricsForCandidate(c) {
   try {
     const { platform, id } = decodeSourceId(String(c.id));
     if (platform === Platform.QQ_MUSIC) {
-      const raw = await qqFetchLyric(id);
+      const { raw, tlyric } = await qqFetchLyric(id);
       if (!raw.trim()) return null;
-      return { raw, lines: parseLrc(raw) };
+      return { raw, tlyric, lines: parseLrcWithTrans(raw, tlyric) };
     }
     const r = await fetchLyricsById(Number(id));
-    return { raw: r.raw, lines: r.lines };
+    return { raw: r.raw, tlyric: r.tlyric, lines: r.lines };
   } catch {
     return null;
   }
@@ -756,12 +756,12 @@ router.get('/lyrics', async (req, res) => {
       if (!blockedIds.includes(String(sourceId))) {
         const { platform, id } = decodeSourceId(sourceId);
         if (platform === Platform.QQ_MUSIC) {
-          const raw = await qqFetchLyric(id);
+          const { raw, tlyric } = await qqFetchLyric(id);
           if (!raw.trim()) return res.json({ lines: [], sourceId, error: '该歌曲暂无歌词' });
-          return res.json({ lines: parseLrc(raw), sourceId, song: name, artist: singer });
+          return res.json({ lines: parseLrcWithTrans(raw, tlyric), sourceId, song: name, artist: singer });
         }
         const result = await fetchLyricsById(Number(id));
-        return res.json({ lines: result.lines, sourceId: Number(id) });
+        return res.json({ lines: result.lines, sourceId });
       }
       console.log(`[lyrics:route] sourceId=${sourceId} is blocked, falling through to auto-pick`);
     }
@@ -829,6 +829,7 @@ router.get('/lyrics', async (req, res) => {
             artist: replacement.artist,
             sourceId: String(replacement.id),
             raw: replaced.raw || '',
+            tlyric: replaced.tlyric || '',
             lines: replaced.lines,
           };
         } else {

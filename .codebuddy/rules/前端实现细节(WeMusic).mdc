@@ -69,3 +69,42 @@ provider:
 ## 七、搜索栏（本项目行为）
 
 - 搜索建议（history autocompletion）在 focus/input 时自动弹出。
+
+## 八、服务端同一接口不同分支的响应字段一致性
+
+### 规则
+
+修改或新增 API 端点时，**必须**确保所有 `res.json()` 分支返回的字段集合一致。同一个端点不能在某些分支有 `candidates`、某些分支没有——前端无法安全地使用 `data.candidates || []` 来获取默认值，因为这会在缺失分支上覆盖掉已有的有效状态。
+
+### 背景
+
+`GET /api/stats/lyrics` 有两个分支：
+- **不带 `sourceId`**（正常流程）：响应包含 `{ lines, sourceId, candidates, album_mid }`，走缓存/搜索逻辑
+- **带 `sourceId`**（换源快速通道）：响应仅 `{ lines, sourceId }`，**缺少 `candidates` 字段**
+
+前端 `doLoadLyrics()` 用 `lyricsCandidates = data.candidates || []` 更新状态，导致用户每次换源后候选列表被清空。下次打开换源弹窗时触发重新拉取（不带 `sourceId`），服务端重新执行自动匹配 → 默认最高分源覆盖用户刚选的源 → 「当前」标记永远指向同一个源。
+
+这个 bug 经历了 3 轮修复才定位到根因：
+1. 第 1 轮：`restoreTitle()` 对 null 元素赋值抛 TypeError（语法 bug）
+2. 第 2 轮：服务端 `sourceId` 返回数字而非字符串（类型不一致）
+3. 第 3 轮（根因）：`candidates` 字段在换源分支缺失，前端用 `||` 兜底导致状态被清空
+
+### 修复方式
+
+前端 `doLoadLyrics()` 改为：
+```js
+if (data.candidates) lyricsCandidates = data.candidates;  // 仅在响应包含时才更新
+```
+
+而非之前的 `lyricsCandidates = data.candidates || []`。
+
+### 类似风险点
+
+项目中所有 `data.xxx || defaultValue` 模式的赋值，如果 `xxx` 在 API 的某些分支缺失，都有同样的风险。检查清单：
+- `data.candidates || []` — 已修复（`lyrics.js` `doLoadLyrics`）
+- 其他 `||` 兜底的字段（如 `data.lines || []`、`data.error`）需逐个确认在所有 `res.json()` 分支中均有显式出现
+
+### 编码规范
+
+- ✅ 正确：`if (key in data) state.x = data[key]` 或 `if (data.candidates) state.candidates = data.candidates`
+- ❌ 错误：`state.x = data.x || defaultValue`（如果 API 某些分支不包含该字段，会把有效状态覆盖为空）

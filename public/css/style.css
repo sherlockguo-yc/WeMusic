@@ -1417,6 +1417,8 @@ input[type='range']::-moz-range-thumb {
   cursor: pointer; border-radius: 8px;
 }
 .lp-line:hover { color: rgba(255,255,255,.7); }
+/* 翻译行：小字、更淡，在原文下方 */
+.lp-trans { display: block; font-size: 13px; color: rgba(255,255,255,.28); margin-top: 2px; line-height: 1.5; }
 .lp-line.active {
   color: #fff; font-size: 18px; font-weight: 700;
   transform: scale(1.02);

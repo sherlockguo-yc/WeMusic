@@ -36,9 +36,12 @@ export default class NeteaseLyricsProvider extends LyricsProvider {
     const url = `https://music.163.com/api/song/lyric?id=${id}&lv=1&tv=-1`;
     try {
       const j = await (await fetch(url, { headers: HEADERS })).json();
-      return j?.lrc?.lyric || '';
+      return {
+        lrc: j?.lrc?.lyric || '',
+        tlyric: j?.tlyric?.lyric || '',
+      };
     } catch {
-      return '';
+      return { lrc: '', tlyric: '' };
     }
   }
 

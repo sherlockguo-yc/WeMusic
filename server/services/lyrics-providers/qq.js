@@ -37,13 +37,16 @@ export default class QQLyricsProvider extends LyricsProvider {
     try {
       const text = await (await fetch(url, { headers: HEADERS })).text();
       const m = text.match(/\{.*\}/s);
-      if (!m) return '';
+      if (!m) return { lrc: '', tlyric: '' };
       const d = JSON.parse(m[0]);
       const b64 = d?.lyric || d?.Lyric || '';
-      if (!b64) return '';
-      return Buffer.from(b64, 'base64').toString('utf-8');
+      const transB64 = d?.trans || d?.Trans || '';
+      return {
+        lrc: b64 ? Buffer.from(b64, 'base64').toString('utf-8') : '',
+        tlyric: transB64 ? Buffer.from(transB64, 'base64').toString('utf-8') : '',
+      };
     } catch {
-      return '';
+      return { lrc: '', tlyric: '' };
     }
   }
 

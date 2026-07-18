@@ -68,6 +68,34 @@ export function parseLrc(lrc = '') {
   return result;
 }
 
+/** 合并原文和翻译：按时间戳匹配 → 无时间戳则按顺序逐行匹配 */
+export function parseLrcWithTrans(lrc, tlyric) {
+  if (!tlyric || !tlyric.trim()) return parseLrc(lrc);
+
+  const original = parseLrc(lrc);
+  const trans = parseLrc(tlyric);
+
+  // 翻译有时间戳 → 按时间匹配
+  if (trans.length && trans[0].time >= 0) {
+    const transMap = new Map();
+    for (const t of trans) {
+      // 同一时间戳多条翻译 → 用第一行之后的时间寻找不同文本
+      const key = t.time;
+      if (!transMap.has(key)) transMap.set(key, t.text);
+    }
+    for (const o of original) {
+      if (transMap.has(o.time)) o.transText = transMap.get(o.time);
+    }
+    return original;
+  }
+
+  // 翻译无时间戳 → 按顺序逐行匹配
+  for (let i = 0; i < original.length && i < trans.length; i++) {
+    original[i].transText = trans[i].text;
+  }
+  return original;
+}
+
 // ---- 内存歌词缓存 ----
 
 const _lyricCache = new Map();
@@ -253,14 +281,15 @@ export async function fetchLyrics(name, singer = '') {
   // 网易云优先
   const neResult = await searchWithProvider(neProvider, name, singerFirst, nameClean);
   if (neResult) {
-    const raw = await neProvider.fetchLyric(neResult.rawId);
-    if (raw.trim()) {
+    const { lrc, tlyric } = await neProvider.fetchLyric(neResult.rawId);
+    if (lrc.trim()) {
       return {
         song: neResult.name,
         artist: (neResult.artists || []).map((a) => a.name).join(' / '),
         sourceId: neResult.id,
-        raw,
-        lines: parseLrc(raw),
+        raw: lrc,
+        tlyric,
+        lines: parseLrcWithTrans(lrc, tlyric),
       };
     }
   }
@@ -270,14 +299,15 @@ export async function fetchLyrics(name, singer = '') {
   const bestQQ = qqCandidates[0];
   if (!bestQQ) throw new Error('未找到匹配歌词');
 
-  const raw = await qqProvider.fetchLyric(bestQQ.rawId || bestQQ.mid);
-  if (!raw.trim()) throw new Error('该歌曲暂无歌词');
+  const { lrc, tlyric } = await qqProvider.fetchLyric(bestQQ.rawId || bestQQ.mid);
+  if (!lrc.trim()) throw new Error('该歌曲暂无歌词');
   return {
     song: bestQQ.name,
     artist: bestQQ.artist,
     sourceId: bestQQ.id,
-    raw,
-    lines: parseLrc(raw),
+    raw: lrc,
+    tlyric,
+    lines: parseLrcWithTrans(lrc, tlyric),
   };
 }
 
@@ -378,9 +408,9 @@ export async function searchLyricsCandidates(name, singer = '') {
     const c = topCandidates[i];
     const lr = lyricResults[i];
     if (lr.status !== 'fulfilled') continue;
-    const raw = lr.value;
-    if (!raw.trim()) { emptyCount++; continue; }
-    verified.push({ ...c, raw });
+    const { lrc, tlyric } = lr.value;
+    if (!lrc.trim()) { emptyCount++; continue; }
+    verified.push({ ...c, raw: lrc, tlyric });
   }
   console.log(`[lyrics:candidates] verified: ${verified.length} valid, ${emptyCount} empty, failed:${lyricResults.filter(r => r.status === 'rejected').length}`);
   return verified.slice(0, 12).map((c) => ({ id: c.id, name: c.name, artist: c.artist, quality: c.quality, source: c.source, album_mid: c.album_mid || '' }));
@@ -392,9 +422,9 @@ export async function searchLyricsCandidates(name, singer = '') {
 export async function fetchLyricsById(songId) {
   const neProvider = providerFor(LyricsSource.NE);
   if (!neProvider) throw new Error('网易云 Provider 不可用');
-  const raw = await neProvider.fetchLyric(songId);
-  if (!raw.trim()) throw new Error('该歌曲暂无歌词');
-  return { raw, lines: parseLrc(raw) };
+  const { lrc, tlyric } = await neProvider.fetchLyric(songId);
+  if (!lrc.trim()) throw new Error('该歌曲暂无歌词');
+  return { raw: lrc, tlyric, lines: parseLrcWithTrans(lrc, tlyric) };
 }
 
 /**
@@ -403,5 +433,6 @@ export async function fetchLyricsById(songId) {
 export async function qqFetchLyric(songmid) {
   const qqProvider = providerFor(LyricsSource.QQ);
   if (!qqProvider) throw new Error('QQ 音乐 Provider 不可用');
-  return qqProvider.fetchLyric(songmid);
+  const { lrc, tlyric } = await qqProvider.fetchLyric(songmid);
+  return { raw: lrc, tlyric };
 }
