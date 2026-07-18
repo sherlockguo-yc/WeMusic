@@ -3,6 +3,14 @@
 PORT=5174
 LOG=/tmp/wemusic.log
 DIR="$HOME/wemusic"
+EVENTS="$DIR/data/deploy-events.jsonl"
+
+log_event() {
+  local stage="$1" status="$2" message="$3"
+  local ts=$(date +%s)
+  mkdir -p "$DIR/data"
+  echo "{\"stage\":\"$stage\",\"status\":\"$status\",\"message\":\"$message\",\"ts\":$ts}" >> "$EVENTS"
+}
 
 # 杀旧进程
 PID=$(lsof -ti:$PORT 2>/dev/null)
@@ -11,6 +19,7 @@ if [ -n "$PID" ]; then
   sleep 1
   kill -9 $PID 2>/dev/null
   echo "[$(date)] stopped PID $PID"
+  log_event "restart" "ok" "已停止旧进程 PID $PID"
 fi
 
 # 启动（node 从 .env 读取配置）
@@ -20,7 +29,9 @@ sleep 2
 NEWPID=$(lsof -ti:$PORT 2>/dev/null)
 if [ -n "$NEWPID" ]; then
   echo "[$(date)] started PID $NEWPID port $PORT"
+  log_event "restart" "ok" "启动成功 PID $NEWPID :$PORT"
 else
   echo "[$(date)] 启动失败，查看 $LOG"
+  log_event "restart" "error" "启动失败"
   tail -5 "$LOG"
 fi
