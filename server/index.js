@@ -1,3 +1,25 @@
+import fs from 'node:fs';
+
+// ============================================================
+// 崩溃诊断（临时）：用同步写入捕获进程死亡瞬间的信号/异常，
+// 排查"启动后 60~95 秒内静默消失、无堆栈、无 OOM 记录"的问题。
+// 用同步 appendFileSync 而非 console，确保进程被杀的瞬间也能落盘。
+// ============================================================
+const CRASH_LOG = '/tmp/wemusic-crash.log';
+function crashLog(msg) {
+  try {
+    fs.appendFileSync(CRASH_LOG, `[${new Date().toISOString()}] pid=${process.pid} ${msg}\n`);
+  } catch {}
+}
+crashLog('process boot');
+process.on('SIGTERM', () => { crashLog('SIGTERM received'); process.exit(0); });
+process.on('SIGINT', () => { crashLog('SIGINT received'); process.exit(0); });
+process.on('SIGHUP', () => { crashLog('SIGHUP received (ignored, no exit)'); });
+process.on('uncaughtException', (err) => { crashLog(`uncaughtException: ${err?.stack || err}`); });
+process.on('unhandledRejection', (err) => { crashLog(`unhandledRejection: ${err?.stack || err}`); });
+process.on('exit', (code) => { crashLog(`process exit code=${code}`); });
+process.on('beforeExit', (code) => { crashLog(`beforeExit code=${code}`); });
+
 import express from 'express';
 import { config, PUBLIC_DIR } from './config.js';
 import db from './db.js'; // 初始化数据库
@@ -225,7 +247,8 @@ app.get(/^\/(?!api\/|dist\/|assets\/|sw\.js|qr)/, (req, res) => {
 // ============================================================
 // 启动
 // ============================================================
-app.listen(config.port, '0.0.0.0', async () => {
+const server = app.listen(config.port, '0.0.0.0', async () => {
+  crashLog(`listening on ${config.port}`);
   const { networkInterfaces } = await import('node:os');
   const nets = networkInterfaces();
   const lan = Object.values(nets).flat().find(
@@ -239,3 +262,8 @@ app.listen(config.port, '0.0.0.0', async () => {
     console.warn('  ⚠️  警告: JWT_SECRET 使用了默认值，公网暴露时请立即修改 .env！\n');
   }
 });
+server.on('error', (err) => crashLog(`server error: ${err?.stack || err}`));
+server.on('close', () => crashLog('server close event'));
+
+// 每 10 秒心跳写入，用于精确定位死亡发生在哪个时间窗口
+setInterval(() => crashLog('heartbeat'), 10_000);
