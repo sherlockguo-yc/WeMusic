@@ -100,9 +100,9 @@ npm test                      # 单元测试 + 依赖检查
 `npm start` 使用 concurrently 同时启动 nodemon（监听 `server/` 自动重启）和 Vite watch 构建（监听 `src/` 自动打包到 `public/dist/`）。修改源码后刷新页面即可看到最新效果，无需手动构建或重启。
 
 ### 手机访问
-- **扫码**：「设置 → 移动端访问」或 `http://localhost:5174/qr`
+- **扫码**：「设置 → 移动端访问」（`https://wemusic.sherlockguo.com`）
 - **adb**：手机 USB 连接，`npm run mobile` 自动打开浏览器
-- **手动**：`http://<局域网IP>:5174`（同一 Wi-Fi）
+- **手动**：访问 `https://wemusic.sherlockguo.com`
 - iOS 分享 →「添加到主屏幕」即可获得 PWA 全屏体验。
 
 ---

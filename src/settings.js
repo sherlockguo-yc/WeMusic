@@ -655,16 +655,12 @@ export function initSettings() {
   $('settingsLogout').onclick = () => { Auth.clear(); location.href = '/login.html'; };
 
   // 移动端扫码弹窗
-  $('showMobileQRBtn').onclick = async () => {
-    try {
-      const { url } = await api('/lan-url');
-      $('mobileQRUrl').textContent = url;
-      $('mobileQRImg').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
-      $('mobileQRLan').textContent = url.replace(/^https?:\/\//, '');
-      $('mobileQRModal').classList.add('show');
-    } catch (e) {
-      toast('获取局域网地址失败：' + e.message);
-    }
+  $('showMobileQRBtn').onclick = () => {
+    const url = 'https://wemusic.sherlockguo.com';
+    $('mobileQRUrl').textContent = url;
+    $('mobileQRImg').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+    $('mobileQRLan').textContent = url.replace(/^https?:\/\//, '');
+    $('mobileQRModal').classList.add('show');
   };
   $('mobileQRClose').onclick = () => $('mobileQRModal').classList.remove('show');
   $('mobileQRModal').onclick = (e) => { if (e.target.id === 'mobileQRModal') $('mobileQRModal').classList.remove('show'); };
