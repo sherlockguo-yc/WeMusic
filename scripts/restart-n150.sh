@@ -28,6 +28,11 @@ cd "$DIR" || exit 1
 [ -f "$HOME/.deploy-env" ] && . "$HOME/.deploy-env"
 # 服务专属配置（.env 受 rsync --exclude 保护，跨版本持久）
 [ -f "$DIR/.env" ] && . "$DIR/.env"
+# 防御性修复：.env 里的 PORT 会覆盖脚本开头设的 PORT=5174（本例中值相同，
+# 无实际影响，但如果未来端口改名/改值，source .env 后必须显式恢复本脚本的
+# 端口约定，避免下面的 lsof/kill 逻辑用错端口。同类 bug 曾在 webhook-start.sh
+# 中导致 PORT 被 wemusic 自己的 .env 覆盖，误杀刚启动的主进程。
+PORT=5174
 # 用 systemd-run 起独立 scope，脱离 cron.service cgroup（避免被 cron 触发的历次
 # 重启进程共用同一个 cgroup 记账，随崩溃循环累积资源压力互相牵连、被内核回收杀死）。
 # 依赖 linger（让用户级 systemd 常驻，不随登录 session 结束而失效）：若未开启则自动开启。
