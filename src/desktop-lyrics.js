@@ -17,6 +17,7 @@ let _pipSyncId = null;
 let _isOpen = false;
 let _currentLayout = 'double';   // 'double' | 'single'
 let _currentBg = 'blur';         // 'blur' | 'dark' | 'theme'
+let _currentSize = 'med';        // 'sm' | 'med' | 'lg'
 let _settingsVisible = false;
 
 // ---- PiP 窗口内部 CSS ----
@@ -75,6 +76,17 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px}
 }
 /* 单行模式：隐藏下一行 */
 .dt-root[data-layout="single"] .dt-next{display:none}
+
+/* ====== 字号（data-size 控制）====== */
+/* 小 */
+.dt-root[data-size="sm"] .dt-current{font-size:14px}
+.dt-root[data-size="sm"] .dt-next{font-size:10px}
+/* 中（默认） */
+.dt-root[data-size="med"] .dt-current{font-size:17px}
+.dt-root[data-size="med"] .dt-next{font-size:12px}
+/* 大 */
+.dt-root[data-size="lg"] .dt-current{font-size:20px;letter-spacing:.8px}
+.dt-root[data-size="lg"] .dt-next{font-size:14px}
 .dt-placeholder{
   font-size:11.5px;opacity:.4;display:flex;align-items:center;gap:5px;
   font-weight:400;letter-spacing:.2px;
@@ -114,11 +126,11 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px}
 }
 .dt-set-btn:hover{opacity:.85}
 .dt-set-pop{
-  position:absolute;bottom:calc(100% + 3px);right:0;display:none;
-  background:rgba(20,20,26,0.96);border-radius:10px;padding:12px 14px;
-  min-width:160px;z-index:30;
+  position:absolute;top:calc(100% + 4px);right:0;display:none;
+  background:rgba(20,20,26,0.96);border-radius:10px;padding:10px 12px;
+  min-width:150px;z-index:30;
   border:1px solid rgba(255,255,255,0.07);
-  box-shadow:0 10px 30px rgba(0,0,0,0.4),0 2px 8px rgba(0,0,0,0.25);
+  box-shadow:0 8px 24px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.2);
   color:inherit;
 }
 .dt-root[data-bg="theme"].dt-light .dt-set-pop{
@@ -127,7 +139,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px}
   box-shadow:0 10px 30px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.06);
 }
 .dt-set-pop.show{display:block;animation:dtpopIn .14s ease-out}
-@keyframes dtpopIn{from{opacity:0;transform:translateY(3px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes dtpopIn{from{opacity:0;transform:translateY(-3px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
 .dt-srow{margin-bottom:11px}
 .dt-srow:last-child{margin-bottom:0}
 .dt-slabel{
@@ -155,12 +167,14 @@ function loadPrefs() {
   try {
     _currentLayout = localStorage.getItem('wemusic_desktop_lyrics_layout') || 'double';
     _currentBg = localStorage.getItem('wemusic_desktop_lyrics_bg') || 'blur';
+    _currentSize = localStorage.getItem('wemusic_desktop_lyrics_size') || 'med';
   } catch { /* ignored */ }
 }
 function savePrefs() {
   try {
     localStorage.setItem('wemusic_desktop_lyrics_layout', _currentLayout);
     localStorage.setItem('wemusic_desktop_lyrics_bg', _currentBg);
+    localStorage.setItem('wemusic_desktop_lyrics_size', _currentSize);
   } catch { /* ignored */ }
 }
 
@@ -217,7 +231,7 @@ function buildHTML(song) {
       : `<div class="dt-placeholder">${PIANO_ICON} 加载中…</div>`;
 
   return `
-<div class="dt-root" data-layout="${_currentLayout}" data-bg="${_currentBg}${lightClass}">
+<div class="dt-root" data-layout="${_currentLayout}" data-bg="${_currentBg}${lightClass}" data-size="${_currentSize}">
   <button class="dt-set-btn" id="dtGearBtn">${GEAR_ICON}</button>
   <div class="dt-set-pop" id="dtPop">${settingsHTML()}</div>
   <div class="dt-body" id="dtBody">${bodyHTML}</div>
@@ -237,7 +251,10 @@ function settingsHTML() {
   const bopts = [['blur','毛玻璃'],['dark','暗色'],['theme','主题']].map(([v,l]) =>
     `<button class="dtopt${v===_currentBg?' on':''}" data-s="bg" data-v="${v}">${l}</button>`
   ).join('');
-  return `<div class="dt-srow"><span class="dt-slabel">布局</span><div class="dtops">${lopts}</div></div><div class="dt-srow"><span class="dt-slabel">背景</span><div class="dtops">${bopts}</div></div>`;
+  const sopts = [['sm','小'],['med','中'],['lg','大']].map(([v,l]) =>
+    `<button class="dtopt${v===_currentSize?' on':''}" data-s="size" data-v="${v}">${l}</button>`
+  ).join('');
+  return `<div class="dt-srow"><span class="dt-slabel">布局</span><div class="dtops">${lopts}</div></div><div class="dt-srow"><span class="dt-slabel">背景</span><div class="dtops">${bopts}</div></div><div class="dt-srow"><span class="dt-slabel">字号</span><div class="dtops">${sopts}</div></div>`;
 }
 
 // ---- 绑定事件 ----
@@ -270,6 +287,9 @@ function bindEvents(doc) {
         root.dataset.bg = v;
         const isLight = document.body.classList.contains('light');
         root.classList.toggle('dt-light', v === 'theme' && isLight);
+      } else if (s === 'size') {
+        _currentSize = v;
+        root.dataset.size = v; // CSS 字号自动切换
       }
       savePrefs();
       refreshOpts(doc);
@@ -293,6 +313,7 @@ function bindEvents(doc) {
 function refreshOpts(doc) {
   doc.querySelectorAll('.dtopt[data-s="layout"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentLayout));
   doc.querySelectorAll('.dtopt[data-s="bg"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentBg));
+  doc.querySelectorAll('.dtopt[data-s="size"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentSize));
 }
 
 // ---- 同步循环 ----
