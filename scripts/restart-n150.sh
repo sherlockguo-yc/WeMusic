@@ -28,7 +28,22 @@ cd "$DIR" || exit 1
 [ -f "$HOME/.deploy-env" ] && . "$HOME/.deploy-env"
 # 服务专属配置（.env 受 rsync --exclude 保护，跨版本持久）
 [ -f "$DIR/.env" ] && . "$DIR/.env"
-nohup node server/index.js > "$LOG" 2>&1 &
+# 用 systemd-run 起独立 scope，脱离 cron.service cgroup（避免被 cron 触发的历次
+# 重启进程共用同一个 cgroup 记账，随崩溃循环累积资源压力互相牵连、被内核回收杀死）。
+# 依赖 linger（让用户级 systemd 常驻，不随登录 session 结束而失效）：若未开启则自动开启。
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+if command -v systemd-run >/dev/null 2>&1; then
+  if ! loginctl show-user "$(id -un)" --property=Linger 2>/dev/null | grep -q 'Linger=yes'; then
+    loginctl enable-linger "$(id -un)" >/dev/null 2>&1
+    sleep 1
+  fi
+  # 清理上次遗留的同名 scope（正常退出会自动回收，异常情况下保险起见先清一次）
+  systemctl --user stop wemusic-app.scope >/dev/null 2>&1
+  systemctl --user reset-failed wemusic-app.scope >/dev/null 2>&1
+  nohup systemd-run --user --scope --collect --unit="wemusic-app" -- node server/index.js > "$LOG" 2>&1 &
+else
+  nohup node server/index.js > "$LOG" 2>&1 &
+fi
 sleep 2
 NEWPID=$(lsof -ti:$PORT 2>/dev/null)
 if [ -n "$NEWPID" ]; then
