@@ -18,6 +18,7 @@ let _isOpen = false;
 let _currentLayout = 'double';   // 'double' | 'single'
 let _currentBg = 'blur';         // 'blur' | 'dark' | 'theme'
 let _settingsVisible = false;
+let _userWidth = 320; // 记录用户手动拖动的窗口宽度，布局切换时保留
 
 // ---- PiP 窗口内部 CSS ----
 const PIP_CSS = `
@@ -156,6 +157,7 @@ export async function openDesktopLyrics() {
   }
 
   loadPrefs();
+  _userWidth = 320; // 每次打开重置为默认宽度
 
   // 确保歌词已加载
   if (state.current && !lyricsLines.length) {
@@ -173,6 +175,13 @@ export async function openDesktopLyrics() {
 
       // 窗口关闭时清理
       pipWindow.addEventListener('pagehide', () => { cleanup(); });
+
+      // 跟踪用户手动调整的窗口宽度（布局切换时保留）
+      pipWindow.addEventListener('resize', () => {
+        if (pipWindow && typeof pipWindow.outerWidth === 'number') {
+          _userWidth = pipWindow.outerWidth;
+        }
+      });
 
       // 绑定事件
       bindPiPEvents(pipWindow.document);
@@ -278,9 +287,15 @@ function bindPiPEvents(doc) {
       const value = btn.dataset.value;
       if (setting === 'layout') {
         _currentLayout = value;
+        // 仅布局切换时调整窗口高度（单行/双行），保留用户已调整的宽度
+        if (pipWindow && typeof pipWindow.resizeTo === 'function') {
+          try {
+            pipWindow.resizeTo(Math.max(200, _userWidth), value === 'single' ? 72 : 120);
+          } catch { /* 部分版本不支持 resizeTo */ }
+        }
       } else if (setting === 'bg') {
         _currentBg = value;
-        // 更新 light class
+        // 背景变化不改变窗口尺寸，仅更新 light class
         const isLight = document.body.classList.contains('light');
         const root = doc.querySelector('.dt-lyrics');
         if (value === 'theme' && isLight) root.classList.add('dt-light');
@@ -288,12 +303,6 @@ function bindPiPEvents(doc) {
       }
       savePrefs();
       refreshSettings(doc);
-      // 单行模式调整窗口大小
-      if (pipWindow && typeof pipWindow.resizeTo === 'function') {
-        try {
-          pipWindow.resizeTo(320, _currentLayout === 'single' ? 72 : 120);
-        } catch { /* 部分版本不支持 resizeTo */ }
-      }
     });
   });
 
@@ -433,6 +442,13 @@ function openPopup() {
 
   pipWindow = popup;
   bindPiPEvents(popup.document);
+
+  // 跟踪用户手动调整的窗口宽度
+  popup.addEventListener('resize', () => {
+    if (popup && typeof popup.outerWidth === 'number') {
+      _userWidth = popup.outerWidth;
+    }
+  });
 
   popup.addEventListener('beforeunload', () => { cleanup(); });
 
