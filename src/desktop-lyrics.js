@@ -28,74 +28,107 @@ html,body{width:100%;height:100%;overflow:hidden}
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
   user-select:none;-webkit-user-select:none;position:relative;overflow:hidden;
 }
+/* ---- 背景风格 ---- */
 .dt-lyrics[data-bg="blur"]{
-  background:rgba(0,0,0,0.35);
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  background:linear-gradient(135deg,rgba(20,20,30,0.65) 0%,rgba(10,10,18,0.75) 100%);
+  backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);
   color:#fff;
 }
 .dt-lyrics[data-bg="dark"]{
-  background:rgba(0,0,0,0.85);
-  color:#e0e3e8;
+  background:linear-gradient(160deg,rgba(18,18,22,0.94) 0%,rgba(8,8,12,0.98) 100%);
+  color:#eaecef;
 }
 .dt-lyrics[data-bg="theme"].dt-light{
-  background:#f4f6f9;color:#1b1d22;
+  background:linear-gradient(135deg,#f6f7f9 0%,#eef0f4 100%);color:#1b1d22;
 }
 .dt-lyrics[data-bg="theme"]:not(.dt-light){
-  background:#0d0f12;color:#e0e3e8;
+  background:linear-gradient(160deg,#14161a 0%,#0a0c0e 100%);color:#eaecef;
 }
+/* ---- 歌词区域 ---- */
 .dt-lyrics-body{
   flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
-  padding:8px 16px 4px;min-height:0;
+  padding:10px 20px 6px;min-height:0;position:relative;
 }
 .dt-line{
-  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
-  transition:opacity .15s;
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:100%;transition:all .25s ease;
 }
-.dt-current{font-size:16px;font-weight:700;line-height:1.4;}
-.dt-next{font-size:13px;opacity:.5;margin-top:2px;}
-.dt-placeholder{font-size:13px;opacity:.5;display:flex;align-items:center;gap:6px;}
-.dt-placeholder svg{flex-shrink:0;opacity:.6;}
+.dt-current{
+  font-size:17px;font-weight:700;line-height:1.45;
+  letter-spacing:.5px;text-shadow:0 1px 8px rgba(0,0,0,0.3);
+}
+.dt-next{
+  font-size:12px;opacity:.38;margin-top:3px;font-weight:400;
+  letter-spacing:.2px;
+}
+.dt-placeholder{
+  font-size:12px;opacity:.45;display:flex;align-items:center;gap:6px;
+  font-weight:400;
+}
+.dt-placeholder svg{flex-shrink:0;opacity:.55;}
+/* ---- 分隔线（歌词与控件之间）---- */
+.dt-divider{
+  height:1px;margin:0 16px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent);
+  flex-shrink:0;
+}
+.dt-lyrics[data-bg="theme"].dt-light .dt-divider{
+  background:linear-gradient(90deg,transparent,rgba(0,0,0,0.07),transparent);
+}
+/* ---- 播放控制 ---- */
 .dt-controls{
-  display:flex;justify-content:center;gap:14px;padding:4px 16px 8px;
+  display:flex;justify-content:center;gap:18px;padding:6px 20px 10px;
 }
 .dt-btn{
-  background:none;border:none;cursor:pointer;padding:4px;border-radius:4px;
-  display:flex;align-items:center;justify-content:center;opacity:.7;
+  background:none;border:none;cursor:pointer;padding:5px;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;opacity:.65;
+  transition:opacity .15s,background .15s,transform .12s;
 }
 .dt-lyrics[data-bg="blur"] .dt-btn{color:#fff}
-.dt-lyrics[data-bg="dark"] .dt-btn{color:#e0e3e8}
+.dt-lyrics[data-bg="dark"] .dt-btn{color:#eaecef}
 .dt-lyrics[data-bg="theme"].dt-light .dt-btn{color:#1b1d22}
-.dt-lyrics[data-bg="theme"]:not(.dt-light) .dt-btn{color:#e0e3e8}
-.dt-btn:hover{opacity:1;background:rgba(255,255,255,0.12)}
+.dt-lyrics[data-bg="theme"]:not(.dt-light) .dt-btn{color:#eaecef}
+.dt-btn:hover{opacity:1;background:rgba(255,255,255,0.1);transform:scale(1.08)}
 .dt-lyrics[data-bg="theme"].dt-light .dt-btn:hover{background:rgba(0,0,0,0.06)}
-.dt-btn.paused{opacity:.4}
-.dt-settings-wrap{position:absolute;top:4px;right:4px;}
+.dt-btn:active{transform:scale(0.95)}
+.dt-btn.paused{opacity:.35}
+/* ---- 设置按钮 & 面板（向上展开）---- */
+.dt-settings-wrap{position:absolute;top:4px;right:6px;z-index:20;}
 .dt-settings-popover{
-  position:absolute;top:24px;right:0;display:none;
-  background:rgba(30,30,30,0.96);border-radius:8px;padding:10px;
-  min-width:150px;z-index:10;backdrop-filter:blur(10px);
-  border:1px solid rgba(255,255,255,0.1);
+  position:absolute;bottom:100%;right:0;margin-bottom:4px;display:none;
+  background:rgba(22,22,28,0.95);border-radius:10px;padding:12px;
+  min-width:156px;z-index:30;backdrop-filter:blur(16px);
+  border:1px solid rgba(255,255,255,0.09);
+  box-shadow:0 8px 24px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.2);
 }
 .dt-lyrics[data-bg="theme"].dt-light .dt-settings-popover{
-  background:rgba(255,255,255,0.96);border-color:rgba(0,0,0,0.1);
+  background:rgba(255,255,255,0.97);border-color:rgba(0,0,0,0.08);
   color:#1b1d22;
+  box-shadow:0 8px 24px rgba(0,0,0,0.1),0 2px 8px rgba(0,0,0,0.06);
 }
-.dt-settings-popover.show{display:block}
-.dt-setting-row{margin-bottom:8px}
+.dt-settings-popover.show{display:block;animation:dtPopIn .15s ease}
+@keyframes dtPopIn{from{opacity:0;transform:translateY(4px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+.dt-setting-row{margin-bottom:10px}
 .dt-setting-row:last-child{margin-bottom:0}
-.dt-setting-label{font-size:10px;opacity:.5;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px;}
-.dt-setting-options{display:flex;gap:4px}
+.dt-setting-label{
+  font-size:10px;opacity:.42;display:block;margin-bottom:5px;
+  text-transform:uppercase;letter-spacing:.8px;font-weight:600;
+}
+.dt-setting-options{display:flex;gap:5px}
 .dt-setting-opt{
-  flex:1;font-size:11px;padding:4px 6px;border-radius:4px;cursor:pointer;
-  border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);
-  color:inherit;text-align:center;white-space:nowrap;
+  flex:1;font-size:11px;padding:5px 8px;border-radius:5px;cursor:pointer;
+  border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);
+  color:inherit;text-align:center;white-space:nowrap;font-weight:500;
+  transition:all .12s ease;
 }
 .dt-lyrics[data-bg="theme"].dt-light .dt-setting-opt{
-  border-color:rgba(0,0,0,0.15);background:rgba(0,0,0,0.04);
+  border-color:rgba(0,0,0,0.1);background:rgba(0,0,0,0.03);
 }
-.dt-setting-opt:hover{background:rgba(255,255,255,0.12)}
-.dt-lyrics[data-bg="theme"].dt-light .dt-setting-opt:hover{background:rgba(0,0,0,0.08)}
-.dt-setting-opt.active{border-color:#2ab758;background:rgba(42,183,88,0.2);color:#2ab758}
+.dt-setting-opt:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.18)}
+.dt-lyrics[data-bg="theme"].dt-light .dt-setting-opt:hover{background:rgba(0,0,0,0.07)}
+.dt-setting-opt.active{
+  border-color:#2ab758;background:rgba(42,183,88,0.18);color:#2ab758;
+  font-weight:600;
+}
 @media all and (display-mode:picture-in-picture){body{margin:0}}
 `;
 
@@ -184,6 +217,7 @@ function buildPipHTML(song) {
       <div class="dt-placeholder">${PIANO_ICON} 加载中…</div>
     `)}
   </div>
+  <div class="dt-divider"></div>
   <div class="dt-controls">
     <button class="dt-btn" id="dtPrevBtn" title="上一首">${SKIP_BACK}</button>
     <button class="dt-btn" id="dtPlayBtn" title="播放 / 暂停">${PLAY_ICON}</button>
