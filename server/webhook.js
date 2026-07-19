@@ -1,46 +1,66 @@
 import http from 'node:http';
-import { exec } from 'node:child_process';
 import { homedir } from 'node:os';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 const PORT = Number(process.env.WEBHOOK_PORT) || 9001;
-const DEPLOY_AGENT = `${homedir()}/deploy-agent.sh`;
 const CONF = `${homedir()}/.deploy-projects.conf`;
+const QUEUE_ROOT = `${homedir()}/.deploy-queue`;
+const JOB_DIR = join(QUEUE_ROOT, 'jobs');
+const STATE_DIR = join(QUEUE_ROOT, 'states');
+const VERSION_RE = /^[a-f0-9]{7,40}$/;
 
-// 频率限制：同一项目 60 秒内最多触发一次部署
-const lastDeploy = new Map();
+function readJson(filePath, fallback) {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf-8'));
+  } catch (_) {
+    return fallback;
+  }
+}
 
-// 从配置文件读取支持的项目列表
+function writeJsonAtomic(filePath, data) {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tempPath, `${JSON.stringify(data)}\n`, { encoding: 'utf-8', mode: 0o600 });
+  renameSync(tempPath, filePath);
+}
+
 function loadProjects() {
   if (!existsSync(CONF)) return [];
-  const lines = readFileSync(CONF, 'utf-8').split('\n');
-  return lines
+  return readFileSync(CONF, 'utf-8')
+    .split('\n')
     .map(line => line.trim())
     .filter(line => line && !line.startsWith('#'))
     .map(line => line.split('|')[0])
     .filter(Boolean);
 }
 
-let validProjects = loadProjects();
+function enqueue(project, version) {
+  const now = Math.floor(Date.now() / 1000);
+  const job = { project, version, trigger: 'webhook', queuedAt: now, attempt: 0 };
+  const jobPath = join(JOB_DIR, `${project}.json`);
+  const statePath = join(STATE_DIR, `${project}.json`);
+  const state = readJson(statePath, { project, active: null, pending: null, last: null });
 
-// 每 5 分钟刷新一次项目列表（配置文件可能被更新）
-setInterval(() => { validProjects = loadProjects(); }, 300_000);
-
-function runDeploy(project, version) {
-  console.log(`[${new Date().toISOString()}] 部署 ${project} v${version} ...`);
-  const cmd = `bash "${DEPLOY_AGENT}" --deploy ${project} ${version}`;
-  exec(cmd, { timeout: 300_000 }, (err, stdout, stderr) => {
-    if (err) {
-      console.error(`[${new Date().toISOString()}] ${project} 部署失败:`, err.message);
-      if (stderr) console.error('stderr:', stderr);
-      return;
-    }
-    console.log(`[${new Date().toISOString()}] ${project} 部署完成`);
-    if (stdout) console.log(stdout.trim());
-  });
+  writeJsonAtomic(jobPath, job);
+  state.project = project;
+  state.pending = {
+    ...job,
+    phase: 'queued',
+    status: 'queued',
+    message: `等待部署 ${version}`,
+    updatedAt: now,
+  };
+  state.updatedAt = now;
+  writeJsonAtomic(statePath, state);
+  return job;
 }
+
+let validProjects = loadProjects();
+setInterval(() => { validProjects = loadProjects(); }, 300_000);
 
 function sendJSON(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -56,10 +76,7 @@ function readBody(req) {
   });
 }
 
-// ── HTTP Server ──
-
 const server = http.createServer(async (req, res) => {
-  // POST /deploy — CI workflow 主动通知部署
   if (req.method === 'POST' && req.url === '/deploy') {
     try {
       const body = await readBody(req);
@@ -71,39 +88,31 @@ const server = http.createServer(async (req, res) => {
       if (!project || !version) {
         return sendJSON(res, 400, { error: 'Missing project or version' });
       }
-
       if (!validProjects.includes(project)) {
         return sendJSON(res, 400, { error: `Unknown project: ${project}` });
       }
-
-      // 频率限制：同一项目 60 秒内只接受一次部署
-      const now = Date.now();
-      const last = lastDeploy.get(project) || 0;
-      if (now - last < 60_000) {
-        return sendJSON(res, 429, { error: 'Rate limited', retryAfter: Math.ceil((60_000 - (now - last)) / 1000) });
+      if (!VERSION_RE.test(version)) {
+        return sendJSON(res, 400, { error: 'Invalid version' });
       }
-      lastDeploy.set(project, now);
 
-      console.log(`[${new Date().toISOString()}] 收到部署请求: ${project} v${version}`);
-      sendJSON(res, 202, { message: 'Deploy triggered', project, version });
-      runDeploy(project, version);
+      const job = enqueue(project, version);
+      console.log(`[${new Date().toISOString()}] 已入队: ${project} v${version}`);
+      return sendJSON(res, 202, { message: 'Deploy queued', project, version, queuedAt: job.queuedAt });
     } catch (err) {
-      console.error(`[${new Date().toISOString()}] 处理异常:`, err.message);
-      sendJSON(res, 500, { error: 'Internal server error' });
+      console.error(`[${new Date().toISOString()}] 入队失败:`, err.message);
+      return sendJSON(res, 500, { error: 'Unable to queue deployment' });
     }
-    return;
   }
 
-  // GET /health
   if (req.method === 'GET' && req.url === '/health') {
     return sendJSON(res, 200, { status: 'ok', projects: validProjects });
   }
 
-  sendJSON(res, 404, { error: 'Not found' });
+  return sendJSON(res, 404, { error: 'Not found' });
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`[webhook] 服务已启动 ✅`);
+  console.log('[webhook] 服务已启动');
   console.log(`[webhook] 端口: ${PORT}`);
-  console.log(`[webhook] 端点: POST /deploy, POST /webhook, GET /health`);
+  console.log('[webhook] 端点: POST /deploy, GET /health');
 });
