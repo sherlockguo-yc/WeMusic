@@ -126,7 +126,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px}
 }
 .dt-set-btn:hover{opacity:.85}
 .dt-set-pop{
-  position:absolute;top:calc(100% + 4px);right:0;display:none;
+  position:absolute;top:28px;right:7px;display:none;
   background:rgba(20,20,26,0.96);border-radius:10px;padding:10px 12px;
   min-width:150px;z-index:30;
   border:1px solid rgba(255,255,255,0.07);
