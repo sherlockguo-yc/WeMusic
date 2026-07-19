@@ -31,7 +31,7 @@ setInterval(() => { validProjects = loadProjects(); }, 300_000);
 function runDeploy(project, version) {
   console.log(`[${new Date().toISOString()}] 部署 ${project} v${version} ...`);
   const cmd = `bash "${DEPLOY_AGENT}" --deploy ${project} ${version}`;
-  exec(cmd, { timeout: 180_000 }, (err, stdout, stderr) => {
+  exec(cmd, { timeout: 300_000 }, (err, stdout, stderr) => {
     if (err) {
       console.error(`[${new Date().toISOString()}] ${project} 部署失败:`, err.message);
       if (stderr) console.error('stderr:', stderr);
