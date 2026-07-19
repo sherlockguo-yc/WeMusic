@@ -10,10 +10,11 @@ QUEUE_ROOT="${HOME}/.deploy-queue"
 JOB_DIR="${QUEUE_ROOT}/jobs"
 RUN_DIR="${QUEUE_ROOT}/running"
 STATE_DIR="${QUEUE_ROOT}/states"
+WORKER_STATE_FILE="${QUEUE_ROOT}/worker.json"
 LOCK_FILE="${QUEUE_ROOT}/worker.lock"
 LOG_BASE="/tmp"
 LEASE_SECONDS=1800
-WORKER_PID=$$
+DEPLOY_WORKER_PID=$$
 export DEPLOY_WORKER_PID
 
 ensure_dirs() {
@@ -36,6 +37,43 @@ try:
         print(value)
 except Exception:
     pass
+PY
+}
+
+write_worker_state() {
+  local status="$1" project="${2:-}" version="${3:-}" phase="${4:-}" message="${5:-}"
+  python3 - "$WORKER_STATE_FILE" "$status" "$project" "$version" "$phase" "$message" <<'PY'
+import json, os, sys, tempfile, time
+path, status, project, version, phase, message = sys.argv[1:]
+now = int(time.time())
+try:
+    with open(path, encoding='utf-8') as f:
+        state = json.load(f)
+except Exception:
+    state = {}
+
+is_new_task = state.get('project') != project or state.get('version') != version
+state.update({
+    'pid': int(os.environ.get('DEPLOY_WORKER_PID', os.getpid())),
+    'status': status,
+    'project': project or None,
+    'version': version or None,
+    'phase': phase or None,
+    'message': message or None,
+    'updatedAt': now,
+})
+if status == 'working':
+    if is_new_task:
+        state['startedAt'] = now
+else:
+    state['startedAt'] = None
+
+os.makedirs(os.path.dirname(path), exist_ok=True)
+fd, tmp = tempfile.mkstemp(prefix='.worker-', dir=os.path.dirname(path), text=True)
+with os.fdopen(fd, 'w', encoding='utf-8') as f:
+    json.dump(state, f, ensure_ascii=False, separators=(',', ':'))
+    f.write('\n')
+os.replace(tmp, path)
 PY
 }
 
@@ -109,6 +147,9 @@ with os.fdopen(fd, 'w', encoding='utf-8') as f:
     f.write('\n')
 os.replace(tmp, path)
 PY
+  if [ "$action" = "active" ] || [ "$action" = "phase" ]; then
+    write_worker_state working "$project" "$version" "$phase" "$message" || true
+  fi
 }
 
 log_event() {
@@ -330,6 +371,7 @@ download_artifact() {
 finish_job() {
   local running="$1" project="$2" version="$3" result="$4" phase="$5" trigger="$6" message="$7" attempt="${8:-0}"
   state_transition "$project" "$result" "$version" "$phase" "$result" "$trigger" "$message" "$attempt"
+  write_worker_state idle "" "" "" "空闲" || true
   log_event "$project" "$phase" "$result" "$message" "$trigger"
   rm -f "$running"
 }
@@ -466,6 +508,7 @@ exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
   exit 0
 fi
+write_worker_state idle "" "" "" "空闲" || true
 
 recover_interrupted_jobs
 queue_remote_updates
