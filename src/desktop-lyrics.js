@@ -126,17 +126,17 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px}
 }
 .dt-set-btn:hover{opacity:.85}
 .dt-set-pop{
-  position:absolute;top:28px;right:7px;display:none;
+  position:fixed;top:28px;right:7px;display:none;
   background:rgba(20,20,26,0.96);border-radius:10px;padding:10px 12px;
-  min-width:150px;z-index:30;
+  min-width:150px;z-index:9999;
   border:1px solid rgba(255,255,255,0.07);
-  box-shadow:0 8px 24px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.2);
+  box-shadow:0 8px 24px rgba(0,0,0,0.45),0 2px 8px rgba(0,0,0,0.25);
   color:inherit;
 }
 .dt-root[data-bg="theme"].dt-light .dt-set-pop{
   background:rgba(255,255,255,0.98);border-color:rgba(0,0,0,0.07);
   color:#1a1c20;
-  box-shadow:0 10px 30px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.06);
+  box-shadow:0 10px 30px rgba(0,0,0,0.15),0 2px 8px rgba(0,0,0,0.08);
 }
 .dt-set-pop.show{display:block;animation:dtpopIn .14s ease-out}
 @keyframes dtpopIn{from{opacity:0;transform:translateY(-3px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
