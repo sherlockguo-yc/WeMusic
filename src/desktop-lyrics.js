@@ -8,8 +8,8 @@ const _playerP = import('./player.js');
 // Lucide SVG 图标（仅供本模块使用）
 const SKIP_BACK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>';
 const SKIP_FWD  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>';
-const GEAR_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
-const PIANO_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+const GEAR_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06-.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+const PIANO_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
 
 // ---- 模块状态 ----
 let pipWindow = null;
@@ -18,118 +18,135 @@ let _isOpen = false;
 let _currentLayout = 'double';   // 'double' | 'single'
 let _currentBg = 'blur';         // 'blur' | 'dark' | 'theme'
 let _settingsVisible = false;
-let _userWidth = 320; // 记录用户手动拖动的窗口宽度，布局切换时保留
 
 // ---- PiP 窗口内部 CSS ----
 const PIP_CSS = `
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden}
-.dt-lyrics{
+html,body{width:100%;height:100%;overflow:hidden;font-size:14px}
+.dt-root{
   width:100%;height:100vh;display:flex;flex-direction:column;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
   user-select:none;-webkit-user-select:none;position:relative;overflow:hidden;
+  border-radius:10px;
 }
-/* ---- 背景风格 ---- */
-.dt-lyrics[data-bg="blur"]{
-  background:linear-gradient(135deg,rgba(20,20,30,0.65) 0%,rgba(10,10,18,0.75) 100%);
-  backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);
-  color:#fff;
+
+/* ====== 背景风格 ====== */
+/* 毛玻璃：半透明深色底 + backdrop-filter（不支持时优雅降级为纯色） */
+.dt-root[data-bg="blur"]{
+  background:rgba(18,18,28,0.72);
+  backdrop-filter:blur(28px) saturate(1.6);-webkit-backdrop-filter:blur(28px) saturate(1.6);
+  color:#f0f0f5;
+  box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.08);
 }
-.dt-lyrics[data-bg="dark"]{
-  background:linear-gradient(160deg,rgba(18,18,22,0.94) 0%,rgba(8,8,12,0.98) 100%);
-  color:#eaecef;
+/* 暗色：深邃渐变，有层次感 */
+.dt-root[data-bg="dark"]{
+  background:linear-gradient(145deg,#1a1c22 0%,#101216 50%,#0a0b0e 100%);
+  color:#e8eaef;
+  box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.05);
 }
-.dt-lyrics[data-bg="theme"].dt-light{
-  background:linear-gradient(135deg,#f6f7f9 0%,#eef0f4 100%);color:#1b1d22;
+/* 跟随主题 - 浅色 */
+.dt-root[data-bg="theme"].dt-light{
+  background:linear-gradient(145deg,#fafbfd 0%,#f0f2f5 100%);
+  color:#1a1c20;
+  box-shadow:inset 0 0 0 0.5px rgba(0,0,0,0.06);
 }
-.dt-lyrics[data-bg="theme"]:not(.dt-light){
-  background:linear-gradient(160deg,#14161a 0%,#0a0c0e 100%);color:#eaecef;
+/* 跟随主题 - 深色 */
+.dt-root[data-bg="theme"]:not(.dt-light){
+  background:linear-gradient(145deg,#181a1f 0%,#0e0f12 100%);
+  color:#e8eaef;
+  box-shadow:inset 0 0 0 0.5px rgba(255,255,255,0.04);
 }
-/* ---- 歌词区域 ---- */
-.dt-lyrics-body{
+
+/* ====== 歌词区域 ====== */
+.dt-body{
   flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
-  padding:10px 20px 6px;min-height:0;position:relative;
+  padding:12px 22px 4px;min-height:0;position:relative;
 }
 .dt-line{
-  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  max-width:100%;transition:all .25s ease;
+  text-align:center;white-space:nowrap;text-overflow:ellipsis;max-width:100%;
+  overflow:hidden;line-height:1.5;transition:opacity .2s ease;
 }
 .dt-current{
-  font-size:17px;font-weight:700;line-height:1.45;
-  letter-spacing:.5px;text-shadow:0 1px 8px rgba(0,0,0,0.3);
+  font-size:17px;font-weight:700;letter-spacing:.6px;
+  text-shadow:0 1px 12px rgba(0,0,0,0.25);
 }
 .dt-next{
-  font-size:12px;opacity:.38;margin-top:3px;font-weight:400;
-  letter-spacing:.2px;
+  font-size:12px;opacity:.32;margin-top:2px;letter-spacing:.15px;font-weight:400;
 }
+/* 单行模式：隐藏下一行 */
+.dt-root[data-layout="single"] .dt-next{display:none}
 .dt-placeholder{
-  font-size:12px;opacity:.45;display:flex;align-items:center;gap:6px;
-  font-weight:400;
+  font-size:11.5px;opacity:.4;display:flex;align-items:center;gap:5px;
+  font-weight:400;letter-spacing:.2px;
 }
-.dt-placeholder svg{flex-shrink:0;opacity:.55;}
-/* ---- 分隔线（歌词与控件之间）---- */
-.dt-divider{
-  height:1px;margin:0 16px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent);
-  flex-shrink:0;
+.dt-placeholder svg{flex-shrink:0;opacity:.5;}
+
+/* ====== 分隔线 ====== */
+.dt-sep{
+  flex-shrink:0;height:1px;margin:0 18px;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.07) 30%,rgba(255,255,255,0.07) 70%,transparent 100%);
 }
-.dt-lyrics[data-bg="theme"].dt-light .dt-divider{
-  background:linear-gradient(90deg,transparent,rgba(0,0,0,0.07),transparent);
+.dt-root[data-bg="theme"].dt-light .dt-sep{
+  background:linear-gradient(90deg,transparent 0%,rgba(0,0,0,0.06) 30%,rgba(0,0,0,0.06) 70%,transparent 100%);
 }
-/* ---- 播放控制 ---- */
-.dt-controls{
-  display:flex;justify-content:center;gap:18px;padding:6px 20px 10px;
+
+/* ====== 控制栏 ====== */
+.dt-bar{
+  display:flex;justify-content:center;align-items:center;gap:16px;
+  padding:5px 22px 10px;flex-shrink:0;
 }
-.dt-btn{
-  background:none;border:none;cursor:pointer;padding:5px;border-radius:5px;
-  display:flex;align-items:center;justify-content:center;opacity:.65;
-  transition:opacity .15s,background .15s,transform .12s;
+.dt-cbtn{
+  background:none;border:none;cursor:pointer;padding:5px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;color:inherit;
+  opacity:.55;transition:all .15s ease;
 }
-.dt-lyrics[data-bg="blur"] .dt-btn{color:#fff}
-.dt-lyrics[data-bg="dark"] .dt-btn{color:#eaecef}
-.dt-lyrics[data-bg="theme"].dt-light .dt-btn{color:#1b1d22}
-.dt-lyrics[data-bg="theme"]:not(.dt-light) .dt-btn{color:#eaecef}
-.dt-btn:hover{opacity:1;background:rgba(255,255,255,0.1);transform:scale(1.08)}
-.dt-lyrics[data-bg="theme"].dt-light .dt-btn:hover{background:rgba(0,0,0,0.06)}
-.dt-btn:active{transform:scale(0.95)}
-.dt-btn.paused{opacity:.35}
-/* ---- 设置按钮 & 面板（向上展开）---- */
-.dt-settings-wrap{position:absolute;top:4px;right:6px;z-index:20;}
-.dt-settings-popover{
-  position:absolute;bottom:100%;right:0;margin-bottom:4px;display:none;
-  background:rgba(22,22,28,0.95);border-radius:10px;padding:12px;
-  min-width:156px;z-index:30;backdrop-filter:blur(16px);
-  border:1px solid rgba(255,255,255,0.09);
-  box-shadow:0 8px 24px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.2);
+.dt-cbtn:hover{opacity:1;background:rgba(255,255,255,0.09);transform:scale(1.06)}
+.dt-cbtn:active{transform:scale(0.94)}
+.dt-root[data-bg="theme"].dt-light .dt-cbtn:hover{background:rgba(0,0,0,0.06)}
+.dt-cbtn.paused{opacity:.3}
+
+/* ====== 设置按钮 & 面板 ====== */
+.dt-set-btn{
+  position:absolute;top:5px;right:7px;z-index:20;
+  background:none;border:none;cursor:pointer;padding:4px;
+  border-radius:5px;display:flex;align-items:center;justify-content:center;
+  color:inherit;opacity:.45;transition:opacity .15s;
 }
-.dt-lyrics[data-bg="theme"].dt-light .dt-settings-popover{
-  background:rgba(255,255,255,0.97);border-color:rgba(0,0,0,0.08);
-  color:#1b1d22;
-  box-shadow:0 8px 24px rgba(0,0,0,0.1),0 2px 8px rgba(0,0,0,0.06);
+.dt-set-btn:hover{opacity:.85}
+.dt-set-pop{
+  position:absolute;bottom:calc(100% + 3px);right:0;display:none;
+  background:rgba(20,20,26,0.96);border-radius:10px;padding:12px 14px;
+  min-width:160px;z-index:30;
+  border:1px solid rgba(255,255,255,0.07);
+  box-shadow:0 10px 30px rgba(0,0,0,0.4),0 2px 8px rgba(0,0,0,0.25);
+  color:inherit;
 }
-.dt-settings-popover.show{display:block;animation:dtPopIn .15s ease}
-@keyframes dtPopIn{from{opacity:0;transform:translateY(4px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-.dt-setting-row{margin-bottom:10px}
-.dt-setting-row:last-child{margin-bottom:0}
-.dt-setting-label{
-  font-size:10px;opacity:.42;display:block;margin-bottom:5px;
-  text-transform:uppercase;letter-spacing:.8px;font-weight:600;
+.dt-root[data-bg="theme"].dt-light .dt-set-pop{
+  background:rgba(255,255,255,0.98);border-color:rgba(0,0,0,0.07);
+  color:#1a1c20;
+  box-shadow:0 10px 30px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.06);
 }
-.dt-setting-options{display:flex;gap:5px}
-.dt-setting-opt{
-  flex:1;font-size:11px;padding:5px 8px;border-radius:5px;cursor:pointer;
-  border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);
+.dt-set-pop.show{display:block;animation:dtpopIn .14s ease-out}
+@keyframes dtpopIn{from{opacity:0;transform:translateY(3px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+.dt-srow{margin-bottom:11px}
+.dt-srow:last-child{margin-bottom:0}
+.dt-slabel{
+  font-size:9.5px;opacity:.38;display:block;margin-bottom:5px;
+  text-transform:uppercase;letter-spacing:1px;font-weight:600;
+}
+.dtopts{display:flex;gap:5px}
+.dtopt{
+  flex:1;font-size:11px;padding:5px 7px;border-radius:5px;cursor:pointer;
+  border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);
   color:inherit;text-align:center;white-space:nowrap;font-weight:500;
   transition:all .12s ease;
 }
-.dt-lyrics[data-bg="theme"].dt-light .dt-setting-opt{
-  border-color:rgba(0,0,0,0.1);background:rgba(0,0,0,0.03);
+.dt-root[data-bg="theme"].dt-light .dtopt{
+  border-color:rgba(0,0,0,0.08);background:rgba(0,0,0,0.03);
 }
-.dt-setting-opt:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.18)}
-.dt-lyrics[data-bg="theme"].dt-light .dt-setting-opt:hover{background:rgba(0,0,0,0.07)}
-.dt-setting-opt.active{
-  border-color:#2ab758;background:rgba(42,183,88,0.18);color:#2ab758;
-  font-weight:600;
-}
+.dtopt:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.14)}
+.dt-root[data-bg="theme"].dt-light .dtopt:hover{background:rgba(0,0,0,0.07)}
+.dtopt.on{border-color:#2ab758;background:rgba(42,183,88,0.16);color:#2ab758;font-weight:600}
 @media all and (display-mode:picture-in-picture){body{margin:0}}
 `;
 
@@ -151,40 +168,24 @@ function savePrefs() {
 export function isOpen() { return _isOpen; }
 
 export async function openDesktopLyrics() {
-  if (_isOpen) {
-    try { pipWindow?.focus?.(); } catch {}
-    return;
-  }
+  if (_isOpen) { try { pipWindow?.focus?.(); } catch {} return; }
 
   loadPrefs();
-  _userWidth = 320; // 每次打开重置为默认宽度
 
   // 确保歌词已加载
   if (state.current && !lyricsLines.length) {
-    try { await loadLyrics(state.current); } catch { /* 加载失败不阻塞 */ }
+    try { await loadLyrics(state.current); } catch { /* 不阻塞 */ }
   }
 
   if ('documentPictureInPicture' in window) {
     try {
-      pipWindow = await documentPictureInPicture.requestWindow({
-        width: 320,
-        height: _currentLayout === 'single' ? 72 : 120,
-      });
+      // 固定初始尺寸，后续不再改变
+      pipWindow = await documentPictureInPicture.requestWindow({ width: 340, height: 130 });
       pipWindow.document.head.innerHTML = `<style>${PIP_CSS}</style>`;
-      pipWindow.document.body.innerHTML = buildPipHTML(state.current);
+      pipWindow.document.body.innerHTML = buildHTML(state.current);
 
-      // 窗口关闭时清理
       pipWindow.addEventListener('pagehide', () => { cleanup(); });
-
-      // 跟踪用户手动调整的窗口宽度（布局切换时保留）
-      pipWindow.addEventListener('resize', () => {
-        if (pipWindow && typeof pipWindow.outerWidth === 'number') {
-          _userWidth = pipWindow.outerWidth;
-        }
-      });
-
-      // 绑定事件
-      bindPiPEvents(pipWindow.document);
+      bindEvents(pipWindow.document);
 
       _isOpen = true;
       startSync();
@@ -202,261 +203,161 @@ export function closeDesktopLyrics() {
   cleanup();
 }
 
-// ---- 构建 PiP 窗口 HTML ----
-function buildPipHTML(song) {
+// ---- 构建 HTML ----
+function buildHTML(song) {
   const isLight = document.body.classList.contains('light');
   const lightClass = _currentBg === 'theme' && isLight ? ' dt-light' : '';
   const hasLyrics = lyricsLines.length > 0;
   const instrumental = !hasLyrics && song;
+
+  const bodyHTML = hasLyrics
+    ? `<div class="dt-line dt-current" id="dtCurrent"></div><div class="dt-line dt-next" id="dtNext"></div>`
+    : instrumental
+      ? `<div class="dt-placeholder">${PIANO_ICON} 纯音乐</div>`
+      : `<div class="dt-placeholder">${PIANO_ICON} 加载中…</div>`;
+
   return `
-<div class="dt-lyrics" data-layout="${_currentLayout}" data-bg="${_currentBg}"${lightClass}>
-  <div class="dt-settings-wrap">
-    <button class="dt-btn" id="dtGearBtn" title="设置">${GEAR_ICON}</button>
-    <div class="dt-settings-popover" id="dtSettingsPop">
-      ${buildSettingsHTML()}
-    </div>
-  </div>
-  <div class="dt-lyrics-body" id="dtBody">
-    ${hasLyrics ? `
-      <div class="dt-line dt-current" id="dtCurrent"></div>
-      <div class="dt-line dt-next" id="dtNext"></div>
-    ` : (instrumental ? `
-      <div class="dt-placeholder">${PIANO_ICON} 纯音乐，暂无歌词</div>
-    ` : `
-      <div class="dt-placeholder">${PIANO_ICON} 加载中…</div>
-    `)}
-  </div>
-  <div class="dt-divider"></div>
-  <div class="dt-controls">
-    <button class="dt-btn" id="dtPrevBtn" title="上一首">${SKIP_BACK}</button>
-    <button class="dt-btn" id="dtPlayBtn" title="播放 / 暂停">${PLAY_ICON}</button>
-    <button class="dt-btn" id="dtNextBtn" title="下一首">${SKIP_FWD}</button>
+<div class="dt-root" data-layout="${_currentLayout}" data-bg="${_currentBg}${lightClass}">
+  <button class="dt-set-btn" id="dtGearBtn">${GEAR_ICON}</button>
+  <div class="dt-set-pop" id="dtPop">${settingsHTML()}</div>
+  <div class="dt-body" id="dtBody">${bodyHTML}</div>
+  <div class="dt-sep"></div>
+  <div class="dt-bar">
+    <button class="dt-cbtn" id="dtPrevBtn" title="上一首">${SKIP_BACK}</button>
+    <button class="dt-cbtn" id="dtPlayBtn" title="播放/暂停">${PLAY_ICON}</button>
+    <button class="dt-cbtn" id="dtNextBtn" title="下一首">${SKIP_FWD}</button>
   </div>
 </div>`;
 }
 
-function buildSettingsHTML() {
-  const layouts = [
-    ['double', '双行'],
-    ['single', '单行'],
-  ];
-  const bgs = [
-    ['blur', '毛玻璃'],
-    ['dark', '暗色'],
-    ['theme', '主题'],
-  ];
-  const layoutOpts = layouts.map(([v, label]) =>
-    `<button class="dt-setting-opt${v === _currentLayout ? ' active' : ''}" data-setting="layout" data-value="${v}">${label}</button>`
+function settingsHTML() {
+  const lopts = [['double','双行'],['single','单行']].map(([v,l]) =>
+    `<button class="dtopt${v===_currentLayout?' on':''}" data-s="layout" data-v="${v}">${l}</button>`
   ).join('');
-  const bgOpts = bgs.map(([v, label]) =>
-    `<button class="dt-setting-opt${v === _currentBg ? ' active' : ''}" data-setting="bg" data-value="${v}">${label}</button>`
+  const bopts = [['blur','毛玻璃'],['dark','暗色'],['theme','主题']].map(([v,l]) =>
+    `<button class="dtopt${v===_currentBg?' on':''}" data-s="bg" data-v="${v}">${l}</button>`
   ).join('');
-  return `
-<div class="dt-setting-row">
-  <span class="dt-setting-label">布局</span>
-  <div class="dt-setting-options">${layoutOpts}</div>
-</div>
-<div class="dt-setting-row">
-  <span class="dt-setting-label">背景</span>
-  <div class="dt-setting-options">${bgOpts}</div>
-</div>`;
+  return `<div class="dt-srow"><span class="dt-slabel">布局</span><div class="dtops">${lopts}</div></div><div class="dt-srow"><span class="dt-slabel">背景</span><div class="dtops">${bopts}</div></div>`;
 }
 
-// ---- 绑定 PiP 窗口内部事件 ----
-function bindPiPEvents(doc) {
-  // 齿轮 → 切换设置面板
-  doc.getElementById('dtGearBtn')?.addEventListener('click', (e) => {
+// ---- 绑定事件 ----
+function bindEvents(doc) {
+  doc.getElementById('dtGearBtn')?.addEventListener('click', e => {
     e.stopPropagation();
-    const pop = doc.getElementById('dtSettingsPop');
+    const pop = doc.getElementById('dtPop');
     _settingsVisible = !_settingsVisible;
     pop.classList.toggle('show', _settingsVisible);
   });
 
-  // 点击其他地方关闭设置
-  doc.addEventListener('click', (e) => {
-    if (_settingsVisible && !e.target.closest('.dt-settings-wrap')) {
+  doc.addEventListener('click', e => {
+    if (_settingsVisible && !e.target.closest('.dt-set-btn')) {
       _settingsVisible = false;
-      doc.getElementById('dtSettingsPop')?.classList.remove('show');
+      doc.getElementById('dtPop')?.classList.remove('show');
     }
   });
 
-  // 设置选项点击
-  doc.querySelectorAll('.dt-setting-opt').forEach(btn => {
+  // 设置选项：仅更新 DOM 属性和 CSS class，不调用 resizeTo
+  doc.querySelectorAll('.dtopt').forEach(btn => {
     btn.addEventListener('click', () => {
-      const setting = btn.dataset.setting;
-      const value = btn.dataset.value;
-      if (setting === 'layout') {
-        _currentLayout = value;
-        // 仅布局切换时调整窗口高度（单行/双行），保留用户已调整的宽度
-        if (pipWindow && typeof pipWindow.resizeTo === 'function') {
-          try {
-            pipWindow.resizeTo(Math.max(200, _userWidth), value === 'single' ? 72 : 120);
-          } catch { /* 部分版本不支持 resizeTo */ }
-        }
-      } else if (setting === 'bg') {
-        _currentBg = value;
-        // 背景变化不改变窗口尺寸，仅更新 light class
+      const s = btn.dataset.s, v = btn.dataset.v;
+      const root = doc.querySelector('.dt-root');
+
+      if (s === 'layout') {
+        _currentLayout = v;
+        root.dataset.layout = v; // CSS 自动隐藏/显示 .dt-next
+      } else if (s === 'bg') {
+        _currentBg = v;
+        root.dataset.bg = v;
         const isLight = document.body.classList.contains('light');
-        const root = doc.querySelector('.dt-lyrics');
-        if (value === 'theme' && isLight) root.classList.add('dt-light');
-        else root.classList.remove('dt-light');
+        root.classList.toggle('dt-light', v === 'theme' && isLight);
       }
       savePrefs();
-      refreshSettings(doc);
+      refreshOpts(doc);
     });
   });
 
-  // 播放控制按钮
-  doc.getElementById('dtPrevBtn')?.addEventListener('click', () => {
-    _playerP.then(({ playPrev }) => playPrev());
-  });
-  doc.getElementById('dtNextBtn')?.addEventListener('click', () => {
-    _playerP.then(({ playNext }) => playNext(false));
-  });
+  // 播放控制
+  doc.getElementById('dtPrevBtn')?.addEventListener('click',
+    () => _playerP.then(({ playPrev }) => playPrev()));
+  doc.getElementById('dtNextBtn')?.addEventListener('click',
+    () => _playerP.then(({ playNext }) => playNext(false)));
   doc.getElementById('dtPlayBtn')?.addEventListener('click', async () => {
     const { togglePause } = await _playerP;
-    const result = togglePause();
-    if (result === 'noSong') return;
-    if (result === 'mounted') return;
-    // 同步按钮图标
-    const playBtn = doc.getElementById('dtPlayBtn');
-    if (playBtn) {
-      playBtn.innerHTML = result ? PLAY_ICON : PAUSE_ICON;
-      playBtn.classList.toggle('paused', !!result);
-    }
+    const r = togglePause();
+    if (r === 'noSong' || r === 'mounted') return;
+    const pb = doc.getElementById('dtPlayBtn');
+    if (pb) { pb.innerHTML = r ? PLAY_ICON : PAUSE_ICON; pb.classList.toggle('paused', !!r); }
   });
 }
 
-// 刷新设置面板（切换选项高亮）
-function refreshSettings(doc) {
-  doc.querySelectorAll('.dt-setting-opt[data-setting="layout"]').forEach(b => {
-    b.classList.toggle('active', b.dataset.value === _currentLayout);
-  });
-  doc.querySelectorAll('.dt-setting-opt[data-setting="bg"]').forEach(b => {
-    b.classList.toggle('active', b.dataset.value === _currentBg);
-  });
+function refreshOpts(doc) {
+  doc.querySelectorAll('.dtopt[data-s="layout"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentLayout));
+  doc.querySelectorAll('.dtopt[data-s="bg"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentBg));
 }
 
 // ---- 同步循环 ----
-let _lastHasLyrics = null; // 跟踪 lyricsLines 是否有内容，用于检测变化
+let _lastHasLyrics = null;
 function startSync() {
   if (_pipSyncId) clearInterval(_pipSyncId);
   _lastHasLyrics = null;
   _pipSyncId = setInterval(() => {
     if (!pipWindow || pipWindow.closed) { cleanup(); return; }
     _playerP.then(({ elapsed, timerPaused, autoTimer }) => {
-      if (!pipWindow || pipWindow.closed) return;
-      if (!autoTimer) return;
+      if (!pipWindow || pipWindow.closed || !autoTimer) return;
+      const doc = pipWindow.document; if (!doc) return;
+      const body = doc.getElementById('dtBody'); if (!body) return;
 
-      const doc = pipWindow.document;
-      if (!doc) return;
+      const hasLrc = lyricsLines.length > 0;
+      if (_lastHasLyrics !== null && _lastHasLyrics !== hasLrc) rebuildBody(doc, hasLrc);
+      _lastHasLyrics = hasLrc;
 
-      const body = doc.getElementById('dtBody');
-      if (!body) return;
-
-      const hasLyrics = lyricsLines.length > 0;
-
-      // 歌词状态变化时重建 body（占位 ↔ 歌词行）
-      if (_lastHasLyrics !== null && _lastHasLyrics !== hasLyrics) {
-        rebuildBody(doc, hasLyrics);
-      }
-      _lastHasLyrics = hasLyrics;
-
-      if (!hasLyrics) {
-        // 将「加载中…」替换为「暂无歌词」（loadLyrics 完成且无数据后）
+      if (!hasLrc) {
         const ph = body.querySelector('.dt-placeholder');
-        if (ph && ph.innerHTML.includes('加载中')) {
-          ph.innerHTML = `${PIANO_ICON} 暂无歌词`;
-        }
+        if (ph && ph.textContent.includes('加载中')) ph.textContent = `${PIANO_ICON} 纯音乐`.replace(/<\/?[^>]+>/g, '');
         return;
       }
 
       let idx = 0;
-      for (let i = 0; i < lyricsLines.length; i++) {
-        if (lyricsLines[i].time <= elapsed) idx = i;
-        else break;
-      }
+      for (let i = 0; i < lyricsLines.length; i++) { if (lyricsLines[i].time <= elapsed) idx = i; else break; }
 
-      const currentEl = doc.getElementById('dtCurrent');
-      const nextEl = doc.getElementById('dtNext');
-      const playBtn = doc.getElementById('dtPlayBtn');
-
-      if (currentEl) currentEl.textContent = lyricsLines[idx]?.text || '';
-      if (nextEl) nextEl.textContent = _currentLayout === 'single' ? '' : (lyricsLines[idx + 1]?.text || '');
-
-      // 同步播放/暂停按钮
-      if (playBtn) {
-        playBtn.innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON;
-        playBtn.classList.toggle('paused', timerPaused);
-      }
+      const cur = doc.getElementById('dtCurrent'), nxt = doc.getElementById('dtNext'), pbtn = doc.getElementById('dtPlayBtn');
+      if (cur) cur.textContent = lyricsLines[idx]?.text || '';
+      if (nxt) nxt.textContent = _currentLayout === 'single' ? '' : (lyricsLines[idx+1]?.text || '');
+      if (pbtn) { pbtn.innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON; pbtn.classList.toggle('paused', timerPaused); }
     });
   }, 500);
 }
 
-// 重建 dtBody：在占位文本和歌词行之间切换
-function rebuildBody(doc, hasLyrics) {
-  const body = doc.getElementById('dtBody');
-  if (!body) return;
-  if (hasLyrics) {
-    body.innerHTML = `
-      <div class="dt-line dt-current" id="dtCurrent"></div>
-      <div class="dt-line dt-next" id="dtNext"></div>`;
-  } else if (state.current) {
-    body.innerHTML = `<div class="dt-placeholder">${PIANO_ICON} 暂无歌词</div>`;
+function rebuildBody(doc, hasLrc) {
+  const body = doc.getElementById('dtBody'); if (!body) return;
+  if (hasLrc) {
+    body.innerHTML = '<div class="dt-line dt-current" id="dtCurrent"></div><div class="dt-line dt-next" id="dtNext"></div>';
   } else {
-    body.innerHTML = `<div class="dt-placeholder">${PIANO_ICON} 加载中…</div>`;
+    body.innerHTML = `<div class="dt-placeholder">${PIANO_ICON} ${state.current ? '纯音乐' : '加载中…'}</div>`;
   }
 }
 
-function stopSync() {
-  if (_pipSyncId) { clearInterval(_pipSyncId); _pipSyncId = null; }
-}
+function stopSync() { if (_pipSyncId) { clearInterval(_pipSyncId); _pipSyncId = null; } }
 
-// ---- 降级方案：window.open() 弹窗 ----
+// ---- popup 降级 ----
 function openPopup() {
-  const w = 320;
-  const h = _currentLayout === 'single' ? 72 : 120;
-  // 放在右下角
+  const w = 340, h = 130;
   const left = Math.max(0, window.screenX + window.outerWidth - w - 40);
   const top = Math.max(0, window.screenY + window.outerHeight - h - 80);
+  const pop = window.open('', 'wemusic_dl',
+    `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=no`);
+  if (!pop) { toast('请允许弹出窗口以使用桌面歌词'); return; }
 
-  const popup = window.open('', 'wemusic_desktop_lyrics',
-    `width=${w},height=${h},left=${left},top=${top},` +
-    'menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=no'
-  );
+  pop.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>${PIP_CSS}</style></head><body>${buildHTML(state.current)}</body></html>`);
+  pop.document.close();
 
-  if (!popup) {
-    toast('请允许弹出窗口以使用桌面歌词');
-    return;
-  }
-
-  const isLight = document.body.classList.contains('light');
-  const lightClass = _currentBg === 'theme' && isLight ? ' dt-light' : '';
-
-  popup.document.write(`
-<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>${PIP_CSS}</style></head>
-<body>${buildPipHTML(state.current)}</body></html>
-  `);
-  popup.document.close();
-
-  pipWindow = popup;
-  bindPiPEvents(popup.document);
-
-  // 跟踪用户手动调整的窗口宽度
-  popup.addEventListener('resize', () => {
-    if (popup && typeof popup.outerWidth === 'number') {
-      _userWidth = popup.outerWidth;
-    }
-  });
-
-  popup.addEventListener('beforeunload', () => { cleanup(); });
+  pipWindow = pop;
+  bindEvents(pop.document);
+  pop.addEventListener('beforeunload', () => { cleanup(); });
 
   _isOpen = true;
   startSync();
   updateBtnState();
-
-  // 弹窗失焦不关闭，只靠 beforeunload 检测
 }
 
 // ---- 清理 ----
@@ -468,11 +369,7 @@ function cleanup() {
   updateBtnState();
 }
 
-// ---- 更新底栏按钮状态 ----
 function updateBtnState() {
   const btn = $('dtLyricsBtn');
-  if (btn) {
-    btn.classList.toggle('active', _isOpen);
-    btn.title = _isOpen ? '关闭桌面歌词' : '打开桌面歌词';
-  }
+  if (btn) { btn.classList.toggle('active', _isOpen); btn.title = _isOpen ? '关闭桌面歌词' : '打开桌面歌词'; }
 }
