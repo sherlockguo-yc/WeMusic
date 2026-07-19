@@ -1,0 +1,72 @@
+---
+description: shell 脚本中 source .env 或任何外部配置文件后，脚本自身定义的关键变量（如 PORT、DIR、LOG）必须在该行之后显式重新赋值，防止被外部配置中的同名变量静默覆盖。
+alwaysApply: true
+globs: "**/*.sh"
+---
+
+# Shell 脚本 source 外部文件后防御性重赋值
+
+## 背景
+
+2026-07-19 wemusic 崩溃循环的根因是一个低级的 shell 变量覆盖 bug：
+
+```bash
+# webhook-start.sh（N150 生产环境）
+PORT=9001                                    # 第 6 行：脚本自己的端口
+[ -f "$DIR/.env" ] && . "$DIR/.env"          # 第 9 行：source wemusic 的 .env（其中 PORT=5174！）
+kill $(lsof -ti:$PORT)                        # 此时 PORT=5174，误杀了刚启动的 wemusic 主进程
+```
+
+`.env` 中的 `PORT=5174` 覆盖了脚本的 `PORT=9001`，导致后续所有 `$PORT` 操作都错用了 wemusic 的端口。wemusic 每次重启 1~2 秒后就被自己的 webhook-start.sh 杀死，进入无限重启循环。
+
+## 规则
+
+**任何 shell 脚本中 `source`/`.` 外部配置文件后，脚本自身定义的关键变量必须在 source 行之后显式重新赋值。**
+
+### 必须重新赋值的变量类型
+
+- `PORT` / `HOST` / `ADDR` — 端口和地址
+- `DIR` / `LOG` / `EVENTS` — 目录和日志路径
+- 其他被 source 文件可能定义的同名变量
+
+### 正确模式
+
+```bash
+# ✅ 正确：source 后重新固定
+PORT=9001
+[ -f "$DIR/.env" ] && . "$DIR/.env"
+PORT=9001                  # 显式恢复脚本自己的端口
+
+PID=$(lsof -ti:$PORT)      # 此时 $PORT 一定是 9001
+```
+
+### 错误模式
+
+```bash
+# ❌ 错误：source 后未恢复，变量已被污染
+PORT=9001
+[ -f "$DIR/.env" ] && . "$DIR/.env"    # ~/wemusic/.env 可能有 PORT=5174
+kill $(lsof -ti:$PORT)                 # 杀的可能是 5174 而不是 9001！
+```
+
+### 更安全的替代方案
+
+如果脚本只是需要 `.env` 中的少数几个变量，可以用临时 scope 隔离：
+
+```bash
+# ✅ 用子 shell 隔离 source 的作用域
+WEBHOOK_SECRET=$(bash -c 'source "$1/.env" && echo "$WEBHOOK_SECRET"' _ "$DIR")
+# PORT 不会被污染
+```
+
+但这种方式可读性差，推荐直接显式重新赋值。
+
+### 检查清单
+
+新增或修改任何使用了 `source .env` 的 shell 脚本前，检查：
+1. source 后有没有关键变量被重新赋值？
+2. 如果被 source 的文件将来新增同名变量，脚本还安全吗？（答：只有显式重新赋值才安全）
+
+## 相关事件
+
+- 2026-07-19：`~/webhook-start.sh` 的 PORT 被 wemusic/.env 覆盖导致误杀主进程，触发无限重启循环
