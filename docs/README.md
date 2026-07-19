@@ -51,7 +51,10 @@
 ## .codebuddy/rules/（AI 会话自动加载）
 
 - **CSS布局坑例(WeMusic).mdc** — 背景（为什么这条规则对本项目至关重要）
+- **N150独立脚本镜像.mdc** — N150独立脚本镜像
+- **Shell脚本source-env防御.mdc** — 背景
 - **修改前阅读Specs(WeMusic).mdc** — 修改前阅读Specs(WeMusic)
 - **前端实现细节(WeMusic).mdc** — 〇、项目全局视图
+- **反事实验证.mdc** — 背景
 - **搜索逻辑案例(WeMusic).mdc** — 本项目涉及的修改入口
 - **构建部署规范(WeMusic).mdc** — 一、何时需要 Build
