@@ -304,15 +304,8 @@ function autoAdvance() {
       if (!oldBvid) { playCurrent(); return; } // 无旧 bvid（异常情况）→ 退化为常规切歌
 
       // 更新 UI 到下一首歌（同时保持歌词显示旧歌——方案 B）
-      state.current = nextSong;
-      highlightPlaying();
-      $('npTitle').textContent = nextSong.singer ? `${nextSong.name} - ${nextSong.singer}` : nextSong.name;
-      checkMarquee($('npTitle'));
-      document.title = `${nextSong.name}${nextSong.singer ? ' · ' + nextSong.singer.split('/')[0] : ''} — WeMusic`;
-      updateNpCover(nextSong);
-      updateMediaSession(nextSong);
-      setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn, updateNpDislikeBtn }) => { updateNpLikeBtn(); updateNpDislikeBtn(); }), 0);
-      resetProgress(nextSong.duration);
+      // 注意：不在这里加载新歌歌词（loadLyrics）—— 留在 _completeCrossfade 中执行
+      _switchCurrentSongUI(nextSong);
       startTimer(nextSong._biliDur || nextSong.duration);
       saveSession();
       import('./queue.js').then(({ pushPlayHistory, renderActiveTab }) => {
@@ -333,6 +326,19 @@ export function stopPlayback() {
   destroyVideo();
   setStatus('已停止');
   document.title = 'WeMusic · 个人音乐';
+}
+
+// 更新当前播放歌曲的 UI（歌名、封面、进度条等），供 playCurrent 和 autoAdvance 共用
+function _switchCurrentSongUI(song) {
+  state.current = song;
+  highlightPlaying();
+  $('npTitle').textContent = song.singer ? `${song.name} - ${song.singer}` : song.name;
+  checkMarquee($('npTitle'));
+  document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
+  updateNpCover(song);
+  updateMediaSession(song);
+  setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn, updateNpDislikeBtn }) => { updateNpLikeBtn(); updateNpDislikeBtn(); }), 0);
+  resetProgress(song.duration);
 }
 
 // ---- 状态栏 ----
@@ -712,15 +718,7 @@ export async function playCurrent() {
   }
 
   const seq = ++playSeq;
-  state.current = song;
-  highlightPlaying();
-  $('npTitle').textContent = song.singer ? `${song.name} - ${song.singer}` : song.name;
-  checkMarquee($('npTitle'));
-  document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
-  updateNpCover(song);
-  updateMediaSession(song);
-  setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn, updateNpDislikeBtn }) => { updateNpLikeBtn(); updateNpDislikeBtn(); }), 0);
-  resetProgress(song.duration);
+  _switchCurrentSongUI(song);
 
   if (!song.bvid) {
     try {
