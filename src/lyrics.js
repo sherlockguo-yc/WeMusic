@@ -24,6 +24,7 @@ export let lyricsLines = [];
 export let lyricsFor = '';
 export let lyricsCandidates = []; // 当前候选列表
 export let lyricsCurrentSourceId = null; // 当前使用的网易云 songId
+let _lyricsSeq = 0;          // 单调递增序列号，防止陈旧网络响应覆盖当前数据
 let _lyricsUISyncId = null;  // UI 同步 setInterval ID
 let _lyricsSyncId = null;    // 进度同步 setInterval ID
 
@@ -248,6 +249,7 @@ export async function loadLyrics(song) {
 
 async function doLoadLyrics(song, forceSourceId) {
   const key = `${song.name}__${song.singer || ''}`;
+  const seq = ++_lyricsSeq; // 捕获当前序列号，防止陈旧响应覆盖后续请求的数据
   $('lpBody').innerHTML = '<div class="lp-loading">加载歌词中…</div>';
 
   // 离线优先：若本地缓存命中且已有歌词整包，直接复用，不发网络请求
@@ -256,6 +258,7 @@ async function doLoadLyrics(song, forceSourceId) {
   if (song.bvid) {
     try {
       const cached = await offline.get(song.bvid);
+      if (seq !== _lyricsSeq) return false; // 已被更新的请求取代，丢弃
       if (cached && cached.lyrics) {
         const offlineSourceId = cached.lyrics.sourceId || null;
         const sameSource = !forceSourceId || String(offlineSourceId) === String(forceSourceId);
@@ -274,6 +277,7 @@ async function doLoadLyrics(song, forceSourceId) {
   try {
     const params = `name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}${forceSourceId ? `&sourceId=${forceSourceId}` : ''}`;
     const data = await api(`/stats/lyrics?${params}`);
+    if (seq !== _lyricsSeq) return false; // 已被更新的请求取代，丢弃
 
     // 纯音乐检测：歌名命中关键词，跳过歌词搜索
     if (data.instrumental) {
@@ -303,6 +307,7 @@ async function doLoadLyrics(song, forceSourceId) {
     }
     return true;
   } catch (e) {
+    if (seq !== _lyricsSeq) return false; // 已被取代，静默丢弃
     $('lpBody').innerHTML = `<div class="lp-error">${esc(e.message)}</div>`;
     lyricsLines = []; lyricsFor = ''; lyricsCandidates = []; lyricsCurrentSourceId = null;
     throw e; // 重新抛出，让调用方感知失败

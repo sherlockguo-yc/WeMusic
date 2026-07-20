@@ -405,7 +405,14 @@ function startSync() {
 
       if (!hasLrc) {
         const ph = body.querySelector('.dt-placeholder');
-        if (ph && ph.textContent.includes('加载中')) ph.textContent = `${PIANO_ICON} 纯音乐`.replace(/<\/?[^>]+>/g, '');
+        // 仅在当前歌曲的歌词请求已返回且结果为空时，才显示"纯音乐"
+        // 避免将尚未返回的网络请求误判为纯音乐
+        if (ph && ph.textContent.includes('加载中')) {
+          const songKey = state.current ? `${state.current.name}__${state.current.singer || ''}` : '';
+          if (lyricsFor && lyricsFor === songKey) {
+            ph.textContent = `${PIANO_ICON} 纯音乐，暂无歌词`.replace(/<\/?[^>]+>/g, '');
+          }
+        }
         return;
       }
 
