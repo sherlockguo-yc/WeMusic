@@ -604,6 +604,17 @@ export async function openSettings() {
     };
   });
 
+  // EQ 预设选择
+  const curEQ = localStorage.getItem('wemusic_eq') || 'flat';
+  document.querySelectorAll('.eq-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.eq === curEQ);
+    b.onclick = () => {
+      localStorage.setItem('wemusic_eq', b.dataset.eq);
+      document.querySelectorAll('.eq-opt').forEach((x) => x.classList.toggle('active', x === b));
+      window.dispatchEvent(new CustomEvent('eq_changed'));
+    };
+  });
+
   const curPalette = localStorage.getItem('wemusic_palette') || 'green';
   document.querySelectorAll('.palette-item').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === curPalette);

@@ -854,6 +854,22 @@ let _crossfadeEndTimer = null; // 淡入淡出结束 setTimeout
 let _crossfadeSeq = 0;        // 序列号，防止并发
 let _nextNormGain = 1.0;      // 下一首的归一化 gain
 
+// ---- 均衡器（EQ）：5 段 BiquadFilter 预设曲线 ----
+// 频段：60Hz(lowshelf) / 250Hz(peaking) / 1kHz(peaking) / 4kHz(peaking) / 12kHz(highshelf)
+// 两根 gain node 合并后统一经过 EQ 链，保证淡入淡出期间的混合输出也走 EQ
+const EQ_BANDS = [60, 250, 1000, 4000, 12000];
+const EQ_TYPES = ['lowshelf', 'peaking', 'peaking', 'peaking', 'highshelf'];
+const EQ_PRESETS = {
+  flat:    [ 0,  0,  0,  0,  0],
+  流行:    [+2, +1, +1, +2, +2],
+  摇滚:    [+4, +2, -2, +2, +4],
+  古典:    [+1, +1,  0,  0, -1],
+  人声:    [-3, -2, +4, +2,  0],
+  电子:    [+5, -1, -3, +1, +5],
+};
+let _eqFilters = [];          // 5 个 BiquadFilterNode
+let _eqPreset = 'flat';       // 当前预设
+
 // ---- 音量归一化：AudioContext + GainNode ----
 // GainNode 挂在 bgAudio 上，因此无论 bgAudio 是否正在展开视频时静默预载，
 // 只要它是真正在出声的引擎（mode === 'bg'），归一化效果就会生效。
@@ -869,15 +885,26 @@ function _initAudioCtx() {
   const source = _audioCtx.createMediaElementSource(bgAudio);
   _gainNode = _audioCtx.createGain();
   source.connect(_gainNode);
-  _gainNode.connect(_audioCtx.destination);
   // _nextAudio 管线（淡入淡出用，初始静音）
   _nextAudio = document.getElementById('audioNext');
   _nextSource = _audioCtx.createMediaElementSource(_nextAudio);
   _nextGainNode = _audioCtx.createGain();
   _nextSource.connect(_nextGainNode);
-  _nextGainNode.connect(_audioCtx.destination);
   _nextGainNode.gain.value = 0;
   _nextAudio.volume = 1.0;
+  // EQ 滤镜链：两根 gain 合并 → 5 段 BiquadFilter → destination
+  for (let i = 0; i < 5; i++) {
+    const f = _audioCtx.createBiquadFilter();
+    f.type = EQ_TYPES[i];
+    f.frequency.value = EQ_BANDS[i];
+    if (EQ_TYPES[i] === 'peaking') f.Q.value = 1.0;
+    f.gain.value = 0; // 默认 flat
+    _eqFilters.push(f);
+  }
+  _gainNode.connect(_eqFilters[0]);
+  _nextGainNode.connect(_eqFilters[0]);
+  for (let i = 1; i < 5; i++) _eqFilters[i - 1].connect(_eqFilters[i]);
+  _eqFilters[4].connect(_audioCtx.destination);
   const resume = () => {
     if (_audioCtx.state === 'suspended') _audioCtx.resume();
     document.removeEventListener('click', resume);
@@ -885,6 +912,18 @@ function _initAudioCtx() {
   };
   document.addEventListener('click', resume);
   document.addEventListener('keydown', resume);
+}
+
+// 应用 EQ 预设：将各组增益写入对应的 BiquadFilter
+function _applyEQPreset(preset) {
+  if (!_eqFilters.length) return;
+  const gains = EQ_PRESETS[preset] || EQ_PRESETS.flat;
+  _eqPreset = preset;
+  const now = _audioCtx.currentTime;
+  for (let i = 0; i < 5; i++) {
+    _eqFilters[i].gain.cancelScheduledValues(now);
+    _eqFilters[i].gain.linearRampToValueAtTime(gains[i], now + 0.01);
+  }
 }
 
 async function _fetchGain(bvid) {
@@ -1402,6 +1441,14 @@ export function initPlayer() {
   window.addEventListener('crossfade_changed', () => {
     const on = localStorage.getItem('wemusic_crossfade_enabled') === '1';
     _crossfadeDuration = on ? Number(localStorage.getItem('wemusic_crossfade_duration') || 5) : 0;
+  });
+
+  // EQ：加载预设 + 监听变更。必须在 _initAudioCtx() 之后（滤波器已创建）
+  _eqPreset = localStorage.getItem('wemusic_eq') || 'flat';
+  _applyEQPreset(_eqPreset);
+  window.addEventListener('eq_changed', () => {
+    const p = localStorage.getItem('wemusic_eq') || 'flat';
+    _applyEQPreset(p);
   });
 
   // 音量控件：通过 GainNode 控制 bgAudio 的实际输出音量；同时通过 postMessage 同步 iframe 音量。
