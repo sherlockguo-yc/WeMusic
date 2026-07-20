@@ -313,12 +313,27 @@ export async function fetchLyrics(name, singer = '') {
 
 /**
  * 按歌名+歌手搜索，返回候选列表（用于歌词换源 UI）
+ * @returns {Promise<{candidates: Array, debug: Object}>}
  */
 export async function searchLyricsCandidates(name, singer = '') {
   const singerFirst = singer.split(/[\/、,，&]/)[0].trim();
   const nameClean = stripBrackets(name);
   const bracketCN = (name.match(/[（(]([^)）]+)[）)]/) || [])[1] || '';
   const [neProvider, qqProvider] = providers();
+
+  const debug = {
+    input: {
+      name, singer: singer || '', singerFirst: singerFirst || '',
+      nameClean: nameClean || '', bracketCN: bracketCN || '',
+    },
+    queries: [],
+    ne: { status: 'pending', queryResults: [], totalDeduped: 0, samples: [] },
+    qq: { status: 'pending', totalRaw: 0, filteredByQuality: 0, samples: [] },
+    rawCandidates: [],
+    tiers: {},
+    verify: { total: 0, valid: 0, empty: 0, failed: 0 },
+    finalCount: 0,
+  };
 
   const queries = [];
   const seenQ = new Set();
@@ -331,6 +346,7 @@ export async function searchLyricsCandidates(name, singer = '') {
   addQ(name);
   if (nameClean !== name) addQ(nameClean);
   if (bracketCN) addQ(bracketCN);
+  debug.queries = [...queries];
 
   console.log(`[lyrics:candidates] "${name}" / "${singerFirst}" — queries: [${queries.join(' | ')}]`);
 
@@ -346,12 +362,18 @@ export async function searchLyricsCandidates(name, singer = '') {
 
   // 网易云候选
   if (neResults.status === 'fulfilled') {
-    for (const r of neResults.value) {
+    debug.ne.status = 'ok';
+    let neTotalDeduped = 0;
+    for (let qi = 0; qi < neResults.value.length; qi++) {
+      const r = neResults.value[qi];
+      const cnt = r.status === 'fulfilled' ? r.value.length : 0;
+      debug.ne.queryResults.push({ query: queries[qi], status: r.status === 'fulfilled' ? 'ok' : 'failed', count: cnt });
       if (r.status !== 'fulfilled') continue;
       for (const s of r.value) {
         const rawId = s.rawId;
         if (!rawId || idSeen.has(`ne:${rawId}`)) continue;
         idSeen.add(`ne:${rawId}`);
+        neTotalDeduped++;
         const artistText = (s.artists || []).map((a) => a.name).join(' / ');
         const { quality } = neProvider.scoreCandidate(s, { name, singerFirst });
         const bonus = crowdBonus(crowd.get(String(rawId)), 0.5);
@@ -362,35 +384,61 @@ export async function searchLyricsCandidates(name, singer = '') {
           quality: quality + bonus,
           source: LyricsSource.NE,
         });
+        // 记录评分样本（最多 20 条）
+        if (debug.ne.samples.length < 20) {
+          debug.ne.samples.push({ name: s.name, artist: artistText, quality, crowdBonus: Math.round(bonus * 100) / 100 });
+        }
       }
     }
+    debug.ne.totalDeduped = neTotalDeduped;
+  } else {
+    debug.ne.status = 'failed';
   }
 
   // QQ 音乐候选
   if (qqResults.status === 'fulfilled') {
+    debug.qq.status = 'ok';
+    debug.qq.totalRaw = qqResults.value.length;
+    let qqFiltered = 0;
     for (const c of qqResults.value) {
       const dedupKey = `qq:${c.name?.toLowerCase()}__${c.artist?.toLowerCase()}`;
       if (idSeen.has(dedupKey)) continue;
       idSeen.add(dedupKey);
-      if (c.quality >= 4) candidates.push(c);
+      if (c.quality >= 4) {
+        candidates.push(c);
+        qqFiltered++;
+        if (debug.qq.samples.length < 10) {
+          debug.qq.samples.push({ name: c.name, artist: c.artist, quality: c.quality });
+        }
+      }
     }
+    debug.qq.filteredByQuality = qqFiltered;
+  } else {
+    debug.qq.status = 'failed';
   }
 
   console.log(`[lyrics:candidates] raw candidates: ${candidates.length}, hasSinger(≥5):${candidates.filter(c => c.quality >= 5).length}, exactName(≥4):${candidates.filter(c => c.quality >= 4).length}, ≥2:${candidates.filter(c => c.quality >= 2).length}, ≥1:${candidates.filter(c => c.quality >= 1).length}`);
 
   candidates.sort((a, b) => b.quality - a.quality);
+  debug.rawCandidates = candidates.slice(0, 15).map(c => ({
+    name: c.name, artist: c.artist, quality: c.quality, source: c.source,
+  }));
 
   // 动态阈值：优先高质量，但至少保留 8 个候选
   let topCandidates = candidates.filter((c) => c.quality >= 2);
   const tier1 = topCandidates.length;
+  let tier2 = 0, tier3 = 0;
   if (topCandidates.length < 8) {
     const supplement = candidates.filter((c) => c.quality >= 1 && !topCandidates.includes(c));
+    tier2 = supplement.length;
     topCandidates = topCandidates.concat(supplement).slice(0, 8);
   }
   if (topCandidates.length < 5) {
     const fallback = candidates.filter((c) => c.quality < 1 && !topCandidates.includes(c));
+    tier3 = fallback.length;
     topCandidates = topCandidates.concat(fallback).slice(0, Math.min(8, candidates.length));
   }
+  debug.tiers = { total: candidates.length, tier1_ge2: tier1, supplement_ge1: Math.min(tier2, 8 - tier1), fallback_lt1: tier3 };
   console.log(`[lyrics:candidates] after tier filter: tier1:${tier1} → top:${topCandidates.length}`);
   topCandidates = topCandidates.slice(0, 10);
 
@@ -402,18 +450,25 @@ export async function searchLyricsCandidates(name, singer = '') {
     return neProvider.fetchLyric(c.rawId || c.id);
   }));
 
+  debug.verify.total = topCandidates.length;
   const verified = [];
   let emptyCount = 0;
   for (let i = 0; i < topCandidates.length; i++) {
     const c = topCandidates[i];
     const lr = lyricResults[i];
-    if (lr.status !== 'fulfilled') continue;
+    if (lr.status !== 'fulfilled') { debug.verify.failed++; continue; }
     const { lrc, tlyric } = lr.value;
     if (!lrc.trim()) { emptyCount++; continue; }
     verified.push({ ...c, raw: lrc, tlyric });
   }
+  debug.verify.empty = emptyCount;
+  debug.verify.valid = verified.length;
   console.log(`[lyrics:candidates] verified: ${verified.length} valid, ${emptyCount} empty, failed:${lyricResults.filter(r => r.status === 'rejected').length}`);
-  return verified.slice(0, 12).map((c) => ({ id: c.id, name: c.name, artist: c.artist, quality: c.quality, source: c.source, album_mid: c.album_mid || '' }));
+
+  const finalCandidates = verified.slice(0, 12).map((c) => ({ id: c.id, name: c.name, artist: c.artist, quality: c.quality, source: c.source, album_mid: c.album_mid || '' }));
+  debug.finalCount = finalCandidates.length;
+
+  return { candidates: finalCandidates, debug };
 }
 
 /**

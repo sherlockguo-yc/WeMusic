@@ -95,6 +95,9 @@ export async function openCandModal() {
   // 视频源模式：显示 tabs
   const tabsEl = modal.querySelector('.cand-tabs');
   tabsEl.style.display = 'flex';
+  // 确保 tab 文字是视频相关的
+  const tabs = tabsEl.querySelectorAll('.cand-tab');
+  if (tabs.length >= 2) { tabs[0].textContent = '选择播放资源'; tabs[1].textContent = 'Debug'; }
   setActiveTab('candidates');
 
   modal.classList.add('show');

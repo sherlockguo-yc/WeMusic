@@ -809,10 +809,12 @@ router.get('/lyrics', async (req, res) => {
     console.log(`[lyrics:route] cache MISS for "${cacheKey}" — fetching fresh`);
 
     // 4. 拉取主结果 + 候选列表
-    const [main, candidates] = await Promise.all([
+    const [main, lyricsResult] = await Promise.all([
       fetchLyrics(name, singer || '').catch(() => null),
       searchLyricsCandidates(name, singer || ''),
     ]);
+    const candidates = lyricsResult.candidates;
+    const lyricsDebug = lyricsResult.debug;
 
     // 过滤掉被拉黑的歌词源
     const cleanCandidates = candidates.filter((c) => !blockedIds.includes(String(c.id)));
@@ -847,6 +849,8 @@ router.get('/lyrics', async (req, res) => {
           candidates: cleanCandidates,
           error: cleanCandidates.length ? '当前源已屏蔽，请选择其他版本' : '未找到匹配歌词',
         };
+    // debug 信息不缓存（仅当前调用可用）
+    if (lyricsDebug) result._debug = lyricsDebug;
     setLyricCache(cacheKey, result);
     res.json(result);
   } catch (e) {
@@ -929,7 +933,7 @@ router.get('/blocked/full', async (req, res) => {
   // （一次性 cost，对用户透明的迁移；找到后写回 DB，下次直接命中）
   if (sourceType === 'lyrics' && name && rows.some((r) => !r.name)) {
     try {
-      const candidates = await searchLyricsCandidates(name, singer || '');
+      const { candidates } = await searchLyricsCandidates(name, singer || '');
       const byId = new Map(candidates.map((c) => [String(c.id), c]));
       const upd = db.prepare(
         'UPDATE blocked_sources SET name=?, artist=?, source_label=? WHERE user_id=? AND song_key=? AND source_type=? AND source_id=?'

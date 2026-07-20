@@ -111,7 +111,7 @@ app.get('/api/share/lyrics', async (req, res) => {
   const { n: name, a: singer } = req.query;
   if (!name) return res.json({ sourceId: null, sourceType: null });
   try {
-    const candidates = await searchLyricsCandidates(name, singer || '');
+    const { candidates } = await searchLyricsCandidates(name, singer || '');
     if (candidates && candidates.length > 0) {
       const c = candidates[0];
       return res.json({

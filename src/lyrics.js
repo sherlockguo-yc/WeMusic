@@ -24,6 +24,7 @@ export let lyricsLines = [];
 export let lyricsFor = '';
 export let lyricsCandidates = []; // 当前候选列表
 export let lyricsCurrentSourceId = null; // 当前使用的网易云 songId
+export let lyricsDebug = null;   // 最近一次歌词搜索的 debug 数据
 let _lyricsSeq = 0;          // 单调递增序列号，防止陈旧网络响应覆盖当前数据
 let _lyricsUISyncId = null;  // UI 同步 setInterval ID
 let _lyricsSyncId = null;    // 进度同步 setInterval ID
@@ -298,6 +299,8 @@ async function doLoadLyrics(song, forceSourceId) {
     // 重新拉取时不带 sourceId 会走"自动选最优源"逻辑，把用户刚选的源覆盖回默认值。
     if (data.candidates) lyricsCandidates = data.candidates;
     lyricsCurrentSourceId = data.sourceId || forceSourceId || null;
+    // 存储 debug 数据（仅在非换源请求时有 debug 数据；换源快速通道不返回 debug）
+    if (data._debug) lyricsDebug = data._debug;
 
     if (!lyricsLines.length && lyricsCandidates.length && data.error) {
       $('lpBody').innerHTML = `<div class="lp-placeholder">${esc(data.error)}<br><span style="font-size:12px;color:var(--text-dim)">点「⤢ 歌词」选择其他版本</span></div>`;
@@ -328,14 +331,137 @@ function renderLyricsLines() {
   }).join('');
 }
 
+// ---- 歌词 Debug 渲染 ----
+function renderLyricsDebug(el, d) {
+  if (!d) { el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim)">暂无 debug 数据。打开歌词页播放一首歌曲后将自动获得最近一次歌词搜索的 debug 信息。</div>'; return; }
+
+  const badge = (v, cls) => `<span class="debug-badge ${cls}">${esc(String(v))}</span>`;
+  const kv = (k, v, mono) => `<div class="debug-kv"><span class="dk">${esc(k)}</span><span class="dv${mono ? ' mono' : ''}">${esc(String(v))}</span></div>`;
+  const kvHtml = (k, v) => `<div class="debug-kv"><span class="dk">${esc(k)}</span><span class="dv">${v}</span></div>`;
+  const section = (title, body, open) => `
+    <div class="debug-section${open ? ' open' : ''}">
+      <div class="debug-section-header"><span class="debug-arrow">▶</span>${esc(title)}</div>
+      <div class="debug-section-body">${body}</div>
+    </div>`;
+
+  const sections = [];
+
+  // 1. 输入参数
+  sections.push(section('输入参数', `
+    ${kv('歌名', d.input.name)}
+    ${kv('歌手', d.input.singer || '(无)')}
+    ${kv('singerFirst', d.input.singerFirst || '(空)')}
+    ${kv('nameClean', d.input.nameClean || '(同歌名)')}
+    ${kv('bracketCN', d.input.bracketCN || '(无)')}
+  `, true));
+
+  // 2. 搜索 Query
+  if (d.queries && d.queries.length) {
+    const qList = d.queries.map(q => `<div class="debug-query-row"><span class="q-text">${esc(q)}</span></div>`).join('');
+    sections.push(section(`搜索 Query（${d.queries.length} 组）`, qList));
+  }
+
+  // 3. 网易云搜索结果
+  if (d.ne) {
+    let neBody = '';
+    neBody += kvHtml('状态', d.ne.status === 'ok' ? badge('成功', 'ok') : badge('失败', 'fail'));
+    if (d.ne.queryResults && d.ne.queryResults.length) {
+      const qrList = d.ne.queryResults.map(qr =>
+        `<div class="debug-query-row">
+          <span class="q-text">${esc(qr.query)}</span>
+          ${qr.status === 'ok' ? badge(qr.count + ' 条', 'info') : badge('失败', 'fail')}
+        </div>`
+      ).join('');
+      neBody += kvHtml('每组 Query 返回', '<div style="display:flex;flex-direction:column;gap:2px">' + qrList + '</div>');
+    }
+    neBody += kv('去重后候选', d.ne.totalDeduped);
+    if (d.ne.samples && d.ne.samples.length) {
+      const sampList = d.ne.samples.map((s, i) =>
+        `<div class="debug-query-row" style="opacity:.8">
+          <span class="q-text"><span style="color:var(--text-dim)">#${i + 1}</span> ${esc(s.name)} — ${esc(s.artist)} </span>
+          ${badge('基础分 ' + s.quality, 'info')} ${s.crowdBonus > 0 ? badge('+'+s.crowdBonus, 'ok') : ''}
+        </div>`
+      ).join('');
+      neBody += kvHtml(`评分样本（前 ${d.ne.samples.length} 条）`, '<div style="display:flex;flex-direction:column;gap:2px">' + sampList + '</div>');
+    }
+    sections.push(section('网易云音乐', neBody, true));
+  }
+
+  // 4. QQ 音乐搜索结果
+  if (d.qq && d.qq.status === 'ok') {
+    let qqBody = '';
+    qqBody += kv('状态', '成功');
+    qqBody += kv('原始候选', d.qq.totalRaw);
+    qqBody += kvHtml('quality ≥ 4 过滤后', badge(d.qq.filteredByQuality, d.qq.filteredByQuality > 0 ? 'ok' : 'warn'));
+    if (d.qq.samples && d.qq.samples.length) {
+      const qqSampList = d.qq.samples.map((s, i) =>
+        `<div class="debug-query-row">
+          <span class="q-text"><span style="color:var(--text-dim)">#${i + 1}</span> ${esc(s.name)} — ${esc(s.artist)}</span>
+          ${badge('分 ' + s.quality, 'info')}
+        </div>`
+      ).join('');
+      qqBody += kvHtml(`样本（前 ${d.qq.samples.length} 条）`, '<div style="display:flex;flex-direction:column;gap:2px">' + qqSampList + '</div>');
+    }
+    sections.push(section('QQ 音乐', qqBody));
+  }
+
+  // 5. 原始候选（合并去重、评分排序后，分层过滤前）
+  if (d.rawCandidates && d.rawCandidates.length) {
+    const rawList = d.rawCandidates.map((c, i) => {
+      const srcLabel = c.source === 'qq' ? 'QQ' : 'NE';
+      const srcCls = c.source === 'qq' ? '' : 'info';
+      return `<div class="debug-query-row">
+        <span class="q-text"><span style="color:var(--text-dim)">#${i + 1}</span> ${esc(c.name)} — ${esc(c.artist)}</span>
+        ${badge(srcLabel, srcCls)} ${badge('分 ' + c.quality, c.quality >= 5 ? 'ok' : (c.quality >= 4 ? 'info' : 'warn'))}
+      </div>`;
+    }).join('');
+    sections.push(section(`原始候选（${d.rawCandidates.length} 条，评分排序后）`, rawList));
+  }
+
+  // 6. 分层过滤
+  if (d.tiers) {
+    const t = d.tiers;
+    const tierTotal = (t.tier1_ge2 || 0) + (t.supplement_ge1 || 0) + (t.fallback_lt1 || 0);
+    let tierBody = '';
+    tierBody += kvHtml('候选总数', badge(t.total, 'info'));
+    tierBody += kvHtml('Tier 1（quality ≥ 2）', badge(t.tier1_ge2, t.tier1_ge2 > 0 ? 'ok' : 'warn'));
+    if (t.supplement_ge1 > 0) tierBody += kvHtml('Tier 2 补充（quality ≥ 1）', badge(t.supplement_ge1, 'info'));
+    if (t.fallback_lt1 > 0) tierBody += kvHtml('Tier 3 兜底（quality < 1）', badge(t.fallback_lt1, 'warn'));
+    tierBody += kvHtml('进入验证', badge(tierTotal, 'info'));
+    sections.push(section('分层过滤', tierBody));
+  }
+
+  // 7. 验证结果
+  if (d.verify) {
+    const v = d.verify;
+    let verifyBody = '';
+    verifyBody += kv('验证总数', v.total);
+    verifyBody += kvHtml('有效（有歌词）', badge(v.valid, v.valid > 0 ? 'ok' : 'warn'));
+    verifyBody += kvHtml('空歌词', badge(v.empty, v.empty > 0 ? 'warn' : 'ok'));
+    verifyBody += kvHtml('拉取失败', badge(v.failed, v.failed > 0 ? 'fail' : 'ok'));
+    sections.push(section('歌词验证', verifyBody));
+  }
+
+  // 8. 最终输出
+  sections.push(section('最终输出', kvHtml('候选数', badge(d.finalCount != null ? d.finalCount : '-', d.finalCount > 0 ? 'ok' : 'fail')), true));
+
+  el.innerHTML = sections.join('');
+
+  // 折叠/展开
+  el.querySelectorAll('.debug-section-header').forEach(hdr => {
+    hdr.onclick = () => hdr.parentElement.classList.toggle('open');
+  });
+}
+
 // ---- 歌词换源弹层 ----
 async function openLyricsSwitchModal(song) {
-  if (!lyricsCandidates.length) {
+  // 如果还没有候选列表或没有 debug 数据，重新拉取
+  if (!lyricsCandidates.length || !lyricsDebug) {
     try {
       const data = await api(`/stats/lyrics?name=${encodeURIComponent(song.name)}&singer=${encodeURIComponent(song.singer || '')}`);
       lyricsCandidates = data.candidates || [];
-      // 同时记录主 sourceId（如果响应里有），确保"当前"标记能正确显示
       if (data.sourceId) lyricsCurrentSourceId = String(data.sourceId);
+      if (data._debug) lyricsDebug = data._debug;
     } catch { toast('获取候选列表失败'); return; }
   }
 
@@ -343,11 +469,32 @@ async function openLyricsSwitchModal(song) {
 
   const modal = $('candModal');
   const list = $('candList');
-  // 歌词模式：隐藏 tabs，只显示候选列表
+  const debugPanel = $('candDebug');
+
+  // 歌词模式：显示 tabs
   const tabsEl = modal.querySelector('.cand-tabs');
-  if (tabsEl) tabsEl.style.display = 'none';
+  if (tabsEl) tabsEl.style.display = 'flex';
+  // 更新 tab 标签为歌词相关
+  const tabs = tabsEl?.querySelectorAll('.cand-tab');
+  if (tabs && tabs.length >= 2) {
+    tabs[0].textContent = '选择歌词版本';
+    tabs[1].textContent = 'Debug';
+  }
+  // 默认展示候选列表
   modal.querySelectorAll('.cand-panel').forEach(p => p.classList.remove('active'));
   list.classList.add('active');
+
+  // 设置 tab 点击事件
+  const setActiveTab = (tab) => {
+    modal.querySelectorAll('.cand-tab').forEach(t => t.classList.remove('active'));
+    modal.querySelector(`.cand-tab[data-tab="${tab}"]`)?.classList.add('active');
+    modal.querySelectorAll('.cand-panel').forEach(p => p.classList.remove('active'));
+    if (tab === 'candidates') list.classList.add('active');
+    else if (tab === 'debug') debugPanel.classList.add('active');
+  };
+  tabsEl?.querySelectorAll('.cand-tab').forEach(tab => {
+    tab.onclick = () => setActiveTab(tab.dataset.tab);
+  });
 
   const songKey = `${song.name}__${song.singer || ''}`;
 
@@ -374,10 +521,16 @@ async function openLyricsSwitchModal(song) {
 
   modal.classList.add('show');
 
-  // 关闭时恢复标题
-  const restoreTitle = () => {
-    const h3 = modal.querySelector('h3');
-    if (h3) h3.textContent = '选择播放资源（Bilibili）';
+  // 渲染 debug 面板
+  renderLyricsDebug(debugPanel, lyricsDebug);
+
+  // 关闭时恢复标题和 tab 文字
+  const restoreModal = () => {
+    const tabs = modal.querySelectorAll('.cand-tab');
+    if (tabs.length >= 2) {
+      tabs[0].textContent = '选择播放资源';
+      tabs[1].textContent = 'Debug';
+    }
   };
 
   // 辅助函数：按 data-id 从 candidates 数组查找候选（替代不稳定数组下标）
@@ -388,7 +541,7 @@ async function openLyricsSwitchModal(song) {
       const c = findById(row.dataset.id);
       if (!c) return;
       modal.classList.remove('show');
-      restoreTitle();
+      restoreModal();
       try {
         await doLoadLyrics(song, c.id);
         if (song.song_mid) saveSourceCache(song.song_mid, c.id);
@@ -408,10 +561,8 @@ async function openLyricsSwitchModal(song) {
           song: songKey, type: 'lyrics', sourceId: String(c.id),
           name: c.name, artist: c.artist, sourceLabel,
         } });
-        // 缓存被屏蔽源的展示信息（兜底，主要靠服务端存储）
         saveBlockedMeta(c.id, { name: c.name, artist: c.artist, source: c.source });
         lyricsCandidates = lyricsCandidates.filter(c => String(c.id) !== String(targetId));
-        // 如果被屏蔽的源就是当前选中的源，同时清理 localStorage 缓存，避免下次刷新又加载到被屏蔽的源
         if (song.song_mid && String(lyricsCurrentSourceId) === String(c.id)) {
           const cache = getSourceCache();
           delete cache[song.song_mid];
@@ -419,7 +570,6 @@ async function openLyricsSwitchModal(song) {
           lyricsCurrentSourceId = null;
         }
         row.remove();
-        // 立即刷新底部「已屏蔽的源」区域
         const oldBlocked = list.querySelector('.cand-blocked-section');
         if (oldBlocked) oldBlocked.remove();
         const newBlocked = await fetchBlockedList(api, songKey, 'lyrics', { name: song.name, singer: song.singer });
@@ -430,9 +580,9 @@ async function openLyricsSwitchModal(song) {
     });
   });
 
-  // 点叉关闭时恢复标题
+  // 点叉关闭时恢复
   const origClose = $('candClose').onclick;
-  $('candClose').onclick = () => { restoreTitle(); modal.classList.remove('show'); $('candClose').onclick = origClose; };
+  $('candClose').onclick = () => { restoreModal(); modal.classList.remove('show'); $('candClose').onclick = origClose; };
 
   // 已屏蔽列表事件
   bindBlockedSection(list, api, songKey, 'lyrics', 'candLyrics');
