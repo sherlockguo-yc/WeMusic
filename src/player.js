@@ -290,6 +290,42 @@ function autoAdvance() {
   _flushLog(totalDur || elapsed);
   if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
   if (state.playMode === 'single') { playCurrent(); return; }
+
+  // 淡入淡出：仅 bg 模式 + 已启用 + 下一首有 bvid 时生效
+  const i = computeNextIndex();
+  if (_crossfadeDuration > 0 && mode === 'bg' && i >= 0 && i !== state.queueIndex) {
+    const nextSong = state.queue[i];
+    if (nextSong && nextSong.bvid && _gainNode) {
+      const oldBvid = state.current?.bvid;
+      // 更新队列状态（与 playNext 一致）
+      if (state.playMode === 'shuffle') state.history.push(state.queueIndex);
+      state.queueIndex = i;
+
+      if (!oldBvid) { playCurrent(); return; } // 无旧 bvid（异常情况）→ 退化为常规切歌
+
+      // 更新 UI 到下一首歌（同时保持歌词显示旧歌——方案 B）
+      state.current = nextSong;
+      highlightPlaying();
+      $('npTitle').textContent = nextSong.singer ? `${nextSong.name} - ${nextSong.singer}` : nextSong.name;
+      checkMarquee($('npTitle'));
+      document.title = `${nextSong.name}${nextSong.singer ? ' · ' + nextSong.singer.split('/')[0] : ''} — WeMusic`;
+      updateNpCover(nextSong);
+      updateMediaSession(nextSong);
+      setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn, updateNpDislikeBtn }) => { updateNpLikeBtn(); updateNpDislikeBtn(); }), 0);
+      resetProgress(nextSong.duration);
+      startTimer(nextSong._biliDur || nextSong.duration);
+      saveSession();
+      import('./queue.js').then(({ pushPlayHistory, renderActiveTab }) => {
+        pushPlayHistory(nextSong);
+        if ($('queueDrawer').classList.contains('show')) renderActiveTab();
+      });
+      logPlay(nextSong, nextSong._biliDur || nextSong.duration);
+      // 注意：不在这里加载新歌歌词（loadLyrics）—— 留在 _completeCrossfade 中执行
+      // 启动淡入淡出音频过渡
+      _startCrossfade(nextSong.bvid);
+      return;
+    }
+  }
   playNext(true);
 }
 
@@ -566,6 +602,7 @@ export function computeNextIndex() {
 }
 
 export function playPrev() {
+  if (_crossfading) _cancelCrossfade();
   if (state.queue.length === 0) return;
   const n = state.queue.length;
   if (state.playMode === 'shuffle' && state.history.length) {
@@ -592,6 +629,7 @@ export function playPrev() {
 }
 
 export function playNext(auto = false) {
+  if (_crossfading) _cancelCrossfade();
   const i = computeNextIndex();
   if (i === -1) {
     if (state.queue.length > 0) toast('队列中的歌曲均已标记为不喜欢');
@@ -807,6 +845,17 @@ let _stalledTimer = null;    // stalled 事件 3s 兜底切歌 setTimeout ID
 let _resolveFailCount = 0;   // 连续 resolve 失败计数，≥5 首后停止自动跳过
 let _volume = 0.8;           // 用户手动设置的音量（0~1），持久化，前后台/是否展开视频都用同一个值
 
+// ---- 淡入淡出（crossfade）----
+let _nextAudio = null;        // 第二个 <audio>，淡入淡出时播放下一首
+let _nextGainNode = null;     // _nextAudio 的 GainNode
+let _nextSource = null;       // _nextAudio 的 MediaElementSource
+let _crossfadeDuration = 5;   // 淡入淡出时长（秒），0 表示关闭
+let _crossfading = false;     // 是否正在淡入淡出
+let _crossfadeBvid = null;    // 正在淡入的 bvid
+let _crossfadeEndTimer = null; // 淡入淡出结束 setTimeout
+let _crossfadeSeq = 0;        // 序列号，防止并发
+let _nextNormGain = 1.0;      // 下一首的归一化 gain
+
 // ---- 音量归一化：AudioContext + GainNode ----
 // GainNode 挂在 bgAudio 上，因此无论 bgAudio 是否正在展开视频时静默预载，
 // 只要它是真正在出声的引擎（mode === 'bg'），归一化效果就会生效。
@@ -818,10 +867,19 @@ let _volBtn = null;          // 音量按钮 DOM 引用（用于 tooltip 显示 
 function _initAudioCtx() {
   if (_audioCtx) return;
   _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // bgAudio 管线
   const source = _audioCtx.createMediaElementSource(bgAudio);
   _gainNode = _audioCtx.createGain();
   source.connect(_gainNode);
   _gainNode.connect(_audioCtx.destination);
+  // _nextAudio 管线（淡入淡出用，初始静音）
+  _nextAudio = document.getElementById('audioNext');
+  _nextSource = _audioCtx.createMediaElementSource(_nextAudio);
+  _nextGainNode = _audioCtx.createGain();
+  _nextSource.connect(_nextGainNode);
+  _nextGainNode.connect(_audioCtx.destination);
+  _nextGainNode.gain.value = 0;
+  _nextAudio.volume = 1.0;
   const resume = () => {
     if (_audioCtx.state === 'suspended') _audioCtx.resume();
     document.removeEventListener('click', resume);
@@ -847,7 +905,10 @@ function _applyNormVol() {
   // 输出级安全阀：归一化增益不超过 8 倍，防止极静音频放大后炸耳朵
   const safeGain = Math.min(_normGain, 8.0);
   const effectiveGain = skipNorm ? _volume : (safeGain * _volume);
-  _gainNode.gain.value = effectiveGain;
+  // 淡入淡出期间：_gainNode 由 linearRampToValueAtTime 驱动，不覆盖
+  if (!_crossfading) {
+    _gainNode.gain.value = effectiveGain;
+  }
   // 更新音量按钮 tooltip，显示归一化增益
   if (_volBtn) {
     const normInfo = skipNorm ? '归一化已关闭'
@@ -924,6 +985,119 @@ function _cacheCurrent(bvid) {
   offline.fetchAndStore(bvid, Auth.token, { pinned: false, videoSource: { bvid }, song })
     .then(() => { window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
     .catch(e => console.warn('[offline] 后台缓存失败', bvid, e.message));
+}
+
+// ---- 淡入淡出（crossfade）核心逻辑 ----
+// 通过 AudioContext 的 linearRampToValueAtTime 实现采样级平滑过渡。
+// bgAudio（当前曲）的 GainNode 线性降到 0，_nextAudio（下一曲）的 GainNode 线性升到目标音量。
+
+async function _fetchGainForNext(bvid) {
+  try {
+    const r = await api(`/play/gain?bvid=${encodeURIComponent(bvid)}`);
+    _nextNormGain = (r.gain != null && typeof r.gain === 'number') ? r.gain : 1.0;
+  } catch { _nextNormGain = 1.0; }
+}
+
+function _cancelCrossfade() {
+  if (_crossfadeEndTimer) { clearTimeout(_crossfadeEndTimer); _crossfadeEndTimer = null; }
+  _crossfading = false;
+  _crossfadeBvid = null;
+  _crossfadeSeq++;
+  // 立即恢复增益：bgAudio 回到正常音量，_nextAudio 静音
+  const now = _audioCtx.currentTime;
+  _gainNode.gain.cancelScheduledValues(now);
+  _applyNormVol();
+  _nextGainNode.gain.cancelScheduledValues(now);
+  _nextGainNode.gain.setValueAtTime(0, now);
+  _nextAudio.pause();
+  _nextAudio.src = '';
+}
+
+// 淡入淡出结束：bgAudio 接管下一曲的播放
+function _completeCrossfade(url) {
+  if (!_crossfading) return;
+  if (_crossfadeEndTimer) { clearTimeout(_crossfadeEndTimer); _crossfadeEndTimer = null; }
+  const pos = _nextAudio.currentTime || _crossfadeDuration;
+  // 重置增益：bgAudio 立即恢复到正常音量，_nextAudio 立即静音
+  const now = _audioCtx.currentTime;
+  _gainNode.gain.cancelScheduledValues(now);
+  _nextGainNode.gain.cancelScheduledValues(now);
+  // bgAudio 接管：设 src 为同一 URL（应已被浏览器缓存，加载极快），seek 到当前位置
+  bgAudio.src = url;
+  const doTakeover = () => {
+    bgAudio.removeEventListener('canplay', doTakeover);
+    try { bgAudio.currentTime = pos; } catch {}
+    _applyNormVol(); // 恢复 bgAudio 增益到正常
+    _nextGainNode.gain.setValueAtTime(0, now);
+    bgAudio.play().catch(e => console.warn('[crossfade] bgAudio takeover failed:', e.message));
+    // 短暂重叠后关掉 _nextAudio，避免音频断档
+    setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfading = false; _crossfadeBvid = null; }, 250);
+  };
+  bgAudio.addEventListener('canplay', doTakeover, { once: true });
+  bgAudio.load();
+  // 兜底：1.5 秒后无论如何强制接管（避免 bgAudio 加载卡住导致 _nextAudio 一直播放）
+  setTimeout(() => {
+    if (_crossfading) {
+      bgAudio.removeEventListener('canplay', doTakeover);
+      _applyNormVol();
+      _nextGainNode.gain.setValueAtTime(0, _audioCtx.currentTime);
+      bgAudio.play().catch(() => {});
+      setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfading = false; _crossfadeBvid = null; }, 250);
+    }
+  }, 1500);
+
+  // 歌词跟随：淡入淡出期间保持旧歌词，结束时加载新歌歌词（方案 B）
+  if (state.current) {
+    import('./lyrics.js').then(({ loadLyrics, setLyricsFor }) => {
+      setLyricsFor('');
+      loadLyrics(state.current);
+    });
+  }
+
+  setStatus('Bilibili 播放');
+}
+
+// 启动淡入淡出：bgAudio 淡出，_nextAudio 淡入
+async function _startCrossfade(newBvid) {
+  if (_crossfading) _cancelCrossfade();
+  _crossfading = true;
+  _crossfadeBvid = newBvid;
+  const seq = ++_crossfadeSeq;
+
+  // 获取下一首的播放链接
+  _usedFallback = false;
+  const info = await _getPlayableUrl(newBvid);
+  if (seq !== _crossfadeSeq || !_crossfading) return;
+  if (!info) { _crossfading = false; return; }
+
+  // 异步拉取下一首的归一化增益
+  _fetchGainForNext(newBvid);
+
+  _nextAudio.src = info.url;
+  _nextAudio.load();
+
+  const dur = _crossfadeDuration;
+  const ctx = _audioCtx;
+  const now = ctx.currentTime;
+  const endTime = now + dur;
+
+  // bgAudio 淡出到 0
+  _gainNode.gain.cancelScheduledValues(now);
+  _gainNode.gain.linearRampToValueAtTime(0, endTime);
+  // _nextAudio 从 0 淡入到目标音量
+  const skipNorm = localStorage.getItem('wemusic_volume_normalize') !== '1';
+  const safeNextGain = Math.min(_nextNormGain, 8.0);
+  const targetVol = skipNorm ? _volume : (safeNextGain * _volume);
+  _nextGainNode.gain.cancelScheduledValues(now);
+  _nextGainNode.gain.setValueAtTime(0, now);
+  _nextGainNode.gain.linearRampToValueAtTime(targetVol, endTime);
+
+  _nextAudio.play().catch(e => console.warn('[crossfade] play next failed:', e.message));
+
+  _crossfadeEndTimer = setTimeout(() => _completeCrossfade(info.url), dur * 1000);
+
+  if (!info.fromCache) _cacheCurrent(newBvid);
+  setStatus('Bilibili 播放');
 }
 
 // 加载曲目到 bgAudio 并立即播放（mode === 'bg' 时使用）
@@ -1224,6 +1398,14 @@ export function initPlayer() {
   // 设置面板切换归一化开关 → 立即生效
   window.addEventListener('volume_normalize_changed', () => _applyNormVol());
 
+  // 淡入淡出：开关 + 时长
+  const crossfadeEnabled = localStorage.getItem('wemusic_crossfade_enabled') === '1';
+  _crossfadeDuration = crossfadeEnabled ? Number(localStorage.getItem('wemusic_crossfade_duration') || 5) : 0;
+  window.addEventListener('crossfade_changed', () => {
+    const on = localStorage.getItem('wemusic_crossfade_enabled') === '1';
+    _crossfadeDuration = on ? Number(localStorage.getItem('wemusic_crossfade_duration') || 5) : 0;
+  });
+
   // 音量控件：通过 GainNode 控制 bgAudio 的实际输出音量；同时通过 postMessage 同步 iframe 音量。
   // 无论当前是 bg 模式还是 iframe 模式，这一个滑块始终同时驱动两者，保证前后台/展开态音量一致。
   _volume = Number(localStorage.getItem('wemusic_vol') || 0.8);
@@ -1236,7 +1418,8 @@ export function initPlayer() {
     // 音量由 GainNode 统一控制：bgAudio.volume 始终 1.0
     bgAudio.volume = 1.0;
     bgAudio.muted = (_volume === 0);
-    _applyNormVol();
+    // 淡入淡出期间：_gainNode 由 linearRampToValueAtTime 驱动，不覆盖
+    if (!_crossfading) _applyNormVol();
     const pct = Math.round(_volume * 100);
     volBar.value = pct;
     volBar.style.setProperty('--vol-fill', pct + '%');

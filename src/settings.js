@@ -578,6 +578,32 @@ export async function openSettings() {
     };
   }
 
+  // 淡入淡出开关
+  const crossfadeToggle = $('crossfadeToggle');
+  const crossfadeDurRow = $('crossfadeDurRow');
+  const crossfadeEnabled = localStorage.getItem('wemusic_crossfade_enabled') === '1';
+  const curCrossfadeDur = localStorage.getItem('wemusic_crossfade_duration') || '5';
+
+  if (crossfadeToggle) {
+    crossfadeToggle.checked = crossfadeEnabled;
+    if (crossfadeDurRow) crossfadeDurRow.style.display = crossfadeEnabled ? '' : 'none';
+    crossfadeToggle.onchange = () => {
+      const on = crossfadeToggle.checked;
+      localStorage.setItem('wemusic_crossfade_enabled', on ? '1' : '0');
+      if (crossfadeDurRow) crossfadeDurRow.style.display = on ? '' : 'none';
+      window.dispatchEvent(new CustomEvent('crossfade_changed'));
+    };
+  }
+
+  document.querySelectorAll('.crossfade-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.sec === curCrossfadeDur);
+    b.onclick = () => {
+      localStorage.setItem('wemusic_crossfade_duration', b.dataset.sec);
+      document.querySelectorAll('.crossfade-opt').forEach((x) => x.classList.toggle('active', x === b));
+      window.dispatchEvent(new CustomEvent('crossfade_changed'));
+    };
+  });
+
   const curPalette = localStorage.getItem('wemusic_palette') || 'green';
   document.querySelectorAll('.palette-item').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === curPalette);

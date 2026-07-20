@@ -148,6 +148,7 @@
         </div>
       </div>
       <audio id="audio" preload="auto" crossorigin="anonymous"></audio>
+      <audio id="audioNext" preload="auto" crossorigin="anonymous"></audio>
     </footer>
   </div>
 
@@ -474,6 +475,26 @@
               <span class="toggle-track"></span>
             </label>
             <span style="font-size:calc(var(--font-size)*0.9);color:var(--text-dim)">自动统一不同视频源的音量</span>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-label">淡入淡出</div>
+          <div class="settings-row" style="display:flex;align-items:center;gap:8px">
+            <label class="toggle-switch">
+              <input type="checkbox" id="crossfadeToggle">
+              <span class="toggle-track"></span>
+            </label>
+            <span style="font-size:calc(var(--font-size)*0.9);color:var(--text-dim)">切歌时平滑过渡</span>
+          </div>
+          <div id="crossfadeDurRow" style="display:none;margin-top:8px">
+            <div class="settings-label" style="margin-bottom:4px">过渡时长</div>
+            <div class="settings-row" style="flex-wrap:wrap;gap:6px">
+              <button class="btn sm crossfade-opt" data-sec="3">3 秒</button>
+              <button class="btn sm crossfade-opt" data-sec="5">5 秒</button>
+              <button class="btn sm crossfade-opt" data-sec="8">8 秒</button>
+              <button class="btn sm crossfade-opt" data-sec="10">10 秒</button>
+            </div>
+            <div class="settings-hint" style="font-size:calc(var(--font-size)*0.8);color:var(--text-dim);margin-top:4px">播完自动切歌生效，手动切歌不淡入淡出</div>
           </div>
         </div>
         <div class="settings-section">
