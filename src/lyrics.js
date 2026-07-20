@@ -251,6 +251,8 @@ export async function loadLyrics(song) {
 async function doLoadLyrics(song, forceSourceId) {
   const key = `${song.name}__${song.singer || ''}`;
   const seq = ++_lyricsSeq; // 捕获当前序列号，防止陈旧响应覆盖后续请求的数据
+  // 新歌加载时重置 debug 数据，防止旧歌的数据泄漏到新歌的 Debug 面板
+  lyricsDebug = null;
   $('lpBody').innerHTML = '<div class="lp-loading">加载歌词中…</div>';
 
   // 离线优先：若本地缓存命中且已有歌词整包，直接复用，不发网络请求
