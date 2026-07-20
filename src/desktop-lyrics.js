@@ -16,6 +16,7 @@ const CLOSE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
 let pipWindow = null;
 let _pipSyncId = null;
 let _isOpen = false;
+let _currentMode = 'lyrics';     // 'lyrics' | 'cover'
 let _currentLayout = 'double';
 let _currentBg = 'system';
 let _currentSize = 'med';
@@ -179,12 +180,49 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px;background:#000}
 .dtopt:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.15)}
 .dt-root.dt-light .dtopt:hover{background:rgba(0,0,0,0.07)}
 .dtopt.on{border-color:#2ab758;background:rgba(42,183,88,0.18);color:#2ab758;font-weight:600}
+
+/* ====== 封面模式（清晰封面 + 歌名/歌手）====== */
+/* 封面去模糊，原图展示 */
+.dt-root[data-mode="cover"] .dt-cover-img{filter:none;opacity:1}
+/* 蒙层改为底部渐变：上半透明看封面，底部深保证文字可读 */
+.dt-root[data-mode="cover"] .dt-overlay{
+  background:linear-gradient(180deg,
+    rgba(0,0,0,0) 0%,rgba(0,0,0,0) 45%,
+    rgba(0,0,0,0.3) 70%,rgba(0,0,0,0.65) 100%);
+}
+/* 浅色 mode 下的封面蒙层 */
+.dt-root[data-mode="cover"].dt-light .dt-overlay{
+  background:linear-gradient(180deg,
+    rgba(0,0,0,0) 0%,rgba(0,0,0,0) 45%,
+    rgba(0,0,0,0.06) 70%,rgba(0,0,0,0.2) 100%);
+}
+/* 隐藏歌词，显示歌名/歌手 */
+.dt-root[data-mode="cover"] .dt-body{display:none}
+.dt-root[data-mode="cover"] .dt-song-info{display:flex}
+/* 歌名/歌手叠加层 */
+.dt-song-info{
+  display:none;position:absolute;bottom:52px;left:0;right:0;z-index:2;
+  flex-direction:column;align-items:center;gap:1px;padding:0 20px;
+}
+.dt-si-name{
+  font-size:19px;font-weight:700;color:#fff;
+  text-shadow:0 1px 8px rgba(0,0,0,0.5);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+}
+.dt-root.dt-light .dt-si-name{color:#1a1c20;text-shadow:0 1px 8px rgba(0,0,0,0.08)}
+.dt-si-singer{
+  font-size:13px;opacity:.6;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+}
+.dt-root.dt-light .dt-si-singer{color:#1a1c20;opacity:.45}
+
 @media all and (display-mode:picture-in-picture){body{margin:0}}
 `;
 
 // ---- 偏好 ----
 function loadPrefs() {
   try {
+    _currentMode = localStorage.getItem('wemusic_desktop_lyrics_mode') || 'lyrics';
     _currentLayout = localStorage.getItem('wemusic_desktop_lyrics_layout') || 'double';
     _currentBg = localStorage.getItem('wemusic_desktop_lyrics_bg') || 'system';
     _currentSize = localStorage.getItem('wemusic_desktop_lyrics_size') || 'med';
@@ -192,6 +230,7 @@ function loadPrefs() {
 }
 function savePrefs() {
   try {
+    localStorage.setItem('wemusic_desktop_lyrics_mode', _currentMode);
     localStorage.setItem('wemusic_desktop_lyrics_layout', _currentLayout);
     localStorage.setItem('wemusic_desktop_lyrics_bg', _currentBg);
     localStorage.setItem('wemusic_desktop_lyrics_size', _currentSize);
@@ -246,11 +285,18 @@ function buildHTML(song) {
       ? `<div class="dt-placeholder">${PIANO_ICON} 纯音乐，暂无歌词</div>`
       : `<div class="dt-placeholder">${PIANO_ICON} 加载中…</div>`;
 
+  const name = esc(song?.name || '');
+  const singer = esc(song?.singer || '');
+
   return `
-<div class="dt-root" data-layout="${_currentLayout}" data-bg="${_currentBg}${lightClass}" data-size="${_currentSize}">
+<div class="dt-root" data-mode="${_currentMode}" data-layout="${_currentLayout}" data-bg="${_currentBg}${lightClass}" data-size="${_currentSize}">
   <div class="dt-cover" id="dtCover"><img class="dt-cover-img" id="dtCoverImg" alt="" /></div>
   <div class="dt-fallback"></div>
   <div class="dt-overlay"></div>
+  <div class="dt-song-info" id="dtSongInfo">
+    <div class="dt-si-name" id="dtSiName">${name}</div>
+    <div class="dt-si-singer" id="dtSiSinger">${singer}</div>
+  </div>
   <button class="dt-set-btn" id="dtGearBtn" title="设置">${GEAR_ICON}</button>
   <div class="dt-set-pop" id="dtPop">
     <button class="dt-set-close" id="dtSetClose" title="关闭">${CLOSE_ICON}</button>
@@ -266,6 +312,9 @@ function buildHTML(song) {
 }
 
 function settingsHTML() {
+  const mopts = [['lyrics','歌词'],['cover','封面']].map(([v,l]) =>
+    `<button class="dtopt${v===_currentMode?' on':''}" data-s="mode" data-v="${v}">${l}</button>`
+  ).join('');
   const lopts = [['double','双行'],['single','单行']].map(([v,l]) =>
     `<button class="dtopt${v===_currentLayout?' on':''}" data-s="layout" data-v="${v}">${l}</button>`
   ).join('');
@@ -275,7 +324,7 @@ function settingsHTML() {
   const sopts = [['sm','小'],['med','中'],['lg','大']].map(([v,l]) =>
     `<button class="dtopt${v===_currentSize?' on':''}" data-s="size" data-v="${v}">${l}</button>`
   ).join('');
-  return `<div class="dt-srow"><span class="dt-slabel">布局</span><div class="dtops">${lopts}</div></div><div class="dt-srow"><span class="dt-slabel">背景</span><div class="dtops">${bopts}</div></div><div class="dt-srow"><span class="dt-slabel">字号</span><div class="dtops">${sopts}</div></div>`;
+  return `<div class="dt-srow"><span class="dt-slabel">模式</span><div class="dtops">${mopts}</div></div><div class="dt-srow"><span class="dt-slabel">布局</span><div class="dtops">${lopts}</div></div><div class="dt-srow"><span class="dt-slabel">背景</span><div class="dtops">${bopts}</div></div><div class="dt-srow"><span class="dt-slabel">字号</span><div class="dtops">${sopts}</div></div>`;
 }
 
 // ---- 封面加载 ----
@@ -342,7 +391,12 @@ function bindEvents(doc) {
     btn.addEventListener('click', () => {
       const s = btn.dataset.s, v = btn.dataset.v;
       const root = doc.querySelector('.dt-root');
-      if (s === 'layout') { _currentLayout = v; root.dataset.layout = v; }
+      if (s === 'mode') {
+        _currentMode = v; root.dataset.mode = v;
+        // 切换到封面模式时立即更新歌名/歌手
+        if (v === 'cover') updateSongInfo(doc);
+      }
+      else if (s === 'layout') { _currentLayout = v; root.dataset.layout = v; }
       else if (s === 'bg') {
         _currentBg = v; root.dataset.bg = v;
         if (v === 'light') root.classList.add('dt-light');
@@ -376,9 +430,18 @@ function toggleSettings(doc) {
 }
 
 function refreshOpts(doc) {
+  doc.querySelectorAll('.dtopt[data-s="mode"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentMode));
   doc.querySelectorAll('.dtopt[data-s="layout"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentLayout));
   doc.querySelectorAll('.dtopt[data-s="bg"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentBg));
   doc.querySelectorAll('.dtopt[data-s="size"]').forEach(b => b.classList.toggle('on', b.dataset.v === _currentSize));
+}
+
+// 更新封面模式的歌名/歌手显示
+function updateSongInfo(doc) {
+  const nameEl = doc.getElementById('dtSiName');
+  const singerEl = doc.getElementById('dtSiSinger');
+  if (nameEl) nameEl.textContent = state.current?.name || '未知歌曲';
+  if (singerEl) singerEl.textContent = state.current?.singer || '未知歌手';
 }
 
 // ---- 同步循环 ----
@@ -393,9 +456,12 @@ function startSync() {
       const doc = pipWindow.document; if (!doc) return;
       const body = doc.getElementById('dtBody'); if (!body) return;
 
-      // 切歌：封面变化 → 重新加载
+      // 切歌：封面变化 → 重新加载 + 更新歌名/歌手
       const curMid = state.current?.album_mid;
-      if (_lastCoverMid !== null && _lastCoverMid !== curMid) loadCover(doc, state.current);
+      if (_lastCoverMid !== null && _lastCoverMid !== curMid) {
+        loadCover(doc, state.current);
+        updateSongInfo(doc);
+      }
       _lastCoverMid = curMid || null;
 
       // 歌词行数变化 → 重建 body
