@@ -1,0 +1,61 @@
+---
+description: CSS filter / backdrop-filter / transform / perspective / will-change / contain 会使 position:fixed 后代相对于自身定位而非视口。给任何 fixed 元素写定位前，检查其祖先链是否有这些属性。
+alwaysApply: true
+---
+
+# CSS position:fixed 的 containing block 陷阱
+
+## 背景
+
+2026-07-20 桌面歌词设置面板 bug：设置 popover 使用了 `position: fixed` 却仍被 `.dt-root` 的 `overflow: hidden` 裁切，连续 3 次无效修复（upward popover → position:fixed → 全窗口覆盖层）才定位到根因。
+
+原因：`.dt-root[data-bg="blur"]` 上有 `backdrop-filter: blur(28px)`，这使 `.dt-root` 成为其内部 **`position:fixed` 后代的 containing block**。popover 的 `position:fixed` 相对于 `.dt-root`（130px 高）而非视口定位，仍受 `overflow:hidden` 约束。
+
+> **核心教训**：`position: fixed` ≠ 永远相对于视口。多个常用 CSS 属性会使祖先成为 fixed 后代的包含块。
+
+## 规则
+
+**给任何元素写 `position: fixed` 之前，必须检查其所有祖先元素是否有以下任一属性。如果有，`fixed` 将相对于该祖先定位，而非视口。**
+
+### 会为 fixed 后代重建 containing block 的 CSS 属性
+
+| 属性 | 触发条件 | 常见场景 |
+|------|---------|---------|
+| `filter` | 任意非 `none` 值 | 图片滤镜、模糊效果 |
+| `backdrop-filter` | 任意非 `none` 值 | 毛玻璃背景（本项目默认背景） |
+| `transform` | 任意非 `none` 值 | 动画、居中偏移 |
+| `perspective` | 任意非 `none` 值 | 3D 变换 |
+| `will-change` | 值为 `filter` / `transform` / `backdrop-filter` 等 | 性能优化 hint |
+| `contain` | 值为 `paint` / `layout` / `strict` 等 | CSS containment |
+| `content-visibility` | 任意非 `visible` 值 | 虚拟滚动 / 性能优化 |
+
+### 正确做法
+
+1. **写 `position: fixed` 前 grep 祖先链**：搜索祖先选择器是否包含以上属性
+2. **如果祖先有这些属性且无法移除**，`fixed` 不等于视口定位。考虑：
+   - 将元素移到祖先链之外（如 `document.body.appendChild`）
+   - 使用全窗口覆盖层 `inset:0`（正好填满祖先容器 = 窗口大小，visible 且不被裁切）
+   - 移除祖先的该属性（如将 `backdrop-filter` 移到更精确的子元素上）
+
+### 验证
+
+构造最小化测试页面验证 fixed 元素是否可见：
+
+```html
+<div style="overflow:hidden; width:340px; height:130px; backdrop-filter:blur(10px); position:relative">
+  <div style="position:fixed; top:30px; right:10px; background:red; color:white; padding:10px; z-index:99">
+    I should be visible!
+  </div>
+</div>
+```
+
+在目标环境（PiP 窗口等）中打开，检查红色块是否可见。
+
+## 本项目已知受影响的模式
+
+- `.dt-root[data-bg="blur"]` 的 `backdrop-filter` 使内部 `position:fixed` 相对于 `.dt-root` 定位 → 被 `overflow:hidden` 裁切
+- 解决方案：设置面板改为全窗口覆盖层 `position:fixed; inset:0`，正好填满 `.dt-root` / 窗口，visible
+
+## 相关事件
+
+- 2026-07-20：桌面歌词设置面板 `position:fixed` 修复无效，根因是 `backdrop-filter` 重建 containing block。3 次无效修复后才定位到，浪费约 6 轮交互。

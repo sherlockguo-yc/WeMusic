@@ -51,6 +51,19 @@ alwaysApply: true
 - [ ] 我做了反事实实验（消除 X 后观察 Y 是否消失）并拿到了明确结果吗？
 - [ ] 如果不确定以上任何一条，先加诊断代码收集证据，不要猜
 
+### 不可本地复现的环境：最小化验证
+
+当目标运行环境不可本地直接复现时（PiP 窗口、SSH 远端服务、浏览器特定 API 等），反事实实验的成本更高但**更能暴露错误假设**。此时应：
+
+1. **构造最小化测试页面**（独立 HTML + 关键 CSS/JS，不依赖项目构建体系），用静态方式在目标环境中打开验证核心假设
+2. **加调试日志**（如 `console.log` 元素尺寸、事件触发标记、CSS `getBoundingClientRect()` 输出）来收集正面证据，替代「看起来应该没问题」的静态代码阅读
+3. **一次只改一个变量**：如果一次 commit 包含多个 CSS/JS 修改，无法判断哪个改动生效、哪个改动引入了新问题。每个假设对应一条最小化改动，独立部署验证
+
+反例（2026-07-20 桌面歌词设置面板）：
+- Agent 推断「`position: fixed` 可以脱离父容器的 `overflow:hidden`」→ 改代码 → 推送 → 无效（实际根因是 `backdrop-filter` 使 `.dt-root` 成为 fixed 后代的 containing block，fixed 仍被 `overflow:hidden` 裁切）
+- 反事实实验缺失：未构造最小化测试页面（一个 `<div style='overflow:hidden; backdrop-filter:blur(10px)'><div style='position:fixed'>test</div></div>`）在 PiP 窗口打开验证固定定位元素是否可见
+
 ## 相关事件
 
 - 2026-07-19：Agent 基于错误的 cgroup 假设实施了无效修复（`systemd-run --user --scope`），实际根因是 shell 变量覆盖。加了崩溃诊断代码（`crashLog`）后才拿到真实证据（SIGTERM + exit code=0 + 1.8 秒死亡窗口），定位到真正的 bug。
+- 2026-07-20：桌面歌词设置面板连续 3 次无效修复（upward popover → position:fixed → 全窗口覆盖层），均未在 PiP 窗口中做最小化反事实验证，导致多轮交互被浪费。
