@@ -22,6 +22,13 @@ if [ -n "$PID" ]; then
   log_event "restart" "ok" "已停止旧进程 PID $PID"
 fi
 
+# 检查 Chromium 是否已安装（Puppeteer 海报生成需要）
+CHROMIUM_DIR="$HOME/.cache/puppeteer/chrome"
+if [ ! -d "$CHROMIUM_DIR" ] || [ -z "$(ls -A "$CHROMIUM_DIR" 2>/dev/null)" ]; then
+  echo "[$(date)] Chromium 未安装，正在安装（Puppeteer 海报生成依赖）..."
+  cd "$DIR" && npx puppeteer browsers install chrome 2>&1 || echo "[$(date)] Chromium 安装失败，海报功能将不可用"
+fi
+
 # 启动主服务
 cd "$DIR" || exit 1
 # 统一凭据（GITHUB_TOKEN 等，用于 API 查询提升限流额度）
