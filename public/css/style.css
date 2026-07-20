@@ -253,7 +253,7 @@ button.topbar-btn {
 .btn.sm { padding: 6px 10px; font-size: 12px; }
 
 /* 均衡器激活态 */
-.eq-opt.active { background: var(--accent); color: #062b16; border-color: var(--accent); }
+.eq-opt.active, .crossfade-opt.active { background: var(--accent); color: #062b16; border-color: var(--accent); }
 
 /* 桌面歌词按钮激活态 */
 #dtLyricsBtn.active { background: var(--accent); color: #062b16; border-color: var(--accent); }
