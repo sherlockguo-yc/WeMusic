@@ -22,6 +22,8 @@ let _currentBg = 'system';
 let _currentSize = 'med';
 let _settingsVisible = false;
 let _coverLoaded = false;
+let _coverRatio = null;          // 封面模式锁定的宽高比
+let _constrainingResize = false; // 标记防止 resizeTo 触发的 resize 事件递归
 
 // ---- PiP 窗口 CSS ----
 const PIP_CSS = `
@@ -253,8 +255,11 @@ export async function openDesktopLyrics() {
       pipWindow.document.body.innerHTML = buildHTML(state.current);
       pipWindow.document.documentElement.classList.add('ready');
       pipWindow.addEventListener('pagehide', () => { cleanup(); });
+      pipWindow.addEventListener('resize', handleCoverResize);
       bindEvents(pipWindow.document);
       loadCover(pipWindow.document, state.current);
+      // 封面模式 → 按封面比例调整窗口
+      if (_currentMode === 'cover') fitToCoverRatio(pipWindow.document, true);
       _isOpen = true;
       startSync();
       updateBtnState();
@@ -393,8 +398,12 @@ function bindEvents(doc) {
       const root = doc.querySelector('.dt-root');
       if (s === 'mode') {
         _currentMode = v; root.dataset.mode = v;
-        // 切换到封面模式时立即更新歌名/歌手
-        if (v === 'cover') updateSongInfo(doc);
+        if (v === 'cover') {
+          updateSongInfo(doc);
+          fitToCoverRatio(doc, false); // 无封面图时用默认 1:1
+        } else {
+          _coverRatio = null; // 切回歌词模式，释放比例约束
+        }
       }
       else if (s === 'layout') { _currentLayout = v; root.dataset.layout = v; }
       else if (s === 'bg') {
@@ -442,6 +451,38 @@ function updateSongInfo(doc) {
   const singerEl = doc.getElementById('dtSiSinger');
   if (nameEl) nameEl.textContent = state.current?.name || '未知歌曲';
   if (singerEl) singerEl.textContent = state.current?.singer || '未知歌手';
+}
+
+// 封面模式 → 按封面图片比例调整窗口大小，之后 resize 也锁定该比例
+function fitToCoverRatio(doc, initialOpen) {
+  if (!pipWindow || typeof pipWindow.resizeTo !== 'function') return;
+  const img = doc.getElementById('dtCoverImg');
+  // 从已加载的封面图片取宽高比，未加载则默认正方形
+  let ratio = 1;
+  if (img && img.naturalWidth && img.naturalHeight) {
+    ratio = img.naturalWidth / img.naturalHeight;
+  }
+  _coverRatio = ratio;
+  const w = pipWindow.outerWidth, h = pipWindow.outerHeight;
+  const targetH = Math.round(w / ratio);
+  // 仅当高度偏差 > 3px 时才调整（初次打开时强制，切换时按需）
+  if (initialOpen || Math.abs(h - targetH) > 3) {
+    pipWindow.resizeTo(w, targetH);
+  }
+}
+
+// resize 事件处理：封面模式下按锁定比例约束窗口
+function handleCoverResize() {
+  if (_constrainingResize) return; // 跳过 resizeTo 触发的自身回调
+  if (_currentMode !== 'cover' || !_coverRatio) return;
+  if (!pipWindow || typeof pipWindow.resizeTo !== 'function') return;
+  const w = pipWindow.outerWidth, h = pipWindow.outerHeight;
+  if (!w || !h) return;
+  const targetH = Math.round(w / _coverRatio);
+  if (Math.abs(h - targetH) <= 3) return;
+  _constrainingResize = true;
+  pipWindow.resizeTo(w, targetH);
+  setTimeout(() => { _constrainingResize = false; }, 100);
 }
 
 // ---- 同步循环 ----
@@ -528,6 +569,9 @@ function openPopup() {
   loadCover(pop.document, state.current);
   bindEvents(pop.document);
   pop.addEventListener('beforeunload', () => { cleanup(); });
+  pop.addEventListener('resize', handleCoverResize);
+  // 封面模式 → 按封面比例调整窗口
+  if (_currentMode === 'cover') fitToCoverRatio(pop.document, true);
   _isOpen = true;
   startSync();
   updateBtnState();
@@ -537,6 +581,8 @@ function openPopup() {
 function cleanup() {
   stopSync();
   _coverLoaded = false;
+  _coverRatio = null;
+  _constrainingResize = false;
   _lastCoverMid = null;
   try { pipWindow?.close?.(); } catch {}
   pipWindow = null;
