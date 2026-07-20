@@ -17,7 +17,7 @@ let pipWindow = null;
 let _pipSyncId = null;
 let _isOpen = false;
 let _currentLayout = 'double';
-let _currentBg = 'blur';
+let _currentBg = 'system';
 let _currentSize = 'med';
 let _settingsVisible = false;
 let _coverLoaded = false;
@@ -32,6 +32,8 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px;background:#000}
   user-select:none;-webkit-user-select:none;position:relative;overflow:hidden;
   border-radius:10px;color:#fff;
 }
+.dt-root.dt-light{color:#1a1c20}
+.dt-root.dt-light .dt-current{text-shadow:0 1px 6px rgba(0,0,0,0.06)}
 
 /* ====== 封面图层 ====== */
 .dt-cover{
@@ -45,34 +47,24 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px;background:#000}
 }
 /* 封面淡入 */
 .dt-cover-img.ready{filter:blur(36px) brightness(0.32);opacity:1}
-/* 封面加载完成时渐显 500ms */
 .dt-cover-img:not(.ready){opacity:0;transition:opacity .5s ease}
 .dt-cover-img.ready.full{opacity:1}
-/* 暗色模式：封面更暗 */
-.dt-root[data-bg="dark"] .dt-cover-img{filter:blur(40px) brightness(0.18)}
-/* 主题模式：封面亮一些 */
-.dt-root[data-bg="theme"]:not(.dt-light) .dt-cover-img{filter:blur(34px) brightness(0.28)}
-.dt-root[data-bg="theme"].dt-light .dt-cover-img{filter:blur(30px) brightness(0.65)}
+/* 浅色模式：封面更亮 */
+.dt-root.dt-light .dt-cover-img{filter:blur(30px) brightness(0.65)}
 /* 无封面时隐藏 */
 .dt-cover.nocover{display:none}
 
 /* 暗色渐变蒙层：底部和顶部加深，文字可读 */
 .dt-overlay{
   position:absolute;inset:0;z-index:1;
-  background:linear-gradient(
-    180deg,
-    rgba(0,0,0,0.35) 0%,
-    rgba(0,0,0,0.15) 30%,
-    rgba(0,0,0,0.05) 55%,
-    rgba(0,0,0,0.35) 85%,
-    rgba(0,0,0,0.55) 100%
-  );
+  background:linear-gradient(180deg,
+    rgba(0,0,0,0.35) 0%,rgba(0,0,0,0.15) 30%,rgba(0,0,0,0.05) 55%,
+    rgba(0,0,0,0.35) 85%,rgba(0,0,0,0.55) 100%);
 }
-.dt-root[data-bg="dark"] .dt-overlay{
-  background:linear-gradient(180deg,rgba(0,0,0,0.5) 0%,rgba(0,0,0,0.25) 30%,rgba(0,0,0,0.15) 55%,rgba(0,0,0,0.45) 85%,rgba(0,0,0,0.7) 100%);
-}
-.dt-root[data-bg="theme"].dt-light .dt-overlay{
-  background:linear-gradient(180deg,rgba(0,0,0,0.08) 0%,rgba(0,0,0,0.02) 40%,rgba(0,0,0,0.02) 60%,rgba(0,0,0,0.12) 85%,rgba(0,0,0,0.22) 100%);
+.dt-root.dt-light .dt-overlay{
+  background:linear-gradient(180deg,
+    rgba(0,0,0,0.08) 0%,rgba(0,0,0,0.02) 40%,rgba(0,0,0,0.02) 60%,
+    rgba(0,0,0,0.12) 85%,rgba(0,0,0,0.22) 100%);
 }
 /* 无封面时补一个纯色底 */
 .dt-fallback{
@@ -80,7 +72,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px;background:#000}
   background:linear-gradient(160deg,#1a1c22 0%,#101216 50%,#0a0c10 100%);
 }
 .dt-cover.nocover ~ .dt-fallback{display:block}
-.dt-root[data-bg="theme"].dt-light .dt-fallback{
+.dt-root.dt-light .dt-fallback{
   background:linear-gradient(160deg,#f6f7f9 0%,#eef0f4 100%);
 }
 
@@ -153,7 +145,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px;background:#000}
   padding:32px 16px 14px;z-index:40;overflow-y:auto;color:#e0e2e8;
   border:1px solid rgba(255,255,255,0.06);
 }
-.dt-root[data-bg="theme"].dt-light .dt-set-pop{
+.dt-root.dt-light .dt-set-pop{
   background:rgba(255,255,255,0.97);border-color:rgba(0,0,0,0.07);color:#1a1c20;
 }
 .dt-set-pop.show{display:block;animation:dtpopIn .14s ease-out}
@@ -181,11 +173,11 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px;background:#000}
   color:inherit;text-align:center;white-space:nowrap;font-weight:500;
   transition:all .12s ease;
 }
-.dt-root[data-bg="theme"].dt-light .dtopt{
+.dt-root.dt-light .dtopt{
   border-color:rgba(0,0,0,0.08);background:rgba(0,0,0,0.03);
 }
 .dtopt:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.15)}
-.dt-root[data-bg="theme"].dt-light .dtopt:hover{background:rgba(0,0,0,0.07)}
+.dt-root.dt-light .dtopt:hover{background:rgba(0,0,0,0.07)}
 .dtopt.on{border-color:#2ab758;background:rgba(42,183,88,0.18);color:#2ab758;font-weight:600}
 @media all and (display-mode:picture-in-picture){body{margin:0}}
 `;
@@ -194,7 +186,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px;background:#000}
 function loadPrefs() {
   try {
     _currentLayout = localStorage.getItem('wemusic_desktop_lyrics_layout') || 'double';
-    _currentBg = localStorage.getItem('wemusic_desktop_lyrics_bg') || 'blur';
+    _currentBg = localStorage.getItem('wemusic_desktop_lyrics_bg') || 'system';
     _currentSize = localStorage.getItem('wemusic_desktop_lyrics_size') || 'med';
   } catch {}
 }
@@ -240,8 +232,11 @@ export function closeDesktopLyrics() { cleanup(); }
 
 // ---- 构建 HTML ----
 function buildHTML(song) {
-  const isLight = document.body.classList.contains('light');
-  const lightClass = _currentBg === 'theme' && isLight ? ' dt-light' : '';
+  let lightClass = '';
+  if (_currentBg === 'light') lightClass = ' dt-light';
+  else if (_currentBg === 'system') {
+    lightClass = window.matchMedia('(prefers-color-scheme: dark)').matches ? '' : ' dt-light';
+  }
   const hasLyrics = lyricsLines.length > 0;
   const instrumental = !hasLyrics && song;
 
@@ -274,7 +269,7 @@ function settingsHTML() {
   const lopts = [['double','双行'],['single','单行']].map(([v,l]) =>
     `<button class="dtopt${v===_currentLayout?' on':''}" data-s="layout" data-v="${v}">${l}</button>`
   ).join('');
-  const bopts = [['blur','毛玻璃'],['dark','暗色'],['theme','主题']].map(([v,l]) =>
+  const bopts = [['light','浅色'],['dark','深色'],['system','跟随系统']].map(([v,l]) =>
     `<button class="dtopt${v===_currentBg?' on':''}" data-s="bg" data-v="${v}">${l}</button>`
   ).join('');
   const sopts = [['sm','小'],['med','中'],['lg','大']].map(([v,l]) =>
@@ -350,8 +345,12 @@ function bindEvents(doc) {
       if (s === 'layout') { _currentLayout = v; root.dataset.layout = v; }
       else if (s === 'bg') {
         _currentBg = v; root.dataset.bg = v;
-        const isLight = document.body.classList.contains('light');
-        root.classList.toggle('dt-light', v === 'theme' && isLight);
+        if (v === 'light') root.classList.add('dt-light');
+        else if (v === 'dark') root.classList.remove('dt-light');
+        else if (v === 'system') {
+          const prefersDark = doc.defaultView.matchMedia('(prefers-color-scheme: dark)').matches;
+          root.classList.toggle('dt-light', !prefersDark);
+        }
       }
       else if (s === 'size') { _currentSize = v; root.dataset.size = v; }
       savePrefs();
