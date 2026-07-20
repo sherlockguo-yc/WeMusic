@@ -198,10 +198,13 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px;background:#1517
     rgba(0,0,0,0) 0%,rgba(0,0,0,0) 45%,
     rgba(0,0,0,0.06) 70%,rgba(0,0,0,0.2) 100%);
 }
-/* 隐藏歌词，显示歌名/歌手；控件固定在底部 */
+/* 隐藏歌词，显示歌名/歌手；控件固定在底部居中 */
 .dt-root[data-mode="cover"] .dt-body{display:none}
 .dt-root[data-mode="cover"] .dt-song-info{display:flex}
-.dt-root[data-mode="cover"] .dt-bar{position:absolute;bottom:0;left:0;right:0}
+.dt-root[data-mode="cover"] .dt-bar{
+  position:absolute;bottom:6px;left:50%;transform:translateX(-50%);
+  width:auto;
+}
 /* 歌名/歌手叠加层 */
 .dt-song-info{
   display:none;position:absolute;bottom:52px;left:0;right:0;z-index:2;
