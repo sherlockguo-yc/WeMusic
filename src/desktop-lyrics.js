@@ -118,37 +118,40 @@ html,body{width:100%;height:100%;overflow:hidden;font-size:14px}
 .dt-cbtn.paused{opacity:.3}
 
 /* ====== 设置按钮 & 面板 ====== */
+/* 齿轮始终置于覆盖层之上，可再次点击关闭 */
 .dt-set-btn{
-  position:absolute;top:5px;right:7px;z-index:20;
+  position:absolute;top:5px;right:7px;z-index:50;
   background:none;border:none;cursor:pointer;padding:4px;
   border-radius:5px;display:flex;align-items:center;justify-content:center;
-  color:inherit;opacity:.45;transition:opacity .15s;
+  color:inherit;opacity:.5;transition:opacity .15s;
 }
-.dt-set-btn:hover{opacity:.85}
+.dt-set-btn:hover{opacity:.9}
+/* 全窗口覆盖层：inset:0 正好填满 130px 窗口，不受父级 overflow:hidden 或
+   backdrop-filter 建立的 containing block 影响。内容紧凑横排以容纳 3 行设置。 */
 .dt-set-pop{
-  position:fixed;top:28px;right:7px;display:none;
-  background:rgba(20,20,26,0.96);border-radius:10px;padding:10px 12px;
-  min-width:150px;z-index:9999;
-  border:1px solid rgba(255,255,255,0.07);
-  box-shadow:0 8px 24px rgba(0,0,0,0.45),0 2px 8px rgba(0,0,0,0.25);
-  color:inherit;
+  position:fixed;inset:0;display:none;
+  background:rgba(16,16,22,0.97);border-radius:10px;padding:30px 14px 12px;
+  z-index:40;overflow-y:auto;color:inherit;
+  border:1px solid rgba(255,255,255,0.06);
 }
 .dt-root[data-bg="theme"].dt-light .dt-set-pop{
-  background:rgba(255,255,255,0.98);border-color:rgba(0,0,0,0.07);
-  color:#1a1c20;
-  box-shadow:0 10px 30px rgba(0,0,0,0.15),0 2px 8px rgba(0,0,0,0.08);
+  background:rgba(255,255,255,0.98);border-color:rgba(0,0,0,0.07);color:#1a1c20;
 }
 .dt-set-pop.show{display:block;animation:dtpopIn .14s ease-out}
-@keyframes dtpopIn{from{opacity:0;transform:translateY(-3px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-.dt-srow{margin-bottom:11px}
+@keyframes dtpopIn{from{opacity:0}to{opacity:1}}
+/* 紧凑横排：标签在左、选项在右，单行高度约 26px，3 行可装入 130px 窗口 */
+.dt-srow{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-bottom:7px;
+}
 .dt-srow:last-child{margin-bottom:0}
 .dt-slabel{
-  font-size:9.5px;opacity:.38;display:block;margin-bottom:5px;
-  text-transform:uppercase;letter-spacing:1px;font-weight:600;
+  font-size:10px;opacity:.45;margin:0;flex-shrink:0;
+  letter-spacing:.5px;font-weight:600;white-space:nowrap;
 }
-.dtopts{display:flex;gap:5px}
+.dtops{display:flex;gap:5px;flex-shrink:0}
 .dtopt{
-  flex:1;font-size:11px;padding:5px 7px;border-radius:5px;cursor:pointer;
+  font-size:11px;padding:5px 9px;border-radius:5px;cursor:pointer;
   border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);
   color:inherit;text-align:center;white-space:nowrap;font-weight:500;
   transition:all .12s ease;
@@ -267,7 +270,8 @@ function bindEvents(doc) {
   });
 
   doc.addEventListener('click', e => {
-    if (_settingsVisible && !e.target.closest('.dt-set-btn')) {
+    // 点击面板外部（且不是齿轮）时关闭；点击面板内部（含选项）不关闭
+    if (_settingsVisible && !e.target.closest('.dt-set-btn') && !e.target.closest('.dt-set-pop')) {
       _settingsVisible = false;
       doc.getElementById('dtPop')?.classList.remove('show');
     }
