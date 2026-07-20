@@ -1100,10 +1100,15 @@ export function startVideo(bvid, title, dur) {
   });
   logPlay(state.current, dur);
   import('./lyrics.js').then(({ updateLyricsPanelMeta, loadLyrics, loadSongBackground, setLyricsFor }) => {
-    if ($('lyricsPanel').classList.contains('show') && state.current) {
-      updateLyricsPanelMeta(state.current);
-      $('lyricsPanel').classList.add('playing');
-      setLyricsFor('');
+    if (state.current) {
+      // 歌词详情页打开时，同步更新面板 meta 和「播放中」状态
+      if ($('lyricsPanel').classList.contains('show')) {
+        updateLyricsPanelMeta(state.current);
+        $('lyricsPanel').classList.add('playing');
+        setLyricsFor(''); // 清除旧 key 以强制重新加载新歌歌词
+      }
+      // 始终加载歌词数据：桌面歌词/PiP 浮窗依赖此全局数据源，
+      // 不再依赖歌词详情页是否打开。loadLyrics 内部有去重逻辑。
       loadLyrics(state.current);
     }
     // 异步加载歌曲背景（不阻塞播放）
