@@ -275,15 +275,28 @@ function _rr(ctx, x, y, w, h, radii) {
   else ctx.rect(x, y, w, h);
 }
 
-// 对数映射 + 平滑衰减：上升快、回落慢，形成灵动的跳动感
-function _computeBars(barCount) {
-  if (!_spectrumBars || _spectrumBars.length !== barCount) _spectrumBars = new Float32Array(barCount);
+// 对数频率映射 + dB 归一化 + 平滑衰减
+const _specLogFreqs = new Float32Array(128); // 预计算的对数 bin 索引表
+function _precomputeLogBins(barCount) {
+  const nyquist = _spectrumAnalyser.context.sampleRate / 2;
+  const minHz = 40, maxHz = Math.min(nyquist, 16000);
+  const logMin = Math.log(minHz), logRange = Math.log(maxHz / minHz);
   for (let i = 0; i < barCount; i++) {
-    const idx = Math.min(
-      Math.floor(Math.pow(i / barCount, 0.7) * _spectrumBufferLength),
-      _spectrumBufferLength - 1
-    );
-    const target = _spectrumData[idx] / 255;
+    const hz = minHz * Math.exp(logRange * (i / (barCount - 1)));
+    _specLogFreqs[i] = (hz / nyquist) * _spectrumBufferLength;
+  }
+}
+function _computeBars(barCount) {
+  if (!_spectrumBars || _spectrumBars.length !== barCount) { 
+    _spectrumBars = new Float32Array(barCount);
+    _precomputeLogBins(barCount);
+  }
+  for (let i = 0; i < barCount; i++) {
+    const idx = Math.min(Math.floor(_specLogFreqs[i]), _spectrumBufferLength - 1);
+    // 取相邻 3 bins 平均，减少高频抖动
+    const v = (_spectrumData[idx] + _spectrumData[Math.min(idx+1, _spectrumBufferLength-1)] + _spectrumData[Math.max(idx-1, 0)]) / (3 * 255);
+    // dB 归一化：把线性值转为感知均匀的 0-1
+    const target = v < 0.001 ? 0 : Math.min(1, (Math.log10(v + 0.0001) + 4) / 4);
     const cur = _spectrumBars[i];
     _spectrumBars[i] = target > cur ? cur + (target - cur) * 0.5 : cur + (target - cur) * 0.12;
   }
