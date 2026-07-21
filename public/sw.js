@@ -52,15 +52,26 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // API 请求：直接走网络，不缓存
+  // API 请求：直接走网络，不缓存。加 catch 防止 fetch 失败时 respondWith 抛未捕获 rejection
   if (url.pathname.startsWith('/api/')) {
-    e.respondWith(fetch(e.request));
+    e.respondWith(
+      fetch(e.request).catch(() =>
+        new Response(JSON.stringify({ error: '网络不可用' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
     return;
   }
 
   // Bilibili 播放器 iframe（跨域）：直接走网络
   if (url.hostname.includes('bilibili.com') || url.hostname.includes('bilivideo.com')) {
-    e.respondWith(fetch(e.request));
+    e.respondWith(
+      fetch(e.request).catch(() =>
+        new Response('', { status: 503 })
+      )
+    );
     return;
   }
 
