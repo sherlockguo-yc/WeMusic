@@ -196,22 +196,41 @@ except Exception: pass
     return
   fi
 
-  api="https://api.github.com/repos/$repo/releases?per_page=100"
-  body=$(curl -sS -H "Cache-Control: no-cache" --max-time 30 --connect-timeout 10 "${auth_hdr[@]}" "$api" 2>/dev/null || true)
-  printf '%s' "$body" | python3 -c "
-import json, re, sys
-try:
-    releases = json.load(sys.stdin)
-    releases.sort(key=lambda item: item.get('published_at', ''), reverse=True)
-    for release in releases:
-        if release.get('tag_name') == 'latest':
-            continue
-        match = re.search(r'Auto build ([a-f0-9]+)', release.get('body', ''))
-        if match:
-            print(match.group(1))
+  # 分页循环拉取全部 release，再按 published_at 倒序取最新（避免 per_page 截断漏查）
+  GITHUB_TOKEN="${GITHUB_TOKEN:-}" python3 - "$repo" << 'PY' 2>/dev/null || true
+import json, subprocess, sys, re, os
+
+repo = sys.argv[1]
+token = os.environ.get('GITHUB_TOKEN', '')
+auth = ['-H', f'Authorization: Bearer {token}'] if token else []
+
+all_releases = []
+for page in range(1, 101):
+    url = f'https://api.github.com/repos/{repo}/releases?per_page=100&page={page}'
+    result = subprocess.run(
+        ['curl', '-sS', '-H', 'Cache-Control: no-cache', '--max-time', '30', '--connect-timeout', '10'] + auth + [url],
+        capture_output=True, text=True
+    )
+    try:
+        page_data = json.loads(result.stdout)
+        if not isinstance(page_data, list) or len(page_data) == 0:
             break
-except Exception: pass
-" 2>/dev/null || true
+        all_releases.extend(page_data)
+        if len(page_data) < 100:
+            break
+    except Exception:
+        break
+
+if all_releases:
+    all_releases.sort(key=lambda r: r.get('published_at', ''), reverse=True)
+    for r in all_releases:
+        if r.get('tag_name') == 'latest':
+            continue
+        m = re.search(r'Auto build ([a-f0-9]+)', r.get('body', ''))
+        if m:
+            print(m.group(1))
+            break
+PY
 }
 
 enqueue_job() {
