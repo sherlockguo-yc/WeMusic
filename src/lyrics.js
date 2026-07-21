@@ -295,7 +295,8 @@ function _computeBars(barCount) {
     const cur = _spectrumBars[i];
     _spectrumBars[i] = target > cur ? cur + (target - cur) * 0.4 : cur * 0.92;
   }
-  const tmp = new Float32Array(barCount);
+  if (!_specTmp || _specTmp.length !== barCount) _specTmp = new Float32Array(barCount);
+  const tmp = _specTmp;
   tmp[0] = (_spectrumBars[0] * 2 + _spectrumBars[1]) / 3;
   tmp[barCount - 1] = (_spectrumBars[barCount - 1] * 2 + _spectrumBars[barCount - 2]) / 3;
   for (let i = 1; i < barCount - 1; i++)
@@ -357,15 +358,7 @@ function _renderWave(ctx, W, H, bars, n, r, g, b) {
   const step = W / (n - 1);
   const pts = [];
   for (let i = 0; i < n; i++) pts.push({ x: i * step, y: H - Math.max(bars[i] * H * 0.9, 1) });
-  const trace = () => {
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 0; i < n - 1; i++) {
-      const xc = (pts[i].x + pts[i + 1].x) / 2, yc = (pts[i].y + pts[i + 1].y) / 2;
-      ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
-    }
-    ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
-  };
-  // 填充区域
+  // 建一次路径，用于 fill + stroke
   ctx.beginPath();
   ctx.moveTo(0, H);
   ctx.lineTo(pts[0].x, pts[0].y);
@@ -376,17 +369,27 @@ function _renderWave(ctx, W, H, bars, n, r, g, b) {
   ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
   ctx.lineTo(W, H);
   ctx.closePath();
+  // 渐变填充
   const grad = ctx.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, `rgba(${r},${g},${b},0.55)`);
   grad.addColorStop(1, `rgba(${r},${g},${b},0.02)`);
   ctx.fillStyle = grad; ctx.fill();
-  // 顶部描边（带辉光）
-  ctx.beginPath(); trace();
+  // 顶部描边（带辉光，从 pts[0] 起不含下方闭合线）
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 0; i < n - 1; i++) {
+    const xc = (pts[i].x + pts[i + 1].x) / 2, yc = (pts[i].y + pts[i + 1].y) / 2;
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+  }
+  ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
   ctx.strokeStyle = `rgba(${r},${g},${b},0.95)`;
   ctx.lineWidth = 2; ctx.lineJoin = 'round';
   ctx.shadowColor = `rgba(${r},${g},${b},0.6)`; ctx.shadowBlur = 8;
   ctx.stroke(); ctx.shadowBlur = 0;
 }
+
+// 空间平滑用的临时缓冲区（复用避免每帧分配）
+let _specTmp = null;
 
 function _drawSpectrum() {
   if (!_spectrumEnabled) { _spectrumRafId = null; return; }
@@ -396,6 +399,14 @@ function _drawSpectrum() {
   if (!canvas || !_spectrumAnalyser || !_spectrumData) return;
 
   _spectrumAnalyser.getByteFrequencyData(_spectrumData);
+
+  // 同步 canvas 绘制分辨率与 CSS 显示尺寸（避免拉伸模糊）
+  const dpr = window.devicePixelRatio || 1;
+  const sw = canvas.offsetWidth * dpr, sh = canvas.offsetHeight * dpr;
+  if (canvas.width !== sw || canvas.height !== sh) {
+    canvas.width = sw; canvas.height = sh;
+  }
+
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
