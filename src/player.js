@@ -880,6 +880,7 @@ const EQ_PRESETS = {
 };
 let _eqFilters = [];          // 5 个 BiquadFilterNode
 let _eqPreset = 'flat';       // 当前预设
+let _analyserNode = null;    // AnalyserNode（音频可视化）
 
 // ---- 音量归一化：AudioContext + GainNode ----
 // GainNode 挂在 bgAudio 上，因此无论 bgAudio 是否正在展开视频时静默预载，
@@ -912,8 +913,12 @@ function _initAudioCtx() {
     f.gain.value = 0; // 默认 flat
     _eqFilters.push(f);
   }
-  _gainNode.connect(_eqFilters[0]);
-  _nextGainNode.connect(_eqFilters[0]);
+  // 音频可视化：AnalyserNode 插在 gain 合并点和 EQ 之间
+  _analyserNode = _audioCtx.createAnalyser();
+  _analyserNode.fftSize = 256;
+  _gainNode.connect(_analyserNode);
+  _nextGainNode.connect(_analyserNode);
+  _analyserNode.connect(_eqFilters[0]);
   for (let i = 1; i < 5; i++) _eqFilters[i - 1].connect(_eqFilters[i]);
   _eqFilters[4].connect(_audioCtx.destination);
   const resume = () => {
@@ -1422,6 +1427,9 @@ function _onBiliMessage(e) {
 
 // 当前是否正在拖拽任一进度条（底部播放器或歌词页），供外部（歌词页 UI 同步循环）判断是否要跳过覆盖滑块值
 export function isSeeking() { return _seekDragging; }
+
+// 音频可视化：暴露 AnalyserNode 供 lyrics.js 读取频谱数据
+export function getAnalyserNode() { return _analyserNode; }
 
 // 绑定一组「时间文字 + seek 滑块」的拖拽交互，同时用于底部播放器和歌词全屏页。
 // 拖拽期间实时预览时间文字，松手才真正触发 seekTo（避免拖拽途中频繁 seek 造成卡顿）。

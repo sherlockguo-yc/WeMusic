@@ -28,6 +28,11 @@ export let lyricsDebug = null;   // 最近一次歌词搜索的 debug 数据
 let _lyricsSeq = 0;          // 单调递增序列号，防止陈旧网络响应覆盖当前数据
 let _lyricsUISyncId = null;  // UI 同步 setInterval ID
 let _lyricsSyncId = null;    // 进度同步 setInterval ID
+let _spectrumEnabled = false;
+let _spectrumRafId = null;
+let _spectrumAnalyser = null;
+let _spectrumData = null;
+let _spectrumBufferLength = 0;
 
 // 用户滚动状态管理：区分主动滚动与自动滚动
 let _userScrolling = false;      // 用户是否正在主动滚动歌词
@@ -173,6 +178,7 @@ export function openLyricsPanel() {
   }
   panel.classList.add('show');
   document.body.style.overflow = 'hidden';
+  startSpectrum();
   // 重置滚动状态：打开面板时恢复自动跟随
   _userScrolling = false;
   if (_scrollIdleTimer) { clearTimeout(_scrollIdleTimer); _scrollIdleTimer = null; }
@@ -234,8 +240,69 @@ export function closeLyricsPanel() {
     panel.style.setProperty('--lp-origin-x', cx);
     panel.style.setProperty('--lp-origin-y', cy);
   }
+  stopSpectrum();
   panel.classList.remove('show');
   document.body.style.overflow = '';
+}
+
+// ---- 频谱可视化 ----
+function _drawSpectrum() {
+  if (!_spectrumEnabled) { _spectrumRafId = null; return; }
+  _spectrumRafId = requestAnimationFrame(_drawSpectrum);
+
+  const canvas = $('lpSpectrum');
+  if (!canvas || !_spectrumAnalyser || !_spectrumData) return;
+
+  _spectrumAnalyser.getByteFrequencyData(_spectrumData);
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const barCount = 64;
+  const barWidth = W / barCount;
+  const gap = 1.5;
+
+  // 从根元素取主题色（--accent）
+  const style = getComputedStyle(document.documentElement);
+  const accent = style.getPropertyValue('--accent').trim() || '#2ab758';
+
+  for (let i = 0; i < barCount; i++) {
+    // 对数映射：低频 bins 更密集，视觉更有层次
+    const idx = Math.min(
+      Math.floor(Math.pow(i / barCount, 0.7) * _spectrumBufferLength),
+      _spectrumBufferLength - 1
+    );
+    const val = _spectrumData[idx];
+    const barH = Math.max((val / 255) * H * 0.92, 1);
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.4 + (val / 255) * 0.6;
+    ctx.fillRect(i * barWidth + gap, H - barH, barWidth - gap * 2, barH);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function startSpectrum() {
+  if (window.innerWidth < 720) return;
+  if (localStorage.getItem('wemusic_spectrum') !== '1') return;
+  _spectrumEnabled = true;
+  const canvas = $('lpSpectrum');
+  if (canvas) canvas.classList.add('on');
+
+  _playerP.then(({ getAnalyserNode }) => {
+    _spectrumAnalyser = getAnalyserNode();
+    if (_spectrumAnalyser) {
+      _spectrumBufferLength = _spectrumAnalyser.frequencyBinCount;
+      _spectrumData = new Uint8Array(_spectrumBufferLength);
+    }
+    if (!_spectrumRafId) _spectrumRafId = requestAnimationFrame(_drawSpectrum);
+  });
+}
+
+function stopSpectrum() {
+  _spectrumEnabled = false;
+  if (_spectrumRafId) { cancelAnimationFrame(_spectrumRafId); _spectrumRafId = null; }
+  const canvas = $('lpSpectrum');
+  if (canvas) canvas.classList.remove('on');
 }
 
 export async function loadLyrics(song) {
@@ -677,5 +744,13 @@ export function initLyrics() {
     _userScrolling = false;
     if (_scrollIdleTimer) { clearTimeout(_scrollIdleTimer); _scrollIdleTimer = null; }
     _playerP.then(({ seekTo }) => seekTo(sec));
+  });
+
+  // 频谱可视化开关监听：用户在设置中切换时，如果面板已打开则即时生效
+  window.addEventListener('spectrum_changed', () => {
+    if ($('lyricsPanel').classList.contains('show')) {
+      stopSpectrum();
+      startSpectrum();
+    }
   });
 }

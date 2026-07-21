@@ -615,6 +615,16 @@ export async function openSettings() {
     };
   });
 
+  // 音频可视化开关
+  const spectrumToggle = $('spectrumToggle');
+  if (spectrumToggle) {
+    spectrumToggle.checked = localStorage.getItem('wemusic_spectrum') === '1';
+    spectrumToggle.onchange = () => {
+      localStorage.setItem('wemusic_spectrum', spectrumToggle.checked ? '1' : '0');
+      window.dispatchEvent(new CustomEvent('spectrum_changed'));
+    };
+  }
+
   const curPalette = localStorage.getItem('wemusic_palette') || 'green';
   document.querySelectorAll('.palette-item').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === curPalette);

@@ -190,6 +190,7 @@
           </div>
         </div>
       </div>
+      <canvas id="lpSpectrum" class="lp-spectrum" width="800" height="56"></canvas>
       <!-- 歌词页底部播放控制栏 -->
       <div class="lp-controls">
         <button class="lp-ctrl-btn" id="lpPrevBtn" title="上一首"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg></button>
@@ -495,6 +496,16 @@
               <button class="btn sm crossfade-opt" data-sec="10">10 秒</button>
             </div>
             <div class="settings-hint" style="font-size:calc(var(--font-size)*0.8);color:var(--text-dim);margin-top:4px">播完自动切歌生效，手动切歌不淡入淡出</div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-label">音频可视化</div>
+          <div class="settings-row" style="display:flex;align-items:center;gap:8px">
+            <label class="toggle-switch">
+              <input type="checkbox" id="spectrumToggle">
+              <span class="toggle-track"></span>
+            </label>
+            <span style="font-size:calc(var(--font-size)*0.9);color:var(--text-dim)">在歌词详情页底部显示实时频谱</span>
           </div>
         </div>
         <div class="settings-section">
