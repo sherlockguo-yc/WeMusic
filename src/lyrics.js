@@ -291,12 +291,16 @@ function _computeBars(barCount) {
   }
   for (let i = 0; i < barCount; i++) {
     const idx = Math.min(Math.floor(_specLogFreqs[i]), _spectrumBufferLength - 1);
-    // 相邻 3 bin 平均减少高频抖动，线性值直接用（不做 dB 归一化）
-    const target = (_spectrumData[idx] + _spectrumData[Math.min(idx+1,_spectrumBufferLength-1)] + _spectrumData[Math.max(idx-1,0)]) / (3 * 255);
+    const target = _spectrumData[idx] / 255;
     const cur = _spectrumBars[i];
-    // 快升慢降：attack 0.45 / decay 0.88（每帧保留 12%）
-    _spectrumBars[i] = target > cur ? cur + (target - cur) * 0.45 : cur * 0.88;
+    _spectrumBars[i] = target > cur ? cur + (target - cur) * 0.4 : cur * 0.92;
   }
+  const tmp = new Float32Array(barCount);
+  tmp[0] = (_spectrumBars[0] * 2 + _spectrumBars[1]) / 3;
+  tmp[barCount - 1] = (_spectrumBars[barCount - 1] * 2 + _spectrumBars[barCount - 2]) / 3;
+  for (let i = 1; i < barCount - 1; i++)
+    tmp[i] = (_spectrumBars[i - 1] + _spectrumBars[i] * 2 + _spectrumBars[i + 1]) / 4;
+  _spectrumBars.set(tmp);
   return _spectrumBars;
 }
 
