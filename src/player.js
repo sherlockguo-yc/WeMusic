@@ -285,23 +285,29 @@ function checkMarquee(el) {
 }
 
 function autoAdvance() {
-  console.log(`[advance] autoAdvance (mode=${mode}, elapsed=${elapsed}s, dur=${totalDur}s)`);
+  const oldBvid = state.current?.bvid;
+  console.log(`[advance] autoAdvance (mode=${mode}, elapsed=${elapsed}s, dur=${totalDur}s, crossfadeDur=${_crossfadeDuration}, timerPaused=${timerPaused}, crossfading=${_crossfading}, oldBvid=${oldBvid?.slice(0,12) || 'none'})`);
   stopTimer();
   _flushLog(totalDur || elapsed);
+  // 如果 crossfade 还在进行中（旧歌结束但 crossfade 未完成），取消当前 crossfade 并走正常切歌
+  if (_crossfading) {
+    console.log('[advance] crossfade was in progress — cancelling and proceeding with normal advance');
+    _cancelCrossfade();
+  }
   if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
-  if (state.playMode === 'single') { playCurrent(); return; }
+  if (state.playMode === 'single') { console.log('[advance] single mode → playCurrent'); playCurrent(); return; }
 
   // 淡入淡出：仅 bg 模式 + 已启用 + 下一首有 bvid 时生效
   const i = computeNextIndex();
+  const nextSong = i >= 0 ? state.queue[i] : null;
+  console.log(`[advance] nextIndex=${i}, nextSong=${nextSong?.name || 'none'}, nextBvid=${nextSong?.bvid?.slice(0,12) || 'none'}, crossfading=${_crossfading}, gainNode=${!!_gainNode}`);
   if (_crossfadeDuration > 0 && mode === 'bg' && i >= 0 && i !== state.queueIndex) {
-    const nextSong = state.queue[i];
     if (nextSong && nextSong.bvid && _gainNode) {
-      const oldBvid = state.current?.bvid;
       // 更新队列状态（与 playNext 一致）
       if (state.playMode === 'shuffle') state.history.push(state.queueIndex);
       state.queueIndex = i;
 
-      if (!oldBvid) { playCurrent(); return; } // 无旧 bvid（异常情况）→ 退化为常规切歌
+      if (!oldBvid) { console.log('[advance] no oldBvid → fallback to playCurrent'); playCurrent(); return; } // 无旧 bvid（异常情况）→ 退化为常规切歌
 
       // 更新 UI 到下一首歌（同时保持歌词显示旧歌——方案 B）
       // 注意：不在这里加载新歌歌词（loadLyrics）—— 留在 _completeCrossfade 中执行
@@ -315,10 +321,13 @@ function autoAdvance() {
       logPlay(nextSong, nextSong._biliDur || nextSong.duration);
       // 注意：不在这里加载新歌歌词（loadLyrics）—— 留在 _completeCrossfade 中执行
       // 启动淡入淡出音频过渡
+      console.log('[advance] → starting crossfade');
       _startCrossfade(nextSong.bvid);
       return;
     }
+    console.log(`[advance] crossfade skipped: nextSong=${!!nextSong}, nextBvid=${!!nextSong?.bvid}, gainNode=${!!_gainNode}`);
   }
+  console.log('[advance] → falling back to playNext (no crossfade)');
   playNext(true);
 }
 
@@ -635,6 +644,7 @@ export function playPrev() {
 }
 
 export function playNext(auto = false) {
+  console.log(`[player] playNext auto=${auto}, crossfading=${_crossfading}, queueIndex=${state.queueIndex}/${state.queue.length}`);
   if (_crossfading) _cancelCrossfade();
   const i = computeNextIndex();
   if (i === -1) {
@@ -699,6 +709,7 @@ export async function playFromList(songs, index, context, playlistId) {
 }
 
 export async function playCurrent() {
+  console.log(`[player] playCurrent queueIndex=${state.queueIndex}/${state.queue.length}, crossfading=${_crossfading}, mode=${mode}`);
   _flushLog(elapsed);
   stopTimer();
   if (_cacheUrl) { URL.revokeObjectURL(_cacheUrl); _cacheUrl = null; }
@@ -1036,6 +1047,7 @@ async function _fetchGainForNext(bvid) {
 }
 
 function _cancelCrossfade() {
+  console.log(`[crossfade] _cancelCrossfade (hadTimer=${!!_crossfadeEndTimer})`);
   if (_crossfadeEndTimer) { clearTimeout(_crossfadeEndTimer); _crossfadeEndTimer = null; }
   _crossfading = false;
   _crossfadeBvid = null;
@@ -1048,40 +1060,46 @@ function _cancelCrossfade() {
   _nextGainNode.gain.setValueAtTime(0, now);
   _nextAudio.pause();
   _nextAudio.src = '';
+  console.log(`[crossfade] _cancelCrossfade done, gain restored to ${_gainNode.gain.value.toFixed(2)}, nextAudio.paused=${_nextAudio.paused}`);
 }
 
 // 淡入淡出结束：bgAudio 接管下一曲的播放
 function _completeCrossfade(url) {
-  if (!_crossfading) return;
+  console.log(`[crossfade] _completeCrossfade crossfading=${_crossfading}, pos=${_nextAudio.currentTime?.toFixed(1) || '?'}s, bgReady=${bgAudio.readyState}`);
+  if (!_crossfading) { console.log('[crossfade] _completeCrossfade aborted: not crossfading'); return; }
   if (_crossfadeEndTimer) { clearTimeout(_crossfadeEndTimer); _crossfadeEndTimer = null; }
   const pos = _nextAudio.currentTime || _crossfadeDuration;
   // 重置增益：bgAudio 立即恢复到正常音量，_nextAudio 立即静音
   const now = _audioCtx.currentTime;
   _gainNode.gain.cancelScheduledValues(now);
   _nextGainNode.gain.cancelScheduledValues(now);
+  console.log(`[crossfade] takeover: setting bgAudio.src, seekPos=${pos?.toFixed(1)}s`);
   // bgAudio 接管：设 src 为同一 URL（应已被浏览器缓存，加载极快），seek 到当前位置
   bgAudio.src = url;
   const doTakeover = () => {
+    console.log(`[crossfade] takeover: canplay fired (readyState=${bgAudio.readyState}), bgGain=${_gainNode.gain.value.toFixed(2)}, nextGain=${_nextGainNode.gain.value.toFixed(2)}`);
     bgAudio.removeEventListener('canplay', doTakeover);
     try { bgAudio.currentTime = pos; } catch {}
     _crossfading = false; // 必须在 _applyNormVol 之前置 false，否则 gain 不会被恢复
     _applyNormVol(); // 恢复 bgAudio 增益到正常
     _nextGainNode.gain.setValueAtTime(0, now);
-    bgAudio.play().catch(e => console.warn('[crossfade] bgAudio takeover failed:', e.message));
+    console.log(`[crossfade] takeover: bgGain restored to ${_gainNode.gain.value.toFixed(2)}, playing bgAudio`);
+    bgAudio.play().then(() => { console.log('[crossfade] takeover: bgAudio.play() success'); }).catch(e => console.warn('[crossfade] bgAudio takeover failed:', e.message));
     // 短暂重叠后关掉 _nextAudio，避免音频断档
-    setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfadeBvid = null; }, 250);
+    setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfadeBvid = null; console.log('[crossfade] takeover: cleanup done'); }, 250);
   };
   bgAudio.addEventListener('canplay', doTakeover, { once: true });
   bgAudio.load();
   // 兜底：1.5 秒后无论如何强制接管（避免 bgAudio 加载卡住导致 _nextAudio 一直播放）
   setTimeout(() => {
     if (_crossfading) {
+      console.log(`[crossfade] FALLBACK triggered (1.5s timeout), removing canplay listener, readyState=${bgAudio.readyState}`);
       bgAudio.removeEventListener('canplay', doTakeover);
       _crossfading = false; // 必须在 _applyNormVol 之前置 false，否则 gain 不会被恢复
       _applyNormVol();
       _nextGainNode.gain.setValueAtTime(0, _audioCtx.currentTime);
-      bgAudio.play().catch(() => {});
-      setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfadeBvid = null; }, 250);
+      bgAudio.play().then(() => { console.log('[crossfade] FALLBACK: bgAudio.play() success'); }).catch(() => {});
+      setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfadeBvid = null; console.log('[crossfade] FALLBACK: cleanup done'); }, 250);
     }
   }, 1500);
 
@@ -1098,6 +1116,7 @@ function _completeCrossfade(url) {
 
 // 启动淡入淡出：bgAudio 淡出，_nextAudio 淡入
 async function _startCrossfade(newBvid) {
+  console.log(`[crossfade] _startCrossfade bvid=${newBvid?.slice(0,12)} (wasCrossfading=${_crossfading})`);
   if (_crossfading) _cancelCrossfade();
   _crossfading = true;
   _crossfadeBvid = newBvid;
@@ -1105,9 +1124,11 @@ async function _startCrossfade(newBvid) {
 
   // 获取下一首的播放链接
   _usedFallback = false;
+  console.log(`[crossfade] seq=${seq} → fetching playable URL for ${newBvid?.slice(0,12)}`);
   const info = await _getPlayableUrl(newBvid);
-  if (seq !== _crossfadeSeq || !_crossfading) return;
-  if (!info) { _crossfading = false; return; }
+  console.log(`[crossfade] seq=${seq} URL fetch done, info=${!!info}, curSeq=${_crossfadeSeq}, crossfading=${_crossfading}`);
+  if (seq !== _crossfadeSeq || !_crossfading) { console.log('[crossfade] aborted: seq mismatch or no longer crossfading'); return; }
+  if (!info) { console.log('[crossfade] no playable URL → abort'); _crossfading = false; return; }
 
   // 异步拉取下一首的归一化增益
   _fetchGainForNext(newBvid);
@@ -1123,6 +1144,7 @@ async function _startCrossfade(newBvid) {
   // bgAudio 淡出到 0
   _gainNode.gain.cancelScheduledValues(now);
   _gainNode.gain.linearRampToValueAtTime(0, endTime);
+  console.log(`[crossfade] seq=${seq} ramp: bgAudio.gain 1→0 over ${dur}s (now=${now.toFixed(1)}, end=${endTime.toFixed(1)})`);
   // _nextAudio 从 0 淡入到目标音量
   const skipNorm = localStorage.getItem('wemusic_volume_normalize') !== '1';
   const safeNextGain = Math.min(_nextNormGain, 8.0);
@@ -1130,13 +1152,18 @@ async function _startCrossfade(newBvid) {
   _nextGainNode.gain.cancelScheduledValues(now);
   _nextGainNode.gain.setValueAtTime(0, now);
   _nextGainNode.gain.linearRampToValueAtTime(targetVol, endTime);
+  console.log(`[crossfade] seq=${seq} ramp: nextGain 0→${targetVol.toFixed(2)} over ${dur}s (skipNorm=${skipNorm}, nextNormGain=${_nextNormGain.toFixed(2)})`);
 
-  _nextAudio.play().catch(e => console.warn('[crossfade] play next failed:', e.message));
+  _nextAudio.play().then(() => { console.log(`[crossfade] seq=${seq} _nextAudio.play() success`); }).catch(e => console.warn(`[crossfade] seq=${seq} play next failed:`, e.message));
 
-  _crossfadeEndTimer = setTimeout(() => _completeCrossfade(info.url), dur * 1000);
+  _crossfadeEndTimer = setTimeout(() => {
+    console.log(`[crossfade] seq=${seq} crossfade timer fired (${dur}s), calling _completeCrossfade`);
+    _completeCrossfade(info.url);
+  }, dur * 1000);
 
   if (!info.fromCache) _cacheCurrent(newBvid);
   setStatus('Bilibili 播放');
+  console.log(`[crossfade] seq=${seq} _startCrossfade done, timer set for ${dur}s`);
 }
 
 // 加载曲目到 bgAudio 并立即播放（mode === 'bg' 时使用）
