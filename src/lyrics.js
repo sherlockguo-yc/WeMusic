@@ -293,14 +293,16 @@ function _computeBars(barCount) {
     const idx = Math.min(Math.floor(_specLogFreqs[i]), _spectrumBufferLength - 1);
     const target = _spectrumData[idx] / 255;
     const cur = _spectrumBars[i];
-    _spectrumBars[i] = target > cur ? cur + (target - cur) * 0.4 : cur * 0.92;
+    // 柔和跟随：上升较慢(0.18)，下降更慢×0.96，整体丝滑
+    _spectrumBars[i] = target > cur ? cur + (target - cur) * 0.18 : cur * 0.96;
   }
   if (!_specTmp || _specTmp.length !== barCount) _specTmp = new Float32Array(barCount);
   const tmp = _specTmp;
-  tmp[0] = (_spectrumBars[0] * 2 + _spectrumBars[1]) / 3;
-  tmp[barCount - 1] = (_spectrumBars[barCount - 1] * 2 + _spectrumBars[barCount - 2]) / 3;
+  // 轻量空间平滑：中心权重降低，相邻影响增大，进一步消除颤抖
+  tmp[0] = _spectrumBars[0];
+  tmp[barCount - 1] = _spectrumBars[barCount - 1];
   for (let i = 1; i < barCount - 1; i++)
-    tmp[i] = (_spectrumBars[i - 1] + _spectrumBars[i] * 2 + _spectrumBars[i + 1]) / 4;
+    tmp[i] = (_spectrumBars[i - 1] + _spectrumBars[i] + _spectrumBars[i + 1]) / 3;
   _spectrumBars.set(tmp);
   return _spectrumBars;
 }
