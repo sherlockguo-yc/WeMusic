@@ -625,6 +625,17 @@ export async function openSettings() {
     };
   }
 
+  // 音频可视化样式选择
+  const curStyle = localStorage.getItem('wemusic_spectrum_style') || 'gradient';
+  document.querySelectorAll('.spectrum-style-opt').forEach((b) => {
+    b.classList.toggle('active', b.dataset.style === curStyle);
+    b.onclick = () => {
+      localStorage.setItem('wemusic_spectrum_style', b.dataset.style);
+      document.querySelectorAll('.spectrum-style-opt').forEach((x) => x.classList.toggle('active', x === b));
+      window.dispatchEvent(new CustomEvent('spectrum_changed'));
+    };
+  });
+
   const curPalette = localStorage.getItem('wemusic_palette') || 'green';
   document.querySelectorAll('.palette-item').forEach((b) => {
     b.classList.toggle('active', b.dataset.palette === curPalette);

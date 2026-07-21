@@ -33,6 +33,9 @@ let _spectrumRafId = null;
 let _spectrumAnalyser = null;
 let _spectrumData = null;
 let _spectrumBufferLength = 0;
+let _spectrumBars = null;     // 平滑后的每柱高度（0-1）
+let _spectrumStyle = 'gradient'; // gradient | glow | wave
+let _accentCache = { key: '', rgb: [42, 183, 88] };
 
 // 用户滚动状态管理：区分主动滚动与自动滚动
 let _userScrolling = false;      // 用户是否正在主动滚动歌词
@@ -246,6 +249,131 @@ export function closeLyricsPanel() {
 }
 
 // ---- 频谱可视化 ----
+// 解析主题色 --accent 为 [r,g,b]（带缓存，避免每帧重复解析）
+function _getAccentRgb() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  if (raw === _accentCache.key) return _accentCache.rgb;
+  let rgb = [42, 183, 88];
+  if (raw.startsWith('#')) {
+    let h = raw.slice(1);
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+    if (h.length >= 6) {
+      rgb = [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+  } else {
+    const m = raw.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    if (m) rgb = [+m[1], +m[2], +m[3]];
+  }
+  _accentCache = { key: raw, rgb };
+  return rgb;
+}
+
+// 圆角矩形路径（radii 为 [tl,tr,br,bl]），降级为直角
+function _rr(ctx, x, y, w, h, radii) {
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(x, y, w, h, radii);
+  else ctx.rect(x, y, w, h);
+}
+
+// 对数映射 + 平滑衰减：上升快、回落慢，形成灵动的跳动感
+function _computeBars(barCount) {
+  if (!_spectrumBars || _spectrumBars.length !== barCount) _spectrumBars = new Float32Array(barCount);
+  for (let i = 0; i < barCount; i++) {
+    const idx = Math.min(
+      Math.floor(Math.pow(i / barCount, 0.7) * _spectrumBufferLength),
+      _spectrumBufferLength - 1
+    );
+    const target = _spectrumData[idx] / 255;
+    const cur = _spectrumBars[i];
+    _spectrumBars[i] = target > cur ? cur + (target - cur) * 0.5 : cur + (target - cur) * 0.12;
+  }
+  return _spectrumBars;
+}
+
+// A. 渐变镜像：圆角柱 + 垂直渐变 + 底部倒影
+function _renderGradient(ctx, W, H, bars, n, r, g, b) {
+  const gap = 2, bw = W / n;
+  const baseY = H * 0.70;
+  const maxH = baseY * 0.95;
+  const reflMax = H - baseY;
+  const dR = Math.round(r * 0.5), dG = Math.round(g * 0.5), dB = Math.round(b * 0.5);
+  for (let i = 0; i < n; i++) {
+    const v = bars[i];
+    const bh = Math.max(v * maxH, 1);
+    const x = i * bw + gap / 2, w = bw - gap, rad = Math.min(w / 2, 3);
+    const grad = ctx.createLinearGradient(0, baseY - bh, 0, baseY);
+    grad.addColorStop(0, `rgba(${r},${g},${b},1)`);
+    grad.addColorStop(1, `rgba(${dR},${dG},${dB},0.85)`);
+    ctx.fillStyle = grad;
+    _rr(ctx, x, baseY - bh, w, bh, [rad, rad, 0, 0]); ctx.fill();
+    const rh = Math.min(bh * 0.6, reflMax);
+    const rgrad = ctx.createLinearGradient(0, baseY, 0, baseY + rh);
+    rgrad.addColorStop(0, `rgba(${r},${g},${b},0.28)`);
+    rgrad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = rgrad;
+    _rr(ctx, x, baseY, w, rh, [0, 0, rad, rad]); ctx.fill();
+  }
+}
+
+// B. 霓虹辉光：柱体外发光 + 顶部高亮线
+function _renderGlow(ctx, W, H, bars, n, r, g, b) {
+  const gap = 2, bw = W / n;
+  const hiR = Math.min(r + 80, 255), hiG = Math.min(g + 80, 255), hiB = Math.min(b + 80, 255);
+  for (let i = 0; i < n; i++) {
+    const v = bars[i];
+    const bh = Math.max(v * H * 0.92, 1);
+    const x = i * bw + gap / 2, w = bw - gap, rad = Math.min(w / 2, 2.5);
+    const y = H - bh;
+    ctx.shadowColor = `rgba(${r},${g},${b},0.9)`;
+    ctx.shadowBlur = 10 + v * 10;
+    const grad = ctx.createLinearGradient(0, y, 0, H);
+    grad.addColorStop(0, `rgba(${hiR},${hiG},${hiB},1)`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0.7)`);
+    ctx.fillStyle = grad;
+    _rr(ctx, x, y, w, bh, [rad, rad, rad, rad]); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(255,255,255,${0.35 + v * 0.4})`;
+    _rr(ctx, x, y, w, Math.min(2, bh), [rad, rad, 0, 0]); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+}
+
+// C. 波形填充：平滑曲线连接柱顶 + 渐变填充下方区域
+function _renderWave(ctx, W, H, bars, n, r, g, b) {
+  const step = W / (n - 1);
+  const pts = [];
+  for (let i = 0; i < n; i++) pts.push({ x: i * step, y: H - Math.max(bars[i] * H * 0.9, 1) });
+  const trace = () => {
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 0; i < n - 1; i++) {
+      const xc = (pts[i].x + pts[i + 1].x) / 2, yc = (pts[i].y + pts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+    }
+    ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
+  };
+  // 填充区域
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  ctx.lineTo(pts[0].x, pts[0].y);
+  for (let i = 0; i < n - 1; i++) {
+    const xc = (pts[i].x + pts[i + 1].x) / 2, yc = (pts[i].y + pts[i + 1].y) / 2;
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+  }
+  ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
+  ctx.lineTo(W, H);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, `rgba(${r},${g},${b},0.55)`);
+  grad.addColorStop(1, `rgba(${r},${g},${b},0.02)`);
+  ctx.fillStyle = grad; ctx.fill();
+  // 顶部描边（带辉光）
+  ctx.beginPath(); trace();
+  ctx.strokeStyle = `rgba(${r},${g},${b},0.95)`;
+  ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.shadowColor = `rgba(${r},${g},${b},0.6)`; ctx.shadowBlur = 8;
+  ctx.stroke(); ctx.shadowBlur = 0;
+}
+
 function _drawSpectrum() {
   if (!_spectrumEnabled) { _spectrumRafId = null; return; }
   _spectrumRafId = requestAnimationFrame(_drawSpectrum);
@@ -259,32 +387,19 @@ function _drawSpectrum() {
   ctx.clearRect(0, 0, W, H);
 
   const barCount = 64;
-  const barWidth = W / barCount;
-  const gap = 1.5;
+  const bars = _computeBars(barCount);
+  const [r, g, b] = _getAccentRgb();
 
-  // 从根元素取主题色（--accent）
-  const style = getComputedStyle(document.documentElement);
-  const accent = style.getPropertyValue('--accent').trim() || '#2ab758';
-
-  for (let i = 0; i < barCount; i++) {
-    // 对数映射：低频 bins 更密集，视觉更有层次
-    const idx = Math.min(
-      Math.floor(Math.pow(i / barCount, 0.7) * _spectrumBufferLength),
-      _spectrumBufferLength - 1
-    );
-    const val = _spectrumData[idx];
-    const barH = Math.max((val / 255) * H * 0.92, 1);
-    ctx.fillStyle = accent;
-    ctx.globalAlpha = 0.4 + (val / 255) * 0.6;
-    ctx.fillRect(i * barWidth + gap, H - barH, barWidth - gap * 2, barH);
-  }
-  ctx.globalAlpha = 1;
+  if (_spectrumStyle === 'glow') _renderGlow(ctx, W, H, bars, barCount, r, g, b);
+  else if (_spectrumStyle === 'wave') _renderWave(ctx, W, H, bars, barCount, r, g, b);
+  else _renderGradient(ctx, W, H, bars, barCount, r, g, b);
 }
 
 function startSpectrum() {
   if (window.innerWidth < 720) return;
   if (localStorage.getItem('wemusic_spectrum') !== '1') return;
   _spectrumEnabled = true;
+  _spectrumStyle = localStorage.getItem('wemusic_spectrum_style') || 'gradient';
   const canvas = $('lpSpectrum');
   if (canvas) canvas.classList.add('on');
 
