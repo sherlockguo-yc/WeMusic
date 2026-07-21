@@ -318,14 +318,14 @@ function _renderGradient(ctx, W, H, bars, n, r, g, b) {
     const v = bars[i];
     const bh = Math.max(v * maxH, 2);
     const x = i * bw + gap / 2, w = bw - gap;
-    const rad = Math.min(w / 2, 3);           // 轻微圆角
+    const rad = Math.min(w / 2, 4);           // 轻微圆角
     const grad = ctx.createLinearGradient(0, baseY - bh, 0, baseY);
     grad.addColorStop(0, `rgba(${r},${g},${b},1)`);
     grad.addColorStop(1, `rgba(${dR},${dG},${dB},0.85)`);
     ctx.fillStyle = grad;
     _rr(ctx, x, baseY - bh, w, bh, [rad, rad, 0, 0]); ctx.fill();
     const rh = Math.min(bh * 0.6, reflMax);
-    const rrad = Math.min(w / 2, 3);
+    const rrad = Math.min(w / 2, 4);
     const rgrad = ctx.createLinearGradient(0, baseY, 0, baseY + rh);
     rgrad.addColorStop(0, `rgba(${r},${g},${b},0.28)`);
     rgrad.addColorStop(1, `rgba(${r},${g},${b},0)`);
@@ -341,7 +341,7 @@ function _renderGlow(ctx, W, H, bars, n, r, g, b) {
   for (let i = 0; i < n; i++) {
     const v = bars[i];
     const bh = Math.max(v * H * 0.92, 2);
-    const x = i * bw + gap / 2, w = bw - gap, rad = Math.min(w / 2, 3);
+    const x = i * bw + gap / 2, w = bw - gap, rad = Math.min(w / 2, 4);
     const y = H - bh;
     ctx.shadowColor = `rgba(${r},${g},${b},0.9)`;
     ctx.shadowBlur = 10 + v * 10;
