@@ -296,11 +296,6 @@ function autoAdvance() {
   console.log(`[advance] autoAdvance (mode=${mode}, elapsed=${elapsed}s, dur=${totalDur}s, crossfadeDur=${_crossfadeDuration}, timerPaused=${timerPaused}, crossfading=${_crossfading}, oldBvid=${oldBvid?.slice(0,12) || 'none'})`);
   stopTimer();
   _flushLog(totalDur || elapsed);
-  // 如果 crossfade 还在进行中（旧歌结束但 crossfade 未完成），取消当前 crossfade 并走正常切歌
-  if (_crossfading) {
-    console.log('[advance] crossfade was in progress — cancelling and proceeding with normal advance');
-    _cancelCrossfade();
-  }
   if (sleepAfterSong) { stopPlayback(); clearSleep(); toast('定时已到，已停止'); return; }
   if (state.playMode === 'single') { console.log('[advance] single mode → playCurrent'); playCurrent(); return; }
 
@@ -1064,6 +1059,7 @@ function _cancelCrossfade() {
   if (_crossfadeEndTimer) { clearTimeout(_crossfadeEndTimer); _crossfadeEndTimer = null; }
   _crossfading = false;
   _crossfadeBvid = null;
+  _crossfadeStartTime = 0;
   _crossfadeSeq++;
   // 立即恢复增益：bgAudio 回到正常音量，_nextAudio 静音
   const now = _audioCtx.currentTime;
@@ -1078,25 +1074,24 @@ function _cancelCrossfade() {
 
 // 淡入淡出结束：bgAudio 接管下一曲的播放
 function _completeCrossfade(url) {
-  console.log(`[crossfade] _completeCrossfade crossfading=${_crossfading}, pos=${_nextAudio.currentTime?.toFixed(1) || '?'}s, bgReady=${bgAudio.readyState}`);
+  console.log(`[crossfade] _completeCrossfade crossfading=${_crossfading}, nextPos=${_nextAudio.currentTime?.toFixed(1) || '?'}s, bgReady=${bgAudio.readyState}`);
   if (!_crossfading) { console.log('[crossfade] _completeCrossfade aborted: not crossfading'); return; }
   if (_crossfadeEndTimer) { clearTimeout(_crossfadeEndTimer); _crossfadeEndTimer = null; }
-  const pos = _nextAudio.currentTime || _crossfadeDuration;
   // 重置增益：bgAudio 立即恢复到正常音量，_nextAudio 立即静音
   const now = _audioCtx.currentTime;
   _gainNode.gain.cancelScheduledValues(now);
   _nextGainNode.gain.cancelScheduledValues(now);
-  console.log(`[crossfade] takeover: setting bgAudio.src, seekPos=${pos?.toFixed(1)}s`);
-  // bgAudio 接管：设 src 为同一 URL（应已被浏览器缓存，加载极快），seek 到当前位置
+  // bgAudio 接管：设 src 为同一 URL（应已被浏览器缓存，加载极快），从 0 开始播放
   bgAudio.src = url;
+  console.log('[crossfade] takeover: setting bgAudio.src, will play from 0');
   const doTakeover = () => {
     console.log(`[crossfade] takeover: canplay fired (readyState=${bgAudio.readyState}), bgGain=${_gainNode.gain.value.toFixed(2)}, nextGain=${_nextGainNode.gain.value.toFixed(2)}`);
     bgAudio.removeEventListener('canplay', doTakeover);
-    try { bgAudio.currentTime = pos; } catch {}
     _crossfading = false; // 必须在 _applyNormVol 之前置 false，否则 gain 不会被恢复
     _applyNormVol(); // 恢复 bgAudio 增益到正常
     _nextGainNode.gain.setValueAtTime(0, now);
-    console.log(`[crossfade] takeover: bgGain restored to ${_gainNode.gain.value.toFixed(2)}, playing bgAudio`);
+    // 从 0 开始播放（不 seek），避免丢失歌曲开头
+    console.log(`[crossfade] takeover: bgGain restored to ${_gainNode.gain.value.toFixed(2)}, playing bgAudio from 0`);
     bgAudio.play().then(() => { console.log('[crossfade] takeover: bgAudio.play() success'); }).catch(e => console.warn('[crossfade] bgAudio takeover failed:', e.message));
     // 短暂重叠后关掉 _nextAudio，避免音频断档
     setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfadeBvid = null; console.log('[crossfade] takeover: cleanup done'); }, 250);
@@ -1148,6 +1143,9 @@ async function _startCrossfade(newBvid) {
 
   _nextAudio.src = info.url;
   _nextAudio.load();
+
+  // 记录 crossfade 开始时间戳，用于 _tick 合成新歌的 elapsed
+  _crossfadeStartTime = Date.now();
 
   const dur = _crossfadeDuration;
   const ctx = _audioCtx;
@@ -1256,8 +1254,13 @@ function _playBgAudioWithRetry(seekSec) {
 }
 
 // bgAudio 'ended' 事件：正常播完，触发自动连播
+// crossfade 期间 bgAudio 是旧歌，它的 ended 由 crossfade 定时器接管，不应触发 autoAdvance
 bgAudio.addEventListener('ended', () => {
   if (mode === 'bg' && !timerPaused) {
+    if (_crossfading) {
+      console.log(`[bgAudio] ended at ${bgAudio.currentTime?.toFixed(1)}s but crossfade active — ignoring (crossfade timer handles transition)`);
+      return;
+    }
     console.log(`[bgAudio] ended at ${bgAudio.currentTime?.toFixed(1)}s — auto advance`);
     autoAdvance();
   }
