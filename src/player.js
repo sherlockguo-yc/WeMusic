@@ -1064,11 +1064,12 @@ function _completeCrossfade(url) {
   const doTakeover = () => {
     bgAudio.removeEventListener('canplay', doTakeover);
     try { bgAudio.currentTime = pos; } catch {}
+    _crossfading = false; // 必须在 _applyNormVol 之前置 false，否则 gain 不会被恢复
     _applyNormVol(); // 恢复 bgAudio 增益到正常
     _nextGainNode.gain.setValueAtTime(0, now);
     bgAudio.play().catch(e => console.warn('[crossfade] bgAudio takeover failed:', e.message));
     // 短暂重叠后关掉 _nextAudio，避免音频断档
-    setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfading = false; _crossfadeBvid = null; }, 250);
+    setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfadeBvid = null; }, 250);
   };
   bgAudio.addEventListener('canplay', doTakeover, { once: true });
   bgAudio.load();
@@ -1076,10 +1077,11 @@ function _completeCrossfade(url) {
   setTimeout(() => {
     if (_crossfading) {
       bgAudio.removeEventListener('canplay', doTakeover);
+      _crossfading = false; // 必须在 _applyNormVol 之前置 false，否则 gain 不会被恢复
       _applyNormVol();
       _nextGainNode.gain.setValueAtTime(0, _audioCtx.currentTime);
       bgAudio.play().catch(() => {});
-      setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfading = false; _crossfadeBvid = null; }, 250);
+      setTimeout(() => { _nextAudio.pause(); _nextGainNode.gain.value = 0; _crossfadeBvid = null; }, 250);
     }
   }, 1500);
 
