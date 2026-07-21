@@ -426,7 +426,7 @@ function _drawSpectrum() {
 
 function startSpectrum() {
   if (window.innerWidth < 720) return;
-  if (localStorage.getItem('wemusic_spectrum') !== '1') return;
+  if (localStorage.getItem('wemusic_spectrum_style') === 'off') return;
   _spectrumEnabled = true;
   _spectrumStyle = localStorage.getItem('wemusic_spectrum_style') || 'gradient';
   const canvas = $('lpSpectrum');

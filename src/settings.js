@@ -578,27 +578,14 @@ export async function openSettings() {
     };
   }
 
-  // 淡入淡出开关
-  const crossfadeToggle = $('crossfadeToggle');
-  const crossfadeDurRow = $('crossfadeDurRow');
-  const crossfadeEnabled = localStorage.getItem('wemusic_crossfade_enabled') === '1';
+  // 淡入淡出：直接选时长（含"关闭"）
   const curCrossfadeDur = localStorage.getItem('wemusic_crossfade_duration') || '5';
-
-  if (crossfadeToggle) {
-    crossfadeToggle.checked = crossfadeEnabled;
-    if (crossfadeDurRow) crossfadeDurRow.style.display = crossfadeEnabled ? '' : 'none';
-    crossfadeToggle.onchange = () => {
-      const on = crossfadeToggle.checked;
-      localStorage.setItem('wemusic_crossfade_enabled', on ? '1' : '0');
-      if (crossfadeDurRow) crossfadeDurRow.style.display = on ? '' : 'none';
-      window.dispatchEvent(new CustomEvent('crossfade_changed'));
-    };
-  }
-
+  const crossfadeEnabled = localStorage.getItem('wemusic_crossfade_enabled') === '1';
   document.querySelectorAll('.crossfade-opt').forEach((b) => {
-    b.classList.toggle('active', b.dataset.sec === curCrossfadeDur);
+    b.classList.toggle('active', crossfadeEnabled ? b.dataset.sec === curCrossfadeDur : b.dataset.sec === '0');
     b.onclick = () => {
       localStorage.setItem('wemusic_crossfade_duration', b.dataset.sec);
+      localStorage.setItem('wemusic_crossfade_enabled', b.dataset.sec === '0' ? '0' : '1');
       document.querySelectorAll('.crossfade-opt').forEach((x) => x.classList.toggle('active', x === b));
       window.dispatchEvent(new CustomEvent('crossfade_changed'));
     };
@@ -615,20 +602,18 @@ export async function openSettings() {
     };
   });
 
-  // 音频可视化开关
-  const spectrumToggle = $('spectrumToggle');
-  if (spectrumToggle) {
-    spectrumToggle.checked = localStorage.getItem('wemusic_spectrum') === '1';
-    spectrumToggle.onchange = () => {
-      localStorage.setItem('wemusic_spectrum', spectrumToggle.checked ? '1' : '0');
-      window.dispatchEvent(new CustomEvent('spectrum_changed'));
-    };
+  // 音频可视化：按钮组（含"关闭"）
+  // 迁移：旧开关系统关闭 → "off" 状态
+  if (localStorage.getItem('wemusic_spectrum') === '0') {
+    localStorage.setItem('wemusic_spectrum_style', 'off');
   }
-
-  // 音频可视化样式选择
-  const curStyle = localStorage.getItem('wemusic_spectrum_style') || 'gradient';
+  // 从未设置过的用户默认关闭
+  if (localStorage.getItem('wemusic_spectrum_style') === null) {
+    localStorage.setItem('wemusic_spectrum_style', 'off');
+  }
+  const curSpectrumStyle = localStorage.getItem('wemusic_spectrum_style') || 'off';
   document.querySelectorAll('.spectrum-style-opt').forEach((b) => {
-    b.classList.toggle('active', b.dataset.style === curStyle);
+    b.classList.toggle('active', b.dataset.style === curSpectrumStyle);
     b.onclick = () => {
       localStorage.setItem('wemusic_spectrum_style', b.dataset.style);
       document.querySelectorAll('.spectrum-style-opt').forEach((x) => x.classList.toggle('active', x === b));

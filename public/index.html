@@ -480,41 +480,26 @@
         </div>
         <div class="settings-section">
           <div class="settings-label">淡入淡出</div>
-          <div class="settings-row" style="display:flex;align-items:center;gap:8px">
-            <label class="toggle-switch">
-              <input type="checkbox" id="crossfadeToggle">
-              <span class="toggle-track"></span>
-            </label>
-            <span style="font-size:calc(var(--font-size)*0.9);color:var(--text-dim)">切歌时平滑过渡</span>
+          <div class="settings-row" style="flex-wrap:wrap;gap:6px">
+            <button class="btn sm crossfade-opt" data-sec="0">关闭</button>
+            <button class="btn sm crossfade-opt" data-sec="3">3 秒</button>
+            <button class="btn sm crossfade-opt" data-sec="5">5 秒</button>
+            <button class="btn sm crossfade-opt" data-sec="8">8 秒</button>
+            <button class="btn sm crossfade-opt" data-sec="10">10 秒</button>
           </div>
-          <div id="crossfadeDurRow" style="display:none;margin-top:8px">
-            <div class="settings-label" style="margin-bottom:4px">过渡时长</div>
-            <div class="settings-row" style="flex-wrap:wrap;gap:6px">
-              <button class="btn sm crossfade-opt" data-sec="3">3 秒</button>
-              <button class="btn sm crossfade-opt" data-sec="5">5 秒</button>
-              <button class="btn sm crossfade-opt" data-sec="8">8 秒</button>
-              <button class="btn sm crossfade-opt" data-sec="10">10 秒</button>
-            </div>
-            <div class="settings-hint" style="font-size:calc(var(--font-size)*0.8);color:var(--text-dim);margin-top:4px">播完自动切歌生效，手动切歌不淡入淡出</div>
-          </div>
+          <div class="settings-hint" style="font-size:calc(var(--font-size)*0.8);color:var(--text-dim);margin-top:4px">播完自动切歌生效，手动切歌不淡入淡出</div>
         </div>
         <div class="settings-section">
           <div class="settings-label">音频可视化</div>
-          <div class="settings-row" style="display:flex;align-items:center;gap:8px">
-            <label class="toggle-switch">
-              <input type="checkbox" id="spectrumToggle">
-              <span class="toggle-track"></span>
-            </label>
-            <span style="font-size:calc(var(--font-size)*0.9);color:var(--text-dim)">在歌词详情页底部显示实时频谱</span>
-          </div>
-          <div class="settings-row" style="flex-wrap:wrap;gap:6px;margin-top:8px">
+          <div class="settings-row" style="flex-wrap:wrap;gap:6px">
+            <button class="btn sm spectrum-style-opt" data-style="off">关闭</button>
             <button class="btn sm spectrum-style-opt" data-style="gradient">渐变镜像</button>
             <button class="btn sm spectrum-style-opt" data-style="glow">霓虹辉光</button>
             <button class="btn sm spectrum-style-opt" data-style="wave">波形填充</button>
           </div>
         </div>
         <div class="settings-section">
-          <div class="settings-label">均衡器</div>
+          <div class="settings-label">均衡器<span style="font-size:calc(var(--font-size)*0.8);color:var(--text-dim);text-transform:none;font-weight:400">全局生效，选择后对所有歌曲生效</span></div>
           <div class="settings-row" style="flex-wrap:wrap;gap:6px">
             <button class="btn sm eq-opt" data-eq="flat">关闭</button>
             <button class="btn sm eq-opt" data-eq="流行">流行</button>
@@ -523,7 +508,6 @@
             <button class="btn sm eq-opt" data-eq="人声">人声</button>
             <button class="btn sm eq-opt" data-eq="电子">电子</button>
           </div>
-          <div class="settings-hint" style="font-size:calc(var(--font-size)*0.8);color:var(--text-dim);margin-top:4px">全局生效，选择后对所有歌曲生效</div>
         </div>
         <div class="settings-section">
           <div class="settings-label">定时停止播放</div>
