@@ -316,19 +316,21 @@ function _renderGradient(ctx, W, H, bars, n, r, g, b) {
   const dR = Math.round(r * 0.5), dG = Math.round(g * 0.5), dB = Math.round(b * 0.5);
   for (let i = 0; i < n; i++) {
     const v = bars[i];
-    const bh = Math.max(v * maxH, 1);
-    const x = i * bw + gap / 2, w = bw - gap, rad = Math.min(w / 2, 3);
+    const bh = Math.max(v * maxH, 2);
+    const x = i * bw + gap / 2, w = bw - gap;
+    const rad = Math.min(w / 2, bh);          // 顶部全圆角（半圆帽）
     const grad = ctx.createLinearGradient(0, baseY - bh, 0, baseY);
     grad.addColorStop(0, `rgba(${r},${g},${b},1)`);
     grad.addColorStop(1, `rgba(${dR},${dG},${dB},0.85)`);
     ctx.fillStyle = grad;
     _rr(ctx, x, baseY - bh, w, bh, [rad, rad, 0, 0]); ctx.fill();
     const rh = Math.min(bh * 0.6, reflMax);
+    const rrad = Math.min(w / 2, rh);
     const rgrad = ctx.createLinearGradient(0, baseY, 0, baseY + rh);
     rgrad.addColorStop(0, `rgba(${r},${g},${b},0.28)`);
     rgrad.addColorStop(1, `rgba(${r},${g},${b},0)`);
     ctx.fillStyle = rgrad;
-    _rr(ctx, x, baseY, w, rh, [0, 0, rad, rad]); ctx.fill();
+    _rr(ctx, x, baseY, w, rh, [0, 0, rrad, rrad]); ctx.fill();
   }
 }
 
@@ -338,8 +340,8 @@ function _renderGlow(ctx, W, H, bars, n, r, g, b) {
   const hiR = Math.min(r + 80, 255), hiG = Math.min(g + 80, 255), hiB = Math.min(b + 80, 255);
   for (let i = 0; i < n; i++) {
     const v = bars[i];
-    const bh = Math.max(v * H * 0.92, 1);
-    const x = i * bw + gap / 2, w = bw - gap, rad = Math.min(w / 2, 2.5);
+    const bh = Math.max(v * H * 0.92, 2);
+    const x = i * bw + gap / 2, w = bw - gap, rad = Math.min(w / 2, bh / 2);
     const y = H - bh;
     ctx.shadowColor = `rgba(${r},${g},${b},0.9)`;
     ctx.shadowBlur = 10 + v * 10;
@@ -347,10 +349,10 @@ function _renderGlow(ctx, W, H, bars, n, r, g, b) {
     grad.addColorStop(0, `rgba(${hiR},${hiG},${hiB},1)`);
     grad.addColorStop(1, `rgba(${r},${g},${b},0.7)`);
     ctx.fillStyle = grad;
-    _rr(ctx, x, y, w, bh, [rad, rad, rad, rad]); ctx.fill();
+    _rr(ctx, x, y, w, bh, [rad, rad, rad, rad]); ctx.fill();   // 全胶囊形
     ctx.shadowBlur = 0;
     ctx.fillStyle = `rgba(255,255,255,${0.35 + v * 0.4})`;
-    _rr(ctx, x, y, w, Math.min(2, bh), [rad, rad, 0, 0]); ctx.fill();
+    _rr(ctx, x, y, w, Math.min(rad, bh), [rad, rad, 0, 0]); ctx.fill();
   }
   ctx.shadowBlur = 0;
 }
