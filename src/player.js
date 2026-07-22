@@ -175,6 +175,11 @@ function _tick() {
     // 使用合成时间而不用 bgAudio.currentTime，因为 bgAudio 此时还在播放旧歌。
     if (_crossfading) {
       elapsed = Math.floor((Date.now() - _crossfadeStartTime) / 1000);
+    } else if (!_hasStartedPlaying) {
+      // 切歌过渡期间：新歌的 src 尚未加载完成，bgAudio 仍保留旧歌的状态
+      // （currentTime 接近末尾 + 旧歌 duration）。此时禁止从 bgAudio 读取进度，
+      // 否则会导致进度条闪回旧歌满进度状态。
+      // elapsed 保持 resetProgress() 设置的值（0），等待新歌真正开始播放后再读取。
     } else {
       if (bgAudio.duration && isFinite(bgAudio.duration)) totalDur = Math.floor(bgAudio.duration);
       const ct = bgAudio.currentTime || 0;
