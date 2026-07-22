@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const graphPath = resolve(process.cwd(), '.codebuddy/project-graph.json');
+const graphPath = resolve(process.cwd(), '.project-graph.json');
 let graph;
 try { graph = JSON.parse(readFileSync(graphPath, 'utf8')); }
 catch { console.log('⚠  请先运行 npm run codegraph'); process.exit(0); }

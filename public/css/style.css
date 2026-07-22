@@ -1411,7 +1411,7 @@ input[type='range']::-moz-range-thumb {
 /* 频谱可视化 */
 .lp-spectrum {
   display: none; flex: 0 0 auto;
-  width: 100%; height: 100px;
+  width: 100%; height: 80px;
   opacity: 0; transition: opacity .3s;
 }
 .lp-spectrum.on { display: block; opacity: 1; }
