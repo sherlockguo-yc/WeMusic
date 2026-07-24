@@ -960,6 +960,3 @@ export function initSettings() {
     });
   }
 }
-
-// Phase 1：控制台测试接口（Phase 2 后移除）
-window.__theme = { activateTheme, deactivateTheme, applyThemeSlots };

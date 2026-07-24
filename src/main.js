@@ -8,7 +8,7 @@ import { initQueue, loadHistory } from './queue.js';
 import { initSearch } from './search.js';
 import { initLyrics } from './lyrics.js';
 import { initUI } from './ui.js';
-import { initSettings, loadAvatar, loadPrefsFromServer } from './settings.js';
+import { initSettings, loadAvatar, loadPrefsFromServer, applyThemeSlots, activateTheme, deactivateTheme } from './settings.js';
 import { initStats, openDiscover } from './stats.js';
 import * as offline from './offlineCache.js';
 
@@ -22,6 +22,8 @@ if (!Auth.token) {
 initGlobalTooltip(); // 全局 tooltip（stats / playlist-ui 共用）
 offline.init().catch(e => console.warn('offline init failed', e)); // 打开 IndexedDB + 申请持久化存储
 initSettings();
+// Phase 1：控制台测试接口（Phase 2 后移除）
+window.__theme = { activateTheme, deactivateTheme, applyThemeSlots };
 initPlayer();
 initQueue();
 initSearch();
