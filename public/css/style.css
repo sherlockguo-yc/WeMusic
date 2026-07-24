@@ -32,7 +32,9 @@
   --theme-lyrics-highlight: var(--accent);
   --theme-scrollbar-thumb: #333845;
   --theme-scrollbar-width: 8px;
-  --theme-row-hover-bg: var(--bg-soft);
+  /* 注意：--theme-row-hover-bg 不在 :root 预定义（避免 var(--bg-soft) 在 :root 处被“固化”为深色值，
+     导致浅色模式下悬浮行背景仍为深色。改为在 .song-row:hover 规则中用回退 var(--theme-row-hover-bg, var(--bg-soft)) 解析，
+     该回退会在行自身上下文解析 --bg-soft，从而正确跟随浅/深色模式。 */
   --theme-row-playing-bg: rgba(42,183,88,0.12);
   --theme-row-stripe-bg: transparent;
   --theme-dust-color: var(--accent);

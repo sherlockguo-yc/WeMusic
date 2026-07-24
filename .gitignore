@@ -11,3 +11,5 @@ generated-images/
 playwright-cli.json
 coverage/
 .project-graph.json
+test-results/
+playwright-report/
