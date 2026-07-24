@@ -207,12 +207,12 @@ function applyRowPreset(key) {
   const root = document.documentElement;
   switch (key) {
     case 'subtle-stripe':
+      // Phase 1：CSS 端尚无 stripe 规则，先只设占位变量（不修改 hover/playing，避免误改默认行为）
       root.style.setProperty('--theme-row-stripe-bg', 'rgba(255,255,255,0.02)');
-      root.style.setProperty('--theme-row-hover-bg', 'rgba(255,255,255,0.06)');
       break;
     case 'highlight-hover':
-      root.style.setProperty('--theme-row-hover-bg', 'rgba(255,255,255,0.08)');
-      root.style.setProperty('--theme-row-playing-bg', 'rgba(255,255,255,0.12)');
+      // Phase 1：CSS 端未启用，仅设占位
+      root.style.setProperty('--theme-row-hover-bg', 'rgba(255,255,255,0.04)');
       break;
     default:
       root.style.removeProperty('--theme-row-stripe-bg');
@@ -228,12 +228,12 @@ function _getTestSlots() {
     accent:   { type: 'color', value: '#FF6B9D', dustColor: 'rgba(255,107,157,0.5)' },
     font:     { type: 'font',  value: 'serif' },
     player:   { type: 'preset', value: 'rounded-cover' },
-    card:     { type: 'preset', value: 'glass-morphism' },
     sidebar:  { type: 'color', value: '#0f080a' },
     decorations: { type: 'preset', value: 'none' },
-    lyrics:   { type: 'color', value: '#FF6B9D' },
     scrollbar:{ type: 'color', value: '#553344' },
-    row:      { type: 'preset', value: 'subtle-stripe' },
+    // Phase 1：card/row 设为 default（CSS 端尚未真正使用这些变量的细节）
+    card:     { type: 'preset', value: 'default' },
+    row:      { type: 'preset', value: 'default' },
   };
 }
 
