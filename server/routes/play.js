@@ -148,6 +148,12 @@ export const BAD_KW = [
   '空耳', '玩具', '电子琴',
 ];
 
+// 纯音乐/伴奏/和声版本关键词 — 仅当歌名不含这些词时对视频降权
+// 若歌名本身已含这些词（如"xx 伴奏"），则不应用此惩罚（歌名与视频一致，正确匹配）
+export const INSTRUMENTAL_VERSION_KW = [
+  '纯音乐', '伴奏', '和声', '无人声', 'instrumental', 'karaoke', 'off-vocal',
+];
+
 export function isLive(title = '') {
   const t = title.toLowerCase();
   return LIVE_KW.some((k) => t.includes(k.toLowerCase()));
@@ -255,6 +261,18 @@ function scoreBreakdown(v, name, singer, expectDur) {
   // — 降权 —
   for (const k of BAD_KW) {
     if (t.includes(k)) { bd.badKwList.push(k); bd.badKw -= 14; }
+  }
+
+  // — 歌名不含纯音乐/伴奏关键词但视频标题含有时降权 —
+  // 歌名本身是纯音乐/伴奏时（如"xx 伴奏"），视频标题含同类词是正确匹配，不惩罚
+  if (name) {
+    const nameLower = name.toLowerCase();
+    const songIsInstrumental = INSTRUMENTAL_VERSION_KW.some((k) => nameLower.includes(k.toLowerCase()));
+    if (!songIsInstrumental) {
+      for (const k of INSTRUMENTAL_VERSION_KW) {
+        if (t.includes(k.toLowerCase())) { bd.badKwList.push(k); bd.badKw -= 14; }
+      }
+    }
   }
 
   bd.total = bd.nameMatch + bd.singerInTitle + bd.singerInAuthor + bd.durMatch + bd.playWeight + bd.hqBonus + bd.officialMV + bd.goodKw + bd.authorMatch + bd.badKw;

@@ -179,4 +179,31 @@ describe('rank — 综合排序', () => {
     expect(r[0].live).toBe(false);
     expect(r[1].live).toBe(true);
   });
+
+  it('歌名不含纯音乐关键词但视频标题含伴奏/和声 → 该视频被降权排后', () => {
+    const instrumental = mkVideo('晴天 伴奏', '', 1e6, 200);
+    const normal = mkVideo('晴天 官方 MV', '', 1e6, 200);
+    const r = rank([instrumental, normal], '晴天', '周杰伦', 200);
+    expect(r[0].title).toBe('晴天 官方 MV');
+  });
+
+  it('歌名本身含伴奏 → 视频标题的伴奏关键词不降权（正确匹配）', () => {
+    // 歌名就叫"夜曲 伴奏"，视频标题含"伴奏"是正确答案
+    const instrumental = mkVideo('夜曲 伴奏', '', 1e6, 200);
+    const normal = mkVideo('夜曲 原唱', '', 1e5, 200);
+    const r = rank([instrumental, normal], '夜曲 伴奏', '周杰伦', 200);
+    expect(r[0].title).toBe('夜曲 伴奏');
+  });
+
+  it('歌名不含纯音乐但视频含和声/纯音乐 → 降权', () => {
+    const s1 = scoreVideo(mkVideo('晴天 纯音乐', '', 10000, 200), '晴天', '', 200);
+    const s2 = scoreVideo(mkVideo('晴天 MV', '', 10000, 200), '晴天', '', 200);
+    expect(s2).toBeGreaterThan(s1);
+  });
+
+  it('歌名含伴奏时视频标题的伴奏不降权（scoreVideo 级别）', () => {
+    const s1 = scoreVideo(mkVideo('夜曲 伴奏', '', 10000, 200), '夜曲 伴奏', '', 200);
+    const s2 = scoreVideo(mkVideo('夜曲 MV', '', 10000, 200), '夜曲 伴奏', '', 200);
+    expect(s1).toBeGreaterThan(s2);
+  });
 });
