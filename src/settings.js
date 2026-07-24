@@ -46,6 +46,197 @@ export async function loadPrefsFromServer() {
 // 延迟同步（200ms 防抖）
 const _dbSyncPrefs = debounce(syncPrefsToServer, 200);
 
+// ---- 主题系统：Slot 配置 → CSS 变量映射 ----
+
+/** 将 Slot 配置映射为 CSS 变量 */
+export function applyThemeSlots(slots) {
+  if (!slots) return;
+  const root = document.documentElement;
+
+  // bg Slot
+  if (slots.bg) {
+    const bg = slots.bg;
+    if (bg.type === 'image' && bg.value) {
+      root.style.setProperty('--theme-bg-image', `url(${bg.value})`);
+    } else if (bg.type === 'gradient' && bg.value) {
+      root.style.setProperty('--theme-bg-image', bg.value);
+    } else {
+      root.style.setProperty('--theme-bg-image', 'none');
+    }
+    root.style.setProperty('--theme-bg-overlay', bg.overlay || 'transparent');
+    // 渐变融合色：取强调色或底色
+    const fadeColor = bg.fadeColor || getComputedStyle(root).getPropertyValue('--bg').trim();
+    root.style.setProperty('--theme-bg-fade-color', fadeColor);
+  }
+
+  // accent Slot
+  if (slots.accent && slots.accent.value) {
+    root.style.setProperty('--accent', slots.accent.value);
+    root.style.setProperty('--theme-dust-color', slots.accent.value);
+  }
+
+  // font Slot
+  if (slots.font && slots.font.value) {
+    const fontKey = slots.font.value;
+    const fontVal = FONTS[fontKey] || FONTS['default'];
+    root.style.setProperty('--font', fontVal);
+  }
+
+  // player Slot
+  if (slots.player && slots.player.value) {
+    applyPlayerPreset(slots.player.value);
+  }
+
+  // card Slot
+  if (slots.card && slots.card.value) {
+    applyCardPreset(slots.card.value);
+  }
+
+  // sidebar Slot
+  if (slots.sidebar) {
+    const sb = slots.sidebar;
+    if (sb.type === 'image' && sb.value) {
+      root.style.setProperty('--theme-sidebar-bg', `url(${sb.value}) center/cover`);
+    } else if (sb.type === 'color' && sb.value) {
+      root.style.setProperty('--theme-sidebar-bg', sb.value);
+    }
+  }
+
+  // decorations Slot — 仅记录值，CSS 侧通过 body[data-decorations] 处理
+  if (slots.decorations && slots.decorations.value) {
+    document.body.setAttribute('data-decorations', slots.decorations.value);
+  } else {
+    document.body.removeAttribute('data-decorations');
+  }
+
+  // lyrics Slot
+  if (slots.lyrics && slots.lyrics.value) {
+    if (slots.lyrics.type === 'color') {
+      root.style.setProperty('--theme-lyrics-highlight', slots.lyrics.value);
+    }
+  }
+
+  // scrollbar Slot
+  if (slots.scrollbar && slots.scrollbar.value) {
+    root.style.setProperty('--theme-scrollbar-thumb', slots.scrollbar.value);
+  }
+
+  // row Slot
+  if (slots.row && slots.row.value) {
+    applyRowPreset(slots.row.value);
+  }
+
+  // dust-color may differ from accent (e.g., gold dust on purple accent)
+  if (slots.accent && slots.accent.dustColor) {
+    root.style.setProperty('--theme-dust-color', slots.accent.dustColor);
+  }
+}
+
+/** 激活主题：设置 data-theme 并应用 Slot */
+export function activateTheme(themeId) {
+  if (!themeId) { deactivateTheme(); return; }
+  document.body.setAttribute('data-theme', themeId);
+  // Phase 1：从 localStorage 读取硬编码测试数据
+  // Phase 2 后改为从 API / 预设数据加载
+  const testSlots = _getTestSlots();
+  applyThemeSlots(testSlots);
+}
+
+/** 取消主题：移除 data-theme，恢复独立设置 */
+export function deactivateTheme() {
+  document.body.removeAttribute('data-theme');
+  document.body.removeAttribute('data-decorations');
+  const root = document.documentElement;
+  // 清除主题变量，回退到 :root 默认值
+  [
+    '--theme-bg-image', '--theme-bg-overlay', '--theme-bg-fade-color',
+    '--theme-sidebar-bg', '--theme-card-backdrop',
+    '--theme-lyrics-highlight', '--theme-scrollbar-thumb',
+    '--theme-row-playing-bg', '--theme-row-hover-bg',
+    '--theme-dust-color',
+  ].forEach((v) => root.style.removeProperty(v));
+  // 恢复独立设置
+  applyPalette(localStorage.getItem('wemusic_palette') || 'green');
+  applyFont(localStorage.getItem('wemusic_font') || 'default');
+  applyTheme(localStorage.getItem('wemusic_theme') || 'light');
+}
+
+// ---- 预设应用器 ----
+
+function applyPlayerPreset(key) {
+  const root = document.documentElement;
+  switch (key) {
+    case 'rounded-cover':
+      root.style.setProperty('--theme-player-cover-radius', '12px'); break;
+    case 'pill-cover':
+      root.style.setProperty('--theme-player-cover-radius', '50%'); break;
+    case 'borderless':
+      root.style.setProperty('--theme-player-cover-radius', '0px'); break;
+    default:
+      root.style.setProperty('--theme-player-cover-radius', '6px');
+  }
+}
+
+function applyCardPreset(key) {
+  const root = document.documentElement;
+  switch (key) {
+    case 'glass-morphism':
+      root.style.setProperty('--theme-card-backdrop', 'blur(12px)');
+      root.style.setProperty('--theme-card-bg', 'rgba(255,255,255,0.06)');
+      break;
+    case 'flat':
+      root.style.setProperty('--theme-card-shadow', 'none');
+      root.style.setProperty('--theme-card-radius', '4px');
+      root.style.setProperty('--theme-card-backdrop', 'none');
+      break;
+    case 'outlined':
+      root.style.setProperty('--theme-card-bg', 'transparent');
+      root.style.setProperty('--theme-card-border', 'var(--accent)');
+      root.style.setProperty('--theme-card-backdrop', 'none');
+      break;
+    default:
+      root.style.setProperty('--theme-card-bg', 'var(--bg-card)');
+      root.style.setProperty('--theme-card-shadow', 'var(--shadow)');
+      root.style.setProperty('--theme-card-radius', 'var(--radius)');
+      root.style.setProperty('--theme-card-border', 'var(--border)');
+      root.style.setProperty('--theme-card-backdrop', 'none');
+  }
+}
+
+function applyRowPreset(key) {
+  const root = document.documentElement;
+  switch (key) {
+    case 'subtle-stripe':
+      root.style.setProperty('--theme-row-stripe-bg', 'rgba(255,255,255,0.02)');
+      root.style.setProperty('--theme-row-hover-bg', 'rgba(255,255,255,0.06)');
+      break;
+    case 'highlight-hover':
+      root.style.setProperty('--theme-row-hover-bg', 'rgba(255,255,255,0.08)');
+      root.style.setProperty('--theme-row-playing-bg', 'rgba(255,255,255,0.12)');
+      break;
+    default:
+      root.style.removeProperty('--theme-row-stripe-bg');
+      root.style.removeProperty('--theme-row-hover-bg');
+      root.style.removeProperty('--theme-row-playing-bg');
+  }
+}
+
+// ---- Phase 1 测试数据 ----
+function _getTestSlots() {
+  return {
+    bg:       { type: 'color', value: '#1a0a0f', overlay: 'transparent', fadeColor: '#0d0f12' },
+    accent:   { type: 'color', value: '#FF6B9D', dustColor: 'rgba(255,107,157,0.5)' },
+    font:     { type: 'font',  value: 'serif' },
+    player:   { type: 'preset', value: 'rounded-cover' },
+    card:     { type: 'preset', value: 'glass-morphism' },
+    sidebar:  { type: 'color', value: '#0f080a' },
+    decorations: { type: 'preset', value: 'none' },
+    lyrics:   { type: 'color', value: '#FF6B9D' },
+    scrollbar:{ type: 'color', value: '#553344' },
+    row:      { type: 'preset', value: 'subtle-stripe' },
+  };
+}
+
 // ---- 主题 ----
 const mq = window.matchMedia('(prefers-color-scheme: light)');
 const FONTS = {
@@ -769,3 +960,6 @@ export function initSettings() {
     });
   }
 }
+
+// Phase 1：控制台测试接口（Phase 2 后移除）
+window.__theme = { activateTheme, deactivateTheme, applyThemeSlots };

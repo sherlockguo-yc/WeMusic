@@ -13,6 +13,29 @@
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-size: 14px;
+
+  /* === 主题系统变量（默认值 = 现有样式，主题激活时覆盖）=== */
+  --theme-bg-image: none;
+  --theme-bg-overlay: transparent;
+  --theme-bg-fade-color: transparent;
+  --theme-sidebar-bg: transparent;
+  --theme-sidebar-image: none;
+  --theme-card-bg: var(--bg-card);
+  --theme-card-border: var(--border);
+  --theme-card-radius: var(--radius);
+  --theme-card-shadow: var(--shadow);
+  --theme-card-backdrop: none;
+  --theme-player-cover-radius: 6px;
+  --theme-player-progress-height: 4px;
+  --theme-player-progress-radius: 2px;
+  --theme-lyrics-bg: transparent;
+  --theme-lyrics-highlight: var(--accent);
+  --theme-scrollbar-thumb: #333845;
+  --theme-scrollbar-width: 8px;
+  --theme-row-hover-bg: var(--bg-soft);
+  --theme-row-playing-bg: rgba(42,183,88,0.12);
+  --theme-row-stripe-bg: transparent;
+  --theme-dust-color: var(--accent);
 }
 
 /* 浅色主题 */
@@ -25,7 +48,7 @@ body.light {
   --text-dim: #6b7280;
   --shadow: 0 6px 24px rgba(20, 30, 50, 0.12);
 }
-body.light .sidebar { background: #fafbfd; }
+body.light .sidebar { background: var(--theme-sidebar-bg, #fafbfd); }
 body.light .singer-card { background: linear-gradient(120deg, #e8f5ee, #ffffff); }
 body.light .album-card .cover { background: linear-gradient(135deg, #e6eaf0, #f2f4f7); color: #aab0bd; }
 body.light .song-row.playing { background: rgba(61, 220, 132, 0.14); }
@@ -39,6 +62,27 @@ body.light ::-webkit-scrollbar-thumb { background: #ccd2dc; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ---- 主题背景层（body 直接子元素，非伪元素，避免 filter:blur 改变 containing block）---- */
+.theme-bg-layer { display: none; }
+body[data-theme] .theme-bg-layer {
+  display: block; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+}
+.theme-bg-blur {
+  position: absolute; inset: -20px;
+  background-image: var(--theme-bg-image);
+  background-size: cover;
+  background-position: center;
+  filter: blur(20px) saturate(1.2);
+}
+.theme-bg-overlay {
+  position: absolute; inset: 0;
+  background: var(--theme-bg-overlay);
+}
+.theme-bg-fade {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 60%, var(--theme-bg-fade-color) 100%);
+}
+
 html {
   font-size: var(--font-size);
 }
@@ -51,8 +95,8 @@ html, body {
 
 button { font-family: inherit; cursor: pointer; }
 a { color: inherit; text-decoration: none; }
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #333845; border-radius: 8px; }
+::-webkit-scrollbar { width: var(--theme-scrollbar-width, 8px); height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--theme-scrollbar-thumb, #333845); border-radius: 8px; }
 
 /* ---------- 登录页 ---------- */
 .auth-wrap {
@@ -203,7 +247,7 @@ button.topbar-btn {
 
 .sidebar {
   grid-area: sidebar;
-  background: #0b0c10;
+  background: var(--theme-sidebar-bg, #0b0c10);
   border-right: 1px solid var(--border);
   padding: 18px 14px;
   overflow-y: auto;
@@ -279,8 +323,8 @@ button.topbar-btn {
   align-items: center; gap: 12px; padding: 9px 12px; border-radius: 8px;
   cursor: pointer;
 }
-.song-row:hover { background: var(--bg-soft); }
-.song-row.playing { background: rgba(42,183,88,0.12); }
+.song-row:hover { background: var(--theme-row-hover-bg, var(--bg-soft)); }
+.song-row.playing { background: var(--theme-row-playing-bg, rgba(42,183,88,0.12)); }
 .song-row .idx { color: var(--text-dim); font-size: 12px; text-align: center; }
 .song-row .name { font-weight: 600; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song-row .name.name-with-cover { display: flex; align-items: center; gap: 8px; }
@@ -1274,6 +1318,7 @@ input[type='range']::-moz-range-thumb {
 .lp-bg {
   position: absolute; inset: 0; z-index: 0;
   background-size: cover; background-position: center;
+  background-color: var(--theme-lyrics-bg, transparent);
   filter: blur(60px) brightness(0.35) saturate(1.4);
   transform: scale(1.1);
   transition: background-image 0.5s ease;
