@@ -263,7 +263,6 @@
         <div class="add-pl-row" data-min="15">15 分钟后停止</div>
         <div class="add-pl-row" data-min="30">30 分钟后停止</div>
         <div class="add-pl-row" data-min="60">60 分钟后停止</div>
-        <div class="add-pl-row" data-min="song">播完当前歌曲后停止</div>
       </div>
       <div class="prompt-actions">
         <button class="btn sm" id="sleepClose">取消</button>
@@ -480,11 +479,17 @@
             <button class="btn sm sleep-opt" data-min="15">15 分钟</button>
             <button class="btn sm sleep-opt" data-min="30">30 分钟</button>
             <button class="btn sm sleep-opt" data-min="60">60 分钟</button>
-            <button class="btn sm sleep-opt" data-min="song">播完当前曲</button>
             <span class="sleep-custom-wrap" id="sleepCustomWrap">
               <button class="btn sm sleep-opt" id="sleepCustomBtn">自定义</button>
               <input id="sleepCustomInput" type="number" min="1" max="480" placeholder="分钟" />
             </span>
+          </div>
+          <div class="settings-row" style="display:flex;align-items:center;gap:8px">
+            <label class="toggle-switch">
+              <input type="checkbox" id="sleepFinishSongToggle">
+              <span class="toggle-track"></span>
+            </label>
+            <span style="font-size:calc(var(--font-size)*0.9);color:var(--text-dim)">定时到后，等当前歌曲播完再关闭</span>
           </div>
           <div class="settings-hint" id="sleepHint"></div>
         </div>

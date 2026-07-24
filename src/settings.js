@@ -388,11 +388,13 @@ export let sleepTimeout = null;
 export let sleepAfterSong = false;
 let sleepEndTime = 0;
 let sleepTick = null;
+let sleepDuration = 0; // 用户选择的时长（分钟），0 = 未设置
 
 export function clearSleep() {
   if (sleepTimeout) { clearTimeout(sleepTimeout); sleepTimeout = null; }
   if (sleepTick) { clearInterval(sleepTick); sleepTick = null; }
   sleepEndTime = 0;
+  sleepDuration = 0;
   sleepAfterSong = false;
 }
 
@@ -404,10 +406,12 @@ export function updateSleepHint() {
     const remain = Math.max(0, sleepEndTime - Date.now());
     const m = Math.floor(remain / 60000);
     const s = Math.floor((remain % 60000) / 1000);
+    const finishSong = localStorage.getItem('wemusic_sleep_finish_song') === '1';
+    const suffix = finishSong ? '（之后等当前歌曲播完）' : '';
     if (m > 0) {
-      hint.textContent = `${m} 分 ${s} 秒后停止`;
+      hint.textContent = `${m} 分 ${s} 秒后停止${suffix}`;
     } else {
-      hint.textContent = `${s} 秒后停止`;
+      hint.textContent = `${s} 秒后停止${suffix}`;
     }
     return;
   }
@@ -417,22 +421,27 @@ export function updateSleepHint() {
 export function setSleep(v) {
   clearSleep();
   if (v === '0') { toast('已取消定时关闭'); updateSleepHint(); return; }
-  if (v === 'song') {
-    sleepAfterSong = true;
-    toast('将在当前歌曲播完后停止');
-    updateSleepHint();
-    return;
-  }
   const min = Number(v);
+  sleepDuration = min;
   sleepEndTime = Date.now() + min * 60000;
+  const toastFinishSong = localStorage.getItem('wemusic_sleep_finish_song') === '1';
   sleepTimeout = setTimeout(() => {
-    // stopPlayback 在 player.js，通过动态导入避免循环依赖
-    import('./player.js').then(({ stopPlayback }) => stopPlayback());
-    clearSleep();
-    toast('定时已到，已停止播放');
+    if (sleepTick) { clearInterval(sleepTick); sleepTick = null; }
+    // 回调内重新读取：用户可能在定时器运行期间切换开关
+    const finishSong = localStorage.getItem('wemusic_sleep_finish_song') === '1';
+    if (finishSong) {
+      sleepAfterSong = true;
+      sleepEndTime = 0;
+      updateSleepHint();
+      toast('定时已到，将在当前歌曲播完后停止');
+    } else {
+      import('./player.js').then(({ stopPlayback }) => stopPlayback());
+      clearSleep();
+      toast('定时已到，已停止播放');
+    }
   }, min * 60000);
   sleepTick = setInterval(updateSleepHint, 1000);
-  toast(`已设置 ${min} 分钟后停止`);
+  toast(`已设置 ${min} 分钟后${toastFinishSong ? '（播完当前曲后关闭）' : '停止'}`);
   updateSleepHint();
 }
 
@@ -834,13 +843,24 @@ export async function openSettings() {
 
   updateSleepHint();
 
+  // 定时停止：播完当前曲开关
+  const finishSongToggle = $('sleepFinishSongToggle');
+  if (finishSongToggle) {
+    finishSongToggle.checked = localStorage.getItem('wemusic_sleep_finish_song') === '1';
+    finishSongToggle.onchange = () => {
+      localStorage.setItem('wemusic_sleep_finish_song', finishSongToggle.checked ? '1' : '0');
+      updateSleepHint();
+    };
+  }
+
   // 定时停止按钮
   const customWrap = $('sleepCustomWrap');
   const customBtn = $('sleepCustomBtn');
   const customInput = $('sleepCustomInput');
   customWrap?.classList.remove('editing');
 
-  const activeMin = sleepTimeout ? null : (sleepAfterSong ? 'song' : '0');
+  const PRESET_DURATIONS = [15, 30, 60];
+  const activeMin = sleepEndTime ? String(sleepDuration) : (sleepAfterSong ? null : '0');
   document.querySelectorAll('.sleep-opt').forEach((b) => {
     const isActive = (activeMin != null) ? (b.dataset.min === activeMin) : false;
     b.classList.toggle('active', isActive);
@@ -852,7 +872,7 @@ export async function openSettings() {
   });
   // 自定义定时：点击按钮 → 变成输入框 → 回车确认
   if (customBtn && customInput && customWrap) {
-    const isCustom = sleepTimeout && !sleepAfterSong;
+    const isCustom = sleepEndTime && !PRESET_DURATIONS.includes(sleepDuration);
     customBtn.classList.toggle('active', isCustom);
     customBtn.onclick = () => {
       customWrap.classList.add('editing');

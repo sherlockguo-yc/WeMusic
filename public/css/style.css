@@ -85,6 +85,72 @@ body[data-theme] .theme-bg-layer {
   background: radial-gradient(ellipse at center, transparent 60%, var(--theme-bg-fade-color) 100%);
 }
 
+/* ---- 主题装饰（decorations Slot）---- */
+/* 星尘：纯 CSS 粒子 + twinkle 动画 */
+body[data-decorations="star-dust"]::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  width: 2px; height: 2px; border-radius: 50%; background: transparent;
+  box-shadow:
+    10vw 15vh 0 var(--theme-dust-color),
+    25vw 35vh 0 var(--theme-dust-color),
+    40vw 20vh 0 var(--theme-dust-color),
+    55vw 50vh 0 var(--theme-dust-color),
+    70vw 30vh 0 var(--theme-dust-color),
+    85vw 45vh 0 var(--theme-dust-color),
+    15vw 65vh 0 var(--theme-dust-color),
+    30vw 80vh 0 var(--theme-dust-color),
+    50vw 70vh 0 var(--theme-dust-color),
+    65vw 85vh 0 var(--theme-dust-color),
+    80vw 60vh 0 var(--theme-dust-color),
+    90vw 15vh 0 var(--theme-dust-color),
+    20vw 90vh 0 var(--theme-dust-color),
+    45vw 10vh 0 var(--theme-dust-color),
+    75vw 75vh 0 var(--theme-dust-color),
+    5vw 40vh 0 var(--theme-dust-color),
+    35vw 55vh 0 var(--theme-dust-color),
+    60vw 40vh 0 var(--theme-dust-color),
+    15vw 30vh 0 var(--theme-dust-color),
+    92vw 85vh 0 var(--theme-dust-color);
+  animation: twinkle 3s ease-in-out infinite alternate;
+}
+@keyframes twinkle {
+  0% { opacity: 0.2; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+/* 音符角落：4 角 Lucide music-4 图标 */
+body[data-decorations="music-notes-corner"]::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l12-2v13'/%3E%3Cpath d='m9 9 12-2'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='18' cy='16' r='3'/%3E%3C/svg%3E") no-repeat top 20px left 20px / 32px 32px,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l12-2v13'/%3E%3Cpath d='m9 9 12-2'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='18' cy='16' r='3'/%3E%3C/svg%3E") no-repeat top 20px right 20px / 32px 32px,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l12-2v13'/%3E%3Cpath d='m9 9 12-2'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='18' cy='16' r='3'/%3E%3C/svg%3E") no-repeat bottom 20px left 20px / 32px 32px,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V5l12-2v13'/%3E%3Cpath d='m9 9 12-2'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Ccircle cx='18' cy='16' r='3'/%3E%3C/svg%3E") no-repeat bottom 20px right 20px / 32px 32px;
+  opacity: 0.35;
+}
+
+/* 黑胶唱片：右下角 Lucide disc-3 图标 + 极慢旋转 */
+body[data-decorations="vinyl-record"]::before {
+  content: ''; position: fixed; bottom: 24px; right: 24px; pointer-events: none; z-index: 0;
+  width: 48px; height: 48px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M6 12c0-1.7.7-3.2 1.8-4.2'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3Cpath d='M18 12c0 1.7-.7 3.2-1.8 4.2'/%3E%3C/svg%3E") no-repeat center / contain;
+  opacity: 0.25;
+  animation: rotate-disc 30s linear infinite;
+}
+@keyframes rotate-disc {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 底部波浪：Lucide audio-waveform 图标重复排列 */
+body[data-decorations="wave-bottom"]::before {
+  content: ''; position: fixed; bottom: 0; left: 0; right: 0; pointer-events: none; z-index: 0;
+  height: 40px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12h2'/%3E%3Cpath d='M6 8v8'/%3E%3Cpath d='M10 5v14'/%3E%3Cpath d='M14 8v8'/%3E%3Cpath d='M18 5v14'/%3E%3Cpath d='M22 12h-2'/%3E%3C/svg%3E") repeat-x bottom / auto 40px;
+  opacity: 0.2;
+}
+
 html {
   font-size: var(--font-size);
 }
