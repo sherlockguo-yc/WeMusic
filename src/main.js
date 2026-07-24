@@ -12,8 +12,11 @@ import { initSettings, loadAvatar, loadPrefsFromServer } from './settings.js';
 import { initStats, openDiscover } from './stats.js';
 import * as offline from './offlineCache.js';
 
-// 登录拦截
-if (!Auth.token) location.href = '/login.html';
+// 登录拦截：保存当前 URL 到 sessionStorage，登录后恢复
+if (!Auth.token) {
+  sessionStorage.setItem('wemusic_redirect', location.href);
+  location.href = '/login.html';
+}
 
 // 初始化全部模块
 initGlobalTooltip(); // 全局 tooltip（stats / playlist-ui 共用）

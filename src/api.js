@@ -37,7 +37,10 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   try { data = await res.json(); } catch { /* ignore */ }
   if (res.status === 401) {
     Auth.clear();
-    if (!location.pathname.endsWith('login.html')) location.href = '/login.html';
+    if (!location.pathname.endsWith('login.html')) {
+      sessionStorage.setItem('wemusic_redirect', location.href);
+      location.href = '/login.html';
+    }
     throw new Error((data && data.error) || '登录已过期，请重新登录');
   }
   if (!res.ok) {

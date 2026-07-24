@@ -1,7 +1,25 @@
 // 登录页入口
 import { Auth, api } from './api.js';
 
-if (Auth.token) location.href = '/';
+// 已登录时：检查是否有保存的跳转 URL，恢复原来的页面
+if (Auth.token) {
+  const redirect = sessionStorage.getItem('wemusic_redirect');
+  if (redirect) {
+    sessionStorage.removeItem('wemusic_redirect');
+    try {
+      const url = new URL(redirect, location.origin);
+      // 安全校验：跳转 URL 必须同源
+      if (url.origin === location.origin) {
+        location.href = url.pathname + url.search + url.hash;
+      } else {
+        location.href = '/';
+      }
+    } catch { location.href = '/'; }
+  } else {
+    location.href = '/';
+  }
+}
+// 注意：未登录时继续渲染登录表单，不跳转
 
 let mode = 'login';
 
@@ -58,6 +76,18 @@ async function submit() {
   try {
     const data = await api(`/auth/${mode}`, { method: 'POST', body: { username, password }, auth: false });
     Auth.save(data.token, data.user);
+    // 登录成功后恢复到之前保存的页面（如分享链接、搜索结果等）
+    const redirect = sessionStorage.getItem('wemusic_redirect');
+    if (redirect) {
+      sessionStorage.removeItem('wemusic_redirect');
+      try {
+        const url = new URL(redirect, location.origin);
+        if (url.origin === location.origin) {
+          location.href = url.pathname + url.search + url.hash;
+          return;
+        }
+      } catch { /* fall through to default redirect */ }
+    }
     location.href = '/';
   } catch (e) {
     show(e.message, 'error');
