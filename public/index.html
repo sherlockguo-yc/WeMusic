@@ -474,6 +474,21 @@
           </div>
         </div>
         <div class="settings-section">
+          <div class="settings-label">定时停止播放</div>
+          <div class="settings-row">
+            <button class="btn sm sleep-opt" data-min="0">关闭</button>
+            <button class="btn sm sleep-opt" data-min="15">15 分钟</button>
+            <button class="btn sm sleep-opt" data-min="30">30 分钟</button>
+            <button class="btn sm sleep-opt" data-min="60">60 分钟</button>
+            <button class="btn sm sleep-opt" data-min="song">播完当前曲</button>
+            <span class="sleep-custom-wrap" id="sleepCustomWrap">
+              <button class="btn sm sleep-opt" id="sleepCustomBtn">自定义</button>
+              <input id="sleepCustomInput" type="number" min="1" max="480" placeholder="分钟" />
+            </span>
+          </div>
+          <div class="settings-hint" id="sleepHint"></div>
+        </div>
+        <div class="settings-section">
           <div class="settings-label">音量标准化</div>
           <div class="settings-row" style="display:flex;align-items:center;gap:8px">
             <label class="toggle-switch">
@@ -512,21 +527,6 @@
             <button class="btn sm eq-opt" data-eq="人声">人声</button>
             <button class="btn sm eq-opt" data-eq="电子">电子</button>
           </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-label">定时停止播放</div>
-          <div class="settings-row">
-            <button class="btn sm sleep-opt" data-min="0">关闭</button>
-            <button class="btn sm sleep-opt" data-min="15">15 分钟</button>
-            <button class="btn sm sleep-opt" data-min="30">30 分钟</button>
-            <button class="btn sm sleep-opt" data-min="60">60 分钟</button>
-            <button class="btn sm sleep-opt" data-min="song">播完当前曲</button>
-            <span class="sleep-custom-wrap" id="sleepCustomWrap">
-              <button class="btn sm sleep-opt" id="sleepCustomBtn">自定义</button>
-              <input id="sleepCustomInput" type="number" min="1" max="480" placeholder="分钟" />
-            </span>
-          </div>
-          <div class="settings-hint" id="sleepHint"></div>
         </div>
         <div class="settings-section">
           <div class="settings-label">移动端访问</div>
