@@ -21,20 +21,27 @@ router.use(authRequired);
 router.get('/bvid/:songMid', (req, res) => {
   const row = db.prepare('SELECT * FROM bvid_cache WHERE song_mid = ?').get(req.params.songMid);
   if (!row) return res.status(404).json({ cached: false });
-  res.json({ cached: true, ...row });
+  // 解析 candidates_json 字段（方案 D：返回候选列表供换源弹窗秒开）
+  let candidates = null;
+  if (row.candidates_json) {
+    try { candidates = JSON.parse(row.candidates_json); } catch { /* 忽略损坏的 JSON */ }
+  }
+  res.json({ cached: true, ...row, candidates });
 });
 
 // 写入 / 更新缓存
 router.put('/bvid/:songMid', (req, res) => {
-  const { name, singer, bvid, bili_title, bili_dur } = req.body || {};
+  const { name, singer, bvid, bili_title, bili_dur, candidates } = req.body || {};
   if (!bvid) return res.status(400).json({ error: '缺少 bvid' });
+  const candidatesJson = candidates ? JSON.stringify(candidates) : null;
   db.prepare(`
-    INSERT INTO bvid_cache (song_mid, name, singer, bvid, bili_title, bili_dur, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO bvid_cache (song_mid, name, singer, bvid, bili_title, bili_dur, candidates_json, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(song_mid) DO UPDATE SET
       bvid=excluded.bvid, bili_title=excluded.bili_title,
-      bili_dur=excluded.bili_dur, updated_at=excluded.updated_at
-  `).run(req.params.songMid, name || '', singer || '', bvid, bili_title || '', bili_dur || 0, Date.now());
+      bili_dur=excluded.bili_dur, candidates_json=excluded.candidates_json,
+      updated_at=excluded.updated_at
+  `).run(req.params.songMid, name || '', singer || '', bvid, bili_title || '', bili_dur || 0, candidatesJson, Date.now());
   res.json({ ok: true });
 });
 

@@ -530,7 +530,7 @@ export function bvidCacheKey(song) {
   return song.song_mid || `__${song.name}__${song.singer || ''}`;
 }
 
-export function cacheBvid(song) {
+export function cacheBvid(song, candidatesData) {
   if (state.currentContext && song.id) {
     api(`/playlists/${state.currentContext}/songs/${song.id}/bvid`, {
       method: 'PUT', body: { bvid: song.bvid },
@@ -538,10 +538,15 @@ export function cacheBvid(song) {
   }
   const key = bvidCacheKey(song);
   if (key) {
-    api(`/stats/bvid/${encodeURIComponent(key)}`, {
-      method: 'PUT',
-      body: { name: song.name, singer: song.singer, bvid: song.bvid, bili_title: song._biliTitle, bili_dur: song._biliDur },
-    }).catch(() => { console.warn('全局 bvid 缓存保存失败') });
+    const body = { name: song.name, singer: song.singer, bvid: song.bvid, bili_title: song._biliTitle, bili_dur: song._biliDur };
+    // 方案 D：缓存 top 10 候选列表，下次换源弹窗秒开
+    if (candidatesData && candidatesData.length) {
+      body.candidates = candidatesData.slice(0, 10).map(c => ({
+        bvid: c.bvid, title: c.title, author: c.author, duration: c.duration, play: c.play,
+      }));
+    }
+    api(`/stats/bvid/${encodeURIComponent(key)}`, { method: 'PUT', body })
+      .catch(() => { console.warn('全局 bvid 缓存保存失败') });
   }
 }
 
@@ -697,7 +702,7 @@ export async function prefetchNextBvid() {
       const match = best.bvid ? candidates.find(c => c.bvid === best.bvid) : null;
       song._biliTitle = match?.title || best.title || '';
       song._biliDur = match?.duration || best.duration || song.duration;
-      cacheBvid(song);
+      cacheBvid(song, song._candidates);
     }
   } catch { console.warn('预取 bvid 失败') }
 }
@@ -788,7 +793,7 @@ export async function playCurrent() {
       const match = best.bvid ? candidates.find(c => c.bvid === best.bvid) : null;
       song._biliTitle = match?.title || best.title || '';
       song._biliDur = (match?.duration || best.duration || song.duration);
-      cacheBvid(song);
+      cacheBvid(song, candidates);
       _resolveFailCount = 0;  // resolve 成功，重置连续失败计数
     } catch (e) {
       if (seq !== playSeq) return;
@@ -828,7 +833,7 @@ export async function playCurrent() {
         const match = candidates.find(c => c.bvid === song.bvid);
         song._biliTitle = match?.title || best?.title || '';
         if (!song._biliDur) song._biliDur = (match?.duration || best?.duration || song.duration);
-        cacheBvid(song);
+        cacheBvid(song, candidates);
       } catch { console.warn('补查 _biliTitle 失败') }
     }
   }

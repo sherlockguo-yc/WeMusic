@@ -11,6 +11,37 @@ import { getCrowdCompletions, crowdBonus } from '../services/crowd.js';
 
 const router = express.Router();
 
+// ---- resolve 结果内存缓存（LRU + TTL，减少重复 B 站搜索） ----
+const RESOLVE_CACHE_MAX = 500;         // 最多缓存 500 首歌
+const RESOLVE_CACHE_TTL = 5 * 60_000; // 5 分钟过期
+const _resolveCache = new Map();       // key → { best, candidates, ts }
+
+function resolveCacheKey(name, singer) {
+  return `${(name || '').toLowerCase().trim()}__${(singer || '').toLowerCase().trim()}`;
+}
+
+function resolveCacheGet(key) {
+  const entry = _resolveCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > RESOLVE_CACHE_TTL) {
+    _resolveCache.delete(key);
+    return null;
+  }
+  // LRU：访问时移到末尾
+  _resolveCache.delete(key);
+  _resolveCache.set(key, entry);
+  return entry;
+}
+
+function resolveCacheSet(key, best, candidates) {
+  // 防止 OOM：超过上限时淘汰最老的条目
+  if (_resolveCache.size >= RESOLVE_CACHE_MAX) {
+    const oldest = _resolveCache.keys().next().value;
+    _resolveCache.delete(oldest);
+  }
+  _resolveCache.set(key, { best, candidates, ts: Date.now() });
+}
+
 // ffmpeg 路径：优先环境变量 FFMPEG_PATH（生产用系统 ffmpeg），回退到 @ffmpeg-installer（本地开发）
 let ffmpegPath = process.env.FFMPEG_PATH || '';
 if (!ffmpegPath) {
@@ -369,6 +400,16 @@ export function rank(videos, name, singer, expectDur, crowdCompletions = null) {
 router.post('/resolve', authRequired, async (req, res) => {
   const { name, singer = '', duration = 0 } = req.body || {};
   if (!name) return res.status(400).json({ error: '缺少歌曲名' });
+  const t0 = Date.now();
+
+  // — 内存缓存检查（同首歌 5 分钟内再次 resolve 直接返回） —
+  const cacheKey = resolveCacheKey(name, singer);
+  const cached = resolveCacheGet(cacheKey);
+  if (cached) {
+    console.log(`[resolve:cache] HIT "${name}" / "${singer}" → ${cached.candidates.length} candidates (${Date.now() - t0}ms)`);
+    return res.json({ best: cached.best, candidates: cached.candidates.slice(0, 25), _debug: { cached: true, cacheAge: Date.now() - cached.ts } });
+  }
+
   try {
     const singerPartsVal = singerParts(singer);  // 小写，用于匹配（debug + singer filter）
     // singerFirst/singerRest 用于搜索 query，需要保留原始大小写。
@@ -396,6 +437,7 @@ router.post('/resolve', authRequired, async (req, res) => {
     };
 
     // 分层并行查询：Wave 1 — 全部 query 首页并行打出；Wave 2 — 不够时再补第二页
+    // 方案 A 优化：去掉反序 query（`singerFirst name`），保留 4 条核心 query + 歌手片段补查
     const queries = [];
     if (singerFirstForQuery) {
       queries.push(`${name} ${singerFirstForQuery}`);
@@ -403,7 +445,6 @@ router.post('/resolve', authRequired, async (req, res) => {
       queries.push(`${name} ${singerFirstForQuery} 官方`);
     }
     queries.push(name);
-    if (singerFirstForQuery) queries.push(`${singerFirstForQuery} ${name}`);
     // 歌手名其余片段（如中英文名并存时的中文名）各补一条纯查询，覆盖只索引到该片段的小众视频
     for (const extra of singerExtraForQuery) queries.push(`${name} ${extra}`);
     if (bracketCN && singerFirstForQuery) queries.push(`${bracketCN} ${singerFirstForQuery}`);
@@ -414,6 +455,7 @@ router.post('/resolve', authRequired, async (req, res) => {
     let all = [];
 
     // Wave 1：所有 query × page 1 并行请求
+    const tW1 = Date.now();
     const w1 = await Promise.allSettled(queries.map((q) => searchVideos(q, 1, 20)));
     const w1Counts = [];
     let w1TotalBeforeDedup = 0;
@@ -430,9 +472,12 @@ router.post('/resolve', authRequired, async (req, res) => {
       }
     }
     debug.wave1 = { queries: w1Counts, totalBeforeDedup: w1TotalBeforeDedup, totalAfterDedup: all.length };
+    const w1Ms = Date.now() - tW1;
 
     // Wave 2：如果还不够 80 条，所有 query × page 2 并行请求
+    let w2Ms = 0;
     if (all.length < 80) {
+      const tW2 = Date.now();
       const w2 = await Promise.allSettled(queries.map((q) => searchVideos(q, 2, 20)));
       const w2Counts = [];
       let w2TotalBeforeDedup = 0;
@@ -449,6 +494,7 @@ router.post('/resolve', authRequired, async (req, res) => {
         }
       }
       debug.wave2 = { queries: w2Counts, totalBeforeDedup: w2TotalBeforeDedup, totalAfterDedup: all.length };
+      w2Ms = Date.now() - tW2;
     }
 
     debug.totalRaw = all.length;
@@ -459,11 +505,13 @@ router.post('/resolve', authRequired, async (req, res) => {
       return res.status(404).json({ error: '未在 Bilibili 找到该歌曲的视频' });
     }
 
-    console.log(`[video:resolve] "${name}" / "${singerFirstForQuery}" — ${all.length} raw results (W1:${w1.filter(r=>r.status==='fulfilled').length}q), segs:${nameSegments(name).join('|')}`);
+    console.log(`[resolve:search] "${name}" / "${singerFirstForQuery}" — ${all.length} raw (W1:${w1Ms}ms${w2Ms ? ', W2:' + w2Ms + 'ms' : ''}, ${queries.length}q)`);
 
     const sk = songKey(name, singer);
     const videoCompletions = getCrowdCompletions('video', sk);
+    const tRank = Date.now();
     const ranked = rank(all, name, singer, duration, videoCompletions);
+    const rankMs = Date.now() - tRank;
 
     // 收集 rank 内部的 debug 信息
     const segs = nameSegments(name);
@@ -531,7 +579,7 @@ router.post('/resolve', authRequired, async (req, res) => {
       };
     });
 
-    console.log(`[video:resolve] after rank: ${ranked.length} scored (crowd:${videoCompletions.size} sources), blocked:${getBlockedSet(req.user.id, sk, 'video').size}`);
+    console.log(`[resolve:rank] ${ranked.length} scored (rank:${rankMs}ms, crowd:${videoCompletions.size}sources), blocked:${getBlockedSet(req.user.id, sk, 'video').size}`);
 
     // 过滤掉用户已拉黑的视频源
     const blocked = getBlockedSet(req.user.id, songKey(name, singer), 'video');
@@ -544,10 +592,15 @@ router.post('/resolve', authRequired, async (req, res) => {
     }
     const nameImpliesLive = songNameSuggestsLive(name);
     const best = nameImpliesLive ? clean[0] : (clean.find((v) => !v.live) || clean[0]);
-    const top5 = clean.slice(0, 5).map((v) => `[${v.score}] ${v.title.slice(0,40)} live:${v.live}`).join(' | ');
-    console.log(`[video:resolve] top5 after clean: ${top5}`);
+
+    // — 写入内存缓存 —
+    resolveCacheSet(cacheKey, best, clean.slice(0, 25));
+
+    const totalMs = Date.now() - t0;
+    console.log(`[resolve:done] "${name}" / "${singerFirstForQuery}" → ${clean.length} candidates, best="${(best.title || '').slice(0, 40)}", total=${totalMs}ms (search:${w1Ms + w2Ms}ms rank:${rankMs}ms cache:0ms)`);
     res.json({ best, candidates: clean.slice(0, 25), _debug: debug });
   } catch (e) {
+    console.log(`[resolve:fail] "${name}" / "${singer || ''}" — ${Date.now() - t0}ms: ${e.message}`);
     res.status(502).json({ error: e.message });
   }
 });

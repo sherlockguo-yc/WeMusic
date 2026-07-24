@@ -177,6 +177,12 @@ if (!gainCols.includes('title')) {
   db.exec("ALTER TABLE gain_cache ADD COLUMN title TEXT DEFAULT ''");
 }
 
+// bvid_cache 迁移：添加 candidates_json 列（方案 D：缓存候选列表供预取复用）
+const bvidCols = db.prepare('PRAGMA table_info(bvid_cache)').all().map((c) => c.name);
+if (!bvidCols.includes('candidates_json')) {
+  db.exec("ALTER TABLE bvid_cache ADD COLUMN candidates_json TEXT");
+}
+
 const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
 if (!userCols.includes('avatar')) {
   db.exec('ALTER TABLE users ADD COLUMN avatar TEXT');

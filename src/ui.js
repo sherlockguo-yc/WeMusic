@@ -159,7 +159,7 @@ export async function openCandModal() {
         import('./offlineCache.js').then(({ migratePin }) => migratePin(oldBvid, c.bvid, Auth.token, { name: state.current.name, singer: state.current.singer }).catch(() => {}));
       }
       import('./player.js').then(({ cacheBvid, resetProgress, startVideo }) => {
-        cacheBvid(state.current);
+        cacheBvid(state.current, state.current._candidates);
         resetProgress(state.current._biliDur);
         startVideo(c.bvid, c.title, state.current._biliDur);
       });
