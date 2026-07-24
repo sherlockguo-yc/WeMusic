@@ -101,4 +101,65 @@ test.describe('主题系统（Phase 1 冒烟测试）', () => {
     );
     expect(accent.toLowerCase(), '强调色应恢复默认绿 #2ab758').toBe('#2ab758');
   });
+
+  test('默认模式（无主题）悬浮歌曲行：文字可见，不被深色背景遮挡', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    // 不激活任何主题 —— 验证默认 light/dark 模式下的 hover 行为
+
+    await page.evaluate(() => {
+      const row = document.createElement('div');
+      row.className = 'song-row';
+      row.id = 'defaultContrastRow';
+      row.innerHTML = '<span class="song-name">默认模式测试歌曲</span>';
+      document.body.appendChild(row);
+    });
+    await page.hover('#defaultContrastRow');
+
+    const res = await page.evaluate(() => {
+      const row = document.getElementById('defaultContrastRow');
+      const name = row.querySelector('.song-name');
+      const cs = getComputedStyle(row);
+      return {
+        bg: cs.backgroundColor,
+        text: getComputedStyle(name || row).color,
+        bodyClass: document.body.className,
+        dataTheme: document.body.getAttribute('data-theme'),
+      };
+    });
+
+    // 确认处于无主题状态
+    expect(res.dataTheme, '不应有 data-theme 属性').toBeNull();
+
+    const ratio = contrast(res.bg, res.text);
+    expect(ratio,
+      `默认模式悬浮行 body=${res.bodyClass} 背景=${res.bg} 文字=${res.text} 对比度=${ratio.toFixed(2)} 过低，文字可能不可见`
+    ).toBeGreaterThan(3);
+  });
+
+  test('截图验证：主题激活前后悬浮行视觉效果', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+
+    // 注入一个固定在页面顶部的测试行，方便截图对比
+    await page.evaluate(() => {
+      const row = document.createElement('div');
+      row.className = 'song-row';
+      row.id = 'visualContrastRow';
+      row.style.cssText = 'position:fixed; top:200px; left:20px; width:400px; z-index:9999';
+      row.innerHTML = '<span class="song-name">视觉验证-测试歌曲名</span><span class="song-artist">歌手名</span>';
+      document.body.appendChild(row);
+    });
+    await page.waitForTimeout(200);
+
+    // 1) 默认模式 hover 截图
+    await page.hover('#visualContrastRow');
+    await page.waitForTimeout(100);
+    await page.screenshot({ path: 'generated-images/e2e-theme-default-hover.png', clip: { x: 20, y: 200, width: 400, height: 44 } });
+
+    // 2) 激活主题后 hover 截图
+    await page.evaluate(() => window.__theme.activateTheme('test'));
+    await page.waitForTimeout(100);
+    await page.hover('#visualContrastRow');
+    await page.waitForTimeout(100);
+    await page.screenshot({ path: 'generated-images/e2e-theme-active-hover.png', clip: { x: 20, y: 200, width: 400, height: 44 } });
+  });
 });
