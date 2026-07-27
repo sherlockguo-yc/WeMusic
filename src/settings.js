@@ -350,9 +350,10 @@ async function _renderThemeSelector() {
   const grid = $('themeSelectorGrid');
   if (!grid) return;
 
-  // 加载中状态
+  // 加载中状态：骨架屏
   if (!_presetsCache || _presetsCache.length === 0) {
-    grid.innerHTML = '<div class="theme-grid-loading">加载中…</div>';
+    grid.innerHTML = '<div class="theme-grid-loading">' +
+      Array(4).fill('<div class="theme-skeleton"></div>').join('') + '</div>';
     return;
   }
 
@@ -418,9 +419,10 @@ async function _renderThemeSelector() {
 
 /** 打开主题选择器（预加载预设避免空网格） */
 export function openThemeSelector() {
-  // 加载中状态先展示
+  // 加载中状态：骨架屏
   const grid = $('themeSelectorGrid');
-  if (grid) grid.innerHTML = '<div class="theme-grid-loading">加载中…</div>';
+  if (grid) grid.innerHTML = '<div class="theme-grid-loading">' +
+    Array(4).fill('<div class="theme-skeleton"></div>').join('') + '</div>';
   $('themeSelectorModal').classList.add('show');
   // 预加载并渲染
   _renderThemeSelector();
