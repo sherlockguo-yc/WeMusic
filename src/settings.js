@@ -12,6 +12,7 @@ export function syncPrefsToServer() {
     fontSize: localStorage.getItem('wemusic_font_size') || '14',
     palette: localStorage.getItem('wemusic_palette') || 'green',
     vol: localStorage.getItem('wemusic_vol') || '0.8',
+    activeTheme: localStorage.getItem('wemusic_activeTheme') || '',
   };
   api('/auth/preferences', { method: 'PUT', body: { data: prefs } }).catch(() => {});
 }
@@ -185,15 +186,31 @@ function _computeAutoOverlay(brightness, isLightMode) {
 }
 
 /** 激活主题：设置 data-theme 并应用 Slot */
-export function activateTheme(themeId) {
+export async function activateTheme(themeId) {
   if (!themeId) { deactivateTheme(); return; }
   document.body.setAttribute('data-theme', themeId);
-  // Phase 1：从硬编码测试数据加载 Slot
-  // Phase 2 后改为从 API / 预设数据加载
-  const testSlots = _getTestSlots();
-  applyThemeSlots(testSlots);
-  // 持久化当前激活主题
+
+  // 尝试从预设数据加载 Slot 配置
+  let slots = null;
+  try {
+    const { theme } = await api(`/themes/presets/${themeId}`);
+    if (theme) {
+      // 根据当前深浅色模式选择变体
+      const isLight = document.body.classList.contains('light');
+      const variant = isLight ? (theme.dayVariant || theme.nightVariant) : (theme.nightVariant || theme.dayVariant);
+      if (variant?.slots) slots = variant.slots;
+    }
+  } catch (e) { /* 预设加载失败，回退到测试数据 */ }
+
+  // 回退：硬编码测试数据（Phase 1 兼容）
+  if (!slots) slots = _getTestSlots();
+
+  applyThemeSlots(slots);
+  // 持久化
   localStorage.setItem('wemusic_activeTheme', themeId);
+  localStorage.setItem('wemusic_activeThemeName', slots.accent ? '' : ''); // 预设会覆盖
+  // 更新设置面板中的主题名称显示
+  _updateThemeLabel();
 }
 
 /** 取消主题：移除 data-theme，恢复独立设置 */
@@ -201,6 +218,8 @@ export function deactivateTheme() {
   document.body.removeAttribute('data-theme');
   document.body.removeAttribute('data-decorations');
   localStorage.removeItem('wemusic_activeTheme');
+  localStorage.removeItem('wemusic_activeThemeName');
+  _updateThemeLabel();
   const root = document.documentElement;
   // 清除主题变量，回退到 :root 默认值
   [
@@ -286,10 +305,112 @@ function _getTestSlots() {
     sidebar:  { type: 'color', value: '#0f080a' },
     decorations: { type: 'preset', value: 'star-dust' },
     scrollbar:{ type: 'color', value: '#553344' },
-    // Phase 1：card/row 设为 default（CSS 端尚未真正使用这些变量的细节）
     card:     { type: 'preset', value: 'default' },
     row:      { type: 'preset', value: 'default' },
   };
+}
+
+// ---- Phase 2：预设主题系统 ----
+
+/** 预设主题元数据缓存（id → { name, artist, decorations, ... }） */
+let _presetsCache = null;
+
+/** 从服务端加载预设主题元数据 */
+export async function loadPresets() {
+  try {
+    const { presets } = await api('/themes/presets');
+    _presetsCache = presets || [];
+  } catch (e) {
+    _presetsCache = [];
+  }
+}
+
+/** 更新设置面板中的主题名称标签 */
+function _updateThemeLabel() {
+  const label = $('activeThemeName');
+  const btn = $('chooseThemeBtn');
+  if (!label || !btn) return;
+  const id = localStorage.getItem('wemusic_activeTheme');
+  const name = localStorage.getItem('wemusic_activeThemeName');
+  if (id && name) {
+    label.textContent = name;
+    label.style.display = '';
+    btn.textContent = '更换';
+  } else {
+    label.textContent = '未启用';
+    label.style.display = '';
+    btn.textContent = '选择主题';
+  }
+}
+
+/** 渲染主题选择器弹窗 */
+async function _renderThemeSelector() {
+  if (!_presetsCache) await loadPresets();
+
+  const grid = $('themeSelectorGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const activeId = localStorage.getItem('wemusic_activeTheme') || '';
+
+  _presetsCache.forEach((p) => {
+    const card = document.createElement('div');
+    card.className = 'theme-card' + (p.id === activeId ? ' active' : '');
+    card.dataset.themeId = p.id;
+
+    // 主题色块预览
+    const preview = document.createElement('div');
+    preview.className = 'theme-card-preview';
+    preview.style.background = p.dayAccent
+      ? `linear-gradient(135deg, ${p.nightAccent || p.dayAccent}, ${p.dayAccent})`
+      : 'var(--bg-card)';
+
+    const info = document.createElement('div');
+    info.className = 'theme-card-info';
+    info.innerHTML = `<div class="theme-card-name">${escHtml(p.name)}</div>
+      <div class="theme-card-artist">${escHtml(p.artist || '通用主题')}</div>
+      ${p.id === activeId ? '<div class="theme-card-badge">使用中</div>' : ''}`;
+
+    card.appendChild(preview);
+    card.appendChild(info);
+    card.onclick = () => {
+      grid.querySelectorAll('.theme-card').forEach((c) => c.classList.remove('active'));
+      card.classList.add('active');
+    };
+
+    // 双击直接应用
+    card.ondblclick = () => {
+      $('themeSelectorModal').classList.remove('show');
+      _applySelectedTheme();
+    };
+
+    grid.appendChild(card);
+  });
+}
+
+function escHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/** 应用当前选中的主题 */
+async function _applySelectedTheme() {
+  const grid = $('themeSelectorGrid');
+  const active = grid?.querySelector('.theme-card.active');
+  if (!active) { toast('请选择一套主题'); return; }
+
+  const themeId = active.dataset.themeId;
+  const preset = _presetsCache?.find((p) => p.id === themeId);
+  const themeName = preset?.name || themeId;
+
+  await activateTheme(themeId);
+  localStorage.setItem('wemusic_activeThemeName', themeName);
+  $('themeSelectorModal').classList.remove('show');
+  _updateThemeLabel();
+  toast(`已应用「${themeName}」`);
+}
+
+/** 打开主题选择器 */
+export function openThemeSelector() {
+  $('themeSelectorModal').classList.add('show');
+  _renderThemeSelector();
 }
 
 // ---- 主题 ----
@@ -798,6 +919,7 @@ function setupCustomColorEditor() {
 }
 export async function openSettings() {
   hideColorEditor();
+  _updateThemeLabel();
   $('settingsUser').textContent = Auth.user?.username || '';
   renderAvatar(Auth.user?.avatar || null);
   const avatarPreview = $('avatarPreview');
@@ -964,6 +1086,17 @@ export async function openSettings() {
 export function initSettings() {
   $('userAvatarWrap').onclick = openSettings;
   $('settingsClose').onclick = () => $('settingsModal').classList.remove('show');
+  // 主题选择器
+  $('chooseThemeBtn')?.addEventListener('click', openThemeSelector);
+  $('themeSelectorClose').onclick = () => $('themeSelectorModal').classList.remove('show');
+  $('themeSelectorModal').onclick = (e) => { if (e.target.id === 'themeSelectorModal') $('themeSelectorModal').classList.remove('show'); };
+  $('themeApplyBtn').onclick = _applySelectedTheme;
+  $('themeCancelBtn').onclick = () => $('themeSelectorModal').classList.remove('show');
+  $('themeDeactivateBtn').onclick = async () => {
+    deactivateTheme();
+    $('themeSelectorModal').classList.remove('show');
+    toast('已取消主题，恢复默认外观');
+  };
   $('settingsModal').onclick = (e) => { if (e.target.id === 'settingsModal') $('settingsModal').classList.remove('show'); };
   $('settingsLogout').onclick = () => { Auth.clear(); location.href = '/login.html'; };
 
@@ -1040,8 +1173,11 @@ export function initSettings() {
   }
 }
 
-// 启动时恢复已保存的主题（Phase 1：仅测试主题 'test' 可用）
-(function () {
+// 启动时恢复已保存的主题
+(async function () {
   const saved = localStorage.getItem('wemusic_activeTheme');
-  if (saved) activateTheme(saved);
+  if (saved) {
+    await loadPresets();
+    await activateTheme(saved);
+  }
 })();

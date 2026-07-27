@@ -151,6 +151,55 @@ body[data-decorations="wave-bottom"]::before {
   opacity: 0.2;
 }
 
+/* ---- 主题选择器 ---- */
+.theme-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.theme-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.theme-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.theme-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.theme-card-preview {
+  width: 100%;
+  height: 80px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.theme-card-name {
+  font-weight: 600;
+  font-size: calc(var(--font-size) * 1);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.theme-card-artist {
+  font-size: calc(var(--font-size) * 0.85);
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.theme-card-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  font-size: calc(var(--font-size) * 0.75);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
 html {
   font-size: var(--font-size);
 }

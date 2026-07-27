@@ -243,14 +243,140 @@ test.describe('主题系统（Phase 1 冒烟测试）', () => {
 
     const decorations = ['star-dust', 'music-notes-corner', 'vinyl-record', 'wave-bottom'];
     for (const deco of decorations) {
-      // 直接用 applyThemeSlots 修改 decorations 而不用完整 activateTheme
       await page.evaluate((d) => window.__theme.activateTheme('test'), deco);
-      // 覆盖 decorations：手动设置 data-decorations
       await page.evaluate((d) => {
         document.body.setAttribute('data-decorations', d);
       }, deco);
       await page.waitForTimeout(300);
       await page.screenshot({ path: `generated-images/e2e-deco-${deco}.png`, fullPage: true });
     }
+  });
+});
+
+// Phase 2：预设主题 + 选择器 UI
+test.describe('主题系统（Phase 2 预设主题）', () => {
+  test('API GET /api/themes/presets 返回 7 套预设', async ({ request }) => {
+    const { presets } = await (await request.get('/api/themes/presets')).json();
+    expect(Array.isArray(presets), 'presets 应为数组').toBe(true);
+    expect(presets.length, '应有 7 套预设').toBe(7);
+
+    // 验证元数据结构
+    const jay = presets.find((p) => p.id === 'jay-warm-photo');
+    expect(jay, '应有 jay-warm-photo').toBeTruthy();
+    expect(jay.name).toBe('暖粉写真');
+    expect(jay.artist).toBe('周杰伦');
+    expect(jay.dayAccent).toBe('#FF8FAB');
+  });
+
+  test('API GET /api/themes/presets/:id 返回完整 Slot 配置', async ({ request }) => {
+    const { theme } = await (await request.get('/api/themes/presets/jay-warm-photo')).json();
+    expect(theme, 'theme 对象应存在').toBeTruthy();
+    expect(theme.id).toBe('jay-warm-photo');
+
+    const daySlots = theme.dayVariant?.slots;
+    expect(daySlots, 'dayVariant.slots 应存在').toBeTruthy();
+    expect(daySlots.accent?.value).toBe('#FF8FAB');
+    expect(daySlots.font?.value).toBe('serif');
+    expect(daySlots.decorations?.value).toBe('music-notes-corner');
+
+    const nightSlots = theme.nightVariant?.slots;
+    expect(nightSlots, 'nightVariant.slots 应存在').toBeTruthy();
+    expect(nightSlots.accent?.value).toBe('#FF6B9D');
+  });
+
+  test('激活真实预设主题（jay-warm-photo）：强调色 / 字体 / 装饰生效', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    await page.evaluate(() => window.__theme.activateTheme('jay-warm-photo'));
+    await page.waitForTimeout(300);
+
+    const dt = await page.getAttribute('body', 'data-theme');
+    expect(dt, 'body[data-theme] 应为 jay-warm-photo').toBe('jay-warm-photo');
+
+    const accent = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    );
+    // 默认浅色模式 → dayVariant accent = #FF8FAB
+    expect(accent.toLowerCase(), '强调色应为粉色（日变体）').toBe('#ff8fab');
+
+    const font = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--font').trim().toLowerCase()
+    );
+    expect(font, '字体应为 serif').toContain('serif');
+
+    // 该预设的 decorations 是 music-notes-corner
+    const deco = await page.getAttribute('body', 'data-decorations');
+    expect(deco, '装饰应为 music-notes-corner').toBe('music-notes-corner');
+  });
+
+  test('主题选择器 UI：打开弹窗 → 显示卡片 → 选中 → 应用', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+
+    // 打开设置面板
+    await page.evaluate(() => window.__theme.openThemeSelector());
+    await page.waitForTimeout(500);
+
+    // 验证弹窗可见
+    const modal = page.locator('#themeSelectorModal');
+    await expect(modal).toBeVisible();
+
+    // 验证卡片已渲染
+    const cards = page.locator('.theme-card');
+    const count = await cards.count();
+    expect(count, '应显示 7 张主题卡片').toBe(7);
+
+    // 点击第一个卡片 → 变为 active
+    await cards.first().click();
+    await expect(cards.first()).toHaveClass(/active/);
+
+    // 点击应用按钮
+    await page.click('#themeApplyBtn');
+    await page.waitForTimeout(500);
+
+    // 弹窗应关闭，主题应已激活
+    await expect(modal).toBeHidden();
+    const dt = await page.getAttribute('body', 'data-theme');
+    expect(dt, '应用后应有 data-theme').toBeTruthy();
+  });
+
+  test('取消主题：通过 UI 按钮取消后恢复默认', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+
+    // 先激活一个主题
+    await page.evaluate(() => window.__theme.activateTheme('jay-vintage'));
+    await page.waitForTimeout(300);
+
+    // 打开选择器 → 点击取消主题
+    await page.evaluate(() => window.__theme.openThemeSelector());
+    await page.waitForTimeout(300);
+
+    await page.click('#themeDeactivateBtn');
+    await page.waitForTimeout(300);
+
+    // 应恢复到默认状态
+    const dt = await page.getAttribute('body', 'data-theme');
+    expect(dt, '取消后不应有 data-theme').toBeNull();
+
+    const saved = await page.evaluate(() => localStorage.getItem('wemusic_activeTheme'));
+    expect(saved, '取消后 localStorage 应无 activeTheme').toBeNull();
+  });
+
+  test('激活 GEM 预设：金色强调色 + hei 字体 + 星尘装饰', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    await page.evaluate(() => window.__theme.activateTheme('gem-dark-purple'));
+    await page.waitForTimeout(300);
+
+    const accent = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    );
+    // gem-dark-purple accent 是 #D4AF37（金色）
+    expect(accent.toLowerCase(), '强调色应为金色').toBe('#d4af37');
+
+    const font = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--font').trim().toLowerCase()
+    );
+    expect(font, '字体应为 hei 黑体').toContain('hei');
+
+    const deco = await page.getAttribute('body', 'data-decorations');
+    expect(deco, '装饰应为 star-dust').toBe('star-dust');
   });
 });

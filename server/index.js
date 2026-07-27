@@ -26,6 +26,7 @@ import playRouter from './routes/play.js';
 import statsRouter from './routes/stats.js';
 import adminRouter from './routes/admin.js';
 import migrationRouter from './routes/migration.js';
+import themesRouter from './routes/themes.js';
 import { searchLyricsCandidates } from './services/lyrics.js';
 import { shortNameToSourceType } from '../shared/constants.js';
 
@@ -68,6 +69,7 @@ app.use('/api/playlists', playlistRouter);
 app.use('/api/play', playRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/themes', themesRouter);
 
 // 健康检查：只返回 ok，不暴露版本/环境等信息
 app.get('/api/health', (req, res) => res.json({ ok: true }));

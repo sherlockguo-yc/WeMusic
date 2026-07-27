@@ -1,0 +1,247 @@
+[
+  {
+    "id": "jay-warm-photo",
+    "name": "暖粉写真",
+    "artist": "周杰伦",
+    "artistNames": ["Jay Chou", "周杰伦"],
+    "artistIds": ["qqmusic:0025NhlN2yWrP4", "netease:6452"],
+    "dayVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #fce4ec, #f8bbd0, #f48fb1)", "overlay": "rgba(255,255,255,0.15)", "fadeColor": "#f4f6f9" },
+        "accent":   { "type": "color", "value": "#FF8FAB", "dustColor": "rgba(255,143,171,0.4)" },
+        "font":     { "type": "font", "value": "serif" },
+        "player":   { "type": "preset", "value": "rounded-cover" },
+        "card":     { "type": "preset", "value": "glass-morphism" },
+        "sidebar":  { "type": "color", "value": "rgba(250,251,253,0.75)" },
+        "decorations": { "type": "preset", "value": "music-notes-corner" },
+        "lyrics":   { "type": "color", "value": "#FF8FAB" },
+        "scrollbar":{ "type": "color", "value": "#FF8FAB" },
+        "row":      { "type": "preset", "value": "subtle-stripe" }
+      }
+    },
+    "nightVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #1a0a0f, #2d1018, #3d1520)", "overlay": "rgba(0,0,0,0.45)", "fadeColor": "#0d0f12" },
+        "accent":   { "type": "color", "value": "#FF6B9D", "dustColor": "rgba(255,107,157,0.5)" },
+        "font":     { "type": "font", "value": "serif" },
+        "player":   { "type": "preset", "value": "rounded-cover" },
+        "card":     { "type": "preset", "value": "glass-morphism" },
+        "sidebar":  { "type": "color", "value": "#0f080a" },
+        "decorations": { "type": "preset", "value": "music-notes-corner" },
+        "lyrics":   { "type": "color", "value": "#FF6B9D" },
+        "scrollbar":{ "type": "color", "value": "#553344" },
+        "row":      { "type": "preset", "value": "subtle-stripe" }
+      }
+    }
+  },
+  {
+    "id": "jay-vintage",
+    "name": "复古胶片",
+    "artist": "周杰伦",
+    "artistNames": ["Jay Chou", "周杰伦"],
+    "artistIds": ["qqmusic:0025NhlN2yWrP4", "netease:6452"],
+    "dayVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #efe5d5, #d4c4a8, #c4a882)", "overlay": "rgba(255,255,255,0.1)", "fadeColor": "#f4f6f9" },
+        "accent":   { "type": "color", "value": "#C47E5A", "dustColor": "rgba(196,126,90,0.35)" },
+        "font":     { "type": "font", "value": "serif" },
+        "player":   { "type": "preset", "value": "rounded-cover" },
+        "card":     { "type": "preset", "value": "flat" },
+        "sidebar":  { "type": "color", "value": "rgba(239,229,213,0.75)" },
+        "decorations": { "type": "preset", "value": "vinyl-record" },
+        "lyrics":   { "type": "color", "value": "#C47E5A" },
+        "scrollbar":{ "type": "color", "value": "#C47E5A" },
+        "row":      { "type": "preset", "value": "highlight-hover" }
+      }
+    },
+    "nightVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #1a1410, #2a1f18, #332418)", "overlay": "rgba(0,0,0,0.5)", "fadeColor": "#0d0f12" },
+        "accent":   { "type": "color", "value": "#E8A87C", "dustColor": "rgba(232,168,124,0.4)" },
+        "font":     { "type": "font", "value": "serif" },
+        "player":   { "type": "preset", "value": "rounded-cover" },
+        "card":     { "type": "preset", "value": "flat" },
+        "sidebar":  { "type": "color", "value": "#1a1410" },
+        "decorations": { "type": "preset", "value": "vinyl-record" },
+        "lyrics":   { "type": "color", "value": "#E8A87C" },
+        "scrollbar":{ "type": "color", "value": "#5a4a3a" },
+        "row":      { "type": "preset", "value": "highlight-hover" }
+      }
+    }
+  },
+  {
+    "id": "jay-minimal",
+    "name": "简约线条",
+    "artist": "周杰伦",
+    "artistNames": ["Jay Chou", "周杰伦"],
+    "artistIds": ["qqmusic:0025NhlN2yWrP4", "netease:6452"],
+    "dayVariant": {
+      "slots": {
+        "bg":       { "type": "color", "value": "#f8f9fc", "overlay": "transparent", "fadeColor": "#f4f6f9" },
+        "accent":   { "type": "color", "value": "#FF8FAB", "dustColor": "rgba(255,143,171,0.25)" },
+        "font":     { "type": "font", "value": "serif" },
+        "player":   { "type": "preset", "value": "default" },
+        "card":     { "type": "preset", "value": "outlined" },
+        "sidebar":  { "type": "color", "value": "#f8f9fc" },
+        "decorations": { "type": "preset", "value": "music-notes-corner" },
+        "lyrics":   { "type": "color", "value": "#FF8FAB" },
+        "scrollbar":{ "type": "color", "value": "#dddddd" },
+        "row":      { "type": "preset", "value": "default" }
+      }
+    },
+    "nightVariant": {
+      "slots": {
+        "bg":       { "type": "color", "value": "#0f1117", "overlay": "transparent", "fadeColor": "#0d0f12" },
+        "accent":   { "type": "color", "value": "#FF6B9D", "dustColor": "rgba(255,107,157,0.25)" },
+        "font":     { "type": "font", "value": "serif" },
+        "player":   { "type": "preset", "value": "default" },
+        "card":     { "type": "preset", "value": "outlined" },
+        "sidebar":  { "type": "color", "value": "#0f1117" },
+        "decorations": { "type": "preset", "value": "music-notes-corner" },
+        "lyrics":   { "type": "color", "value": "#FF6B9D" },
+        "scrollbar":{ "type": "color", "value": "#2a2d35" },
+        "row":      { "type": "preset", "value": "default" }
+      }
+    }
+  },
+  {
+    "id": "gem-neon",
+    "name": "舞台霓虹",
+    "artist": "邓紫棋",
+    "artistNames": ["G.E.M.", "邓紫棋"],
+    "artistIds": ["qqmusic:001fpbEA0X2vHQ", "netease:7763"],
+    "dayVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #f3e5f5, #e1bee7, #ce93d8)", "overlay": "rgba(255,255,255,0.2)", "fadeColor": "#f4f6f9" },
+        "accent":   { "type": "color", "value": "#C39BD3", "dustColor": "rgba(196,155,211,0.6)" },
+        "font":     { "type": "font", "value": "hei" },
+        "player":   { "type": "preset", "value": "rounded-cover" },
+        "card":     { "type": "preset", "value": "glass-morphism" },
+        "sidebar":  { "type": "color", "value": "rgba(243,229,245,0.75)" },
+        "decorations": { "type": "preset", "value": "star-dust" },
+        "lyrics":   { "type": "color", "value": "#C39BD3" },
+        "scrollbar":{ "type": "color", "value": "#C39BD3" },
+        "row":      { "type": "preset", "value": "subtle-stripe" }
+      }
+    },
+    "nightVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #12051a, #1a0a28, #251035)", "overlay": "rgba(0,0,0,0.5)", "fadeColor": "#0d0f12" },
+        "accent":   { "type": "color", "value": "#7D3C98", "dustColor": "rgba(196,155,211,0.5)" },
+        "font":     { "type": "font", "value": "hei" },
+        "player":   { "type": "preset", "value": "rounded-cover" },
+        "card":     { "type": "preset", "value": "glass-morphism" },
+        "sidebar":  { "type": "color", "value": "#12051a" },
+        "decorations": { "type": "preset", "value": "star-dust" },
+        "lyrics":   { "type": "color", "value": "#7D3C98" },
+        "scrollbar":{ "type": "color", "value": "#4a2a5a" },
+        "row":      { "type": "preset", "value": "subtle-stripe" }
+      }
+    }
+  },
+  {
+    "id": "gem-fashion",
+    "name": "时尚写真",
+    "artist": "邓紫棋",
+    "artistNames": ["G.E.M.", "邓紫棋"],
+    "artistIds": ["qqmusic:001fpbEA0X2vHQ", "netease:7763"],
+    "dayVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #f5f0f0, #e8dce0, #dcc8d0)", "overlay": "rgba(255,255,255,0.15)", "fadeColor": "#f4f6f9" },
+        "accent":   { "type": "color", "value": "#C39BD3", "dustColor": "rgba(212,175,55,0.3)" },
+        "font":     { "type": "font", "value": "hei" },
+        "player":   { "type": "preset", "value": "pill-cover" },
+        "card":     { "type": "preset", "value": "flat" },
+        "sidebar":  { "type": "color", "value": "rgba(245,240,240,0.75)" },
+        "decorations": { "type": "preset", "value": "wave-bottom" },
+        "lyrics":   { "type": "color", "value": "#C39BD3" },
+        "scrollbar":{ "type": "color", "value": "#D4AF37" },
+        "row":      { "type": "preset", "value": "highlight-hover" }
+      }
+    },
+    "nightVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #0d0d12, #15101a, #1c1522)", "overlay": "rgba(0,0,0,0.55)", "fadeColor": "#0d0f12" },
+        "accent":   { "type": "color", "value": "#7D3C98", "dustColor": "rgba(212,175,55,0.25)" },
+        "font":     { "type": "font", "value": "hei" },
+        "player":   { "type": "preset", "value": "pill-cover" },
+        "card":     { "type": "preset", "value": "flat" },
+        "sidebar":  { "type": "color", "value": "#0d0d12" },
+        "decorations": { "type": "preset", "value": "wave-bottom" },
+        "lyrics":   { "type": "color", "value": "#7D3C98" },
+        "scrollbar":{ "type": "color", "value": "#5a4a2a" },
+        "row":      { "type": "preset", "value": "highlight-hover" }
+      }
+    }
+  },
+  {
+    "id": "gem-dark-purple",
+    "name": "暗夜紫",
+    "artist": "邓紫棋",
+    "artistNames": ["G.E.M.", "邓紫棋"],
+    "artistIds": ["qqmusic:001fpbEA0X2vHQ", "netease:7763"],
+    "dayVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #3d1a3d, #2d1540, #1a0a28)", "overlay": "rgba(0,0,0,0.3)", "fadeColor": "#3d1a3d" },
+        "accent":   { "type": "color", "value": "#D4AF37", "dustColor": "rgba(212,175,55,0.5)" },
+        "font":     { "type": "font", "value": "hei" },
+        "player":   { "type": "preset", "value": "rounded-cover" },
+        "card":     { "type": "preset", "value": "outlined" },
+        "sidebar":  { "type": "color", "value": "rgba(61,26,61,0.8)" },
+        "decorations": { "type": "preset", "value": "star-dust" },
+        "lyrics":   { "type": "color", "value": "#D4AF37" },
+        "scrollbar":{ "type": "color", "value": "#D4AF37" },
+        "row":      { "type": "preset", "value": "subtle-stripe" }
+      }
+    },
+    "nightVariant": {
+      "slots": {
+        "bg":       { "type": "gradient", "value": "linear-gradient(135deg, #0a0510, #10081a, #150d20)", "overlay": "rgba(0,0,0,0.6)", "fadeColor": "#0d0f12" },
+        "accent":   { "type": "color", "value": "#D4AF37", "dustColor": "rgba(212,175,55,0.45)" },
+        "font":     { "type": "font", "value": "hei" },
+        "player":   { "type": "preset", "value": "rounded-cover" },
+        "card":     { "type": "preset", "value": "outlined" },
+        "sidebar":  { "type": "color", "value": "#0a0510" },
+        "decorations": { "type": "preset", "value": "star-dust" },
+        "lyrics":   { "type": "color", "value": "#D4AF37" },
+        "scrollbar":{ "type": "color", "value": "#5a4a2a" },
+        "row":      { "type": "preset", "value": "subtle-stripe" }
+      }
+    }
+  },
+  {
+    "id": "classic-wemusic",
+    "name": "经典 WeMusic",
+    "artist": "",
+    "artistNames": [],
+    "artistIds": [],
+    "dayVariant": {
+      "slots": {
+        "bg":       { "type": "color", "value": "#f4f6f9", "overlay": "transparent", "fadeColor": "#f4f6f9" },
+        "accent":   { "type": "color", "value": "#2ab758", "dustColor": "rgba(42,183,88,0.12)" },
+        "font":     { "type": "font", "value": "default" },
+        "player":   { "type": "preset", "value": "default" },
+        "card":     { "type": "preset", "value": "default" },
+        "sidebar":  { "type": "color", "value": "#fafbfd" },
+        "decorations": { "type": "preset", "value": "none" },
+        "lyrics":   { "type": "color", "value": "#2ab758" },
+        "scrollbar":{ "type": "color", "value": "#ccd2dc" },
+        "row":      { "type": "preset", "value": "default" }
+      }
+    },
+    "nightVariant": {
+      "slots": {
+        "bg":       { "type": "color", "value": "#0d0f12", "overlay": "transparent", "fadeColor": "#0d0f12" },
+        "accent":   { "type": "color", "value": "#2ab758", "dustColor": "rgba(42,183,88,0.12)" },
+        "font":     { "type": "font", "value": "default" },
+        "player":   { "type": "preset", "value": "default" },
+        "card":     { "type": "preset", "value": "default" },
+        "sidebar":  { "type": "color", "value": "#0d0f12" },
+        "decorations": { "type": "preset", "value": "none" },
+        "lyrics":   { "type": "color", "value": "#2ab758" },
+        "scrollbar":{ "type": "color", "value": "#333845" },
+        "row":      { "type": "preset", "value": "default" }
+      }
+    }
+  }
+]

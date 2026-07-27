@@ -373,6 +373,14 @@
           </div>
         </div>
         <div class="settings-section">
+          <div class="settings-label">主题<span style="font-size:calc(var(--font-size)*0.8);color:var(--text-dim);text-transform:none;font-weight:400">明星主题</span></div>
+          <div class="settings-row" style="align-items:center;gap:10px">
+            <span id="activeThemeName" style="color:var(--accent);font-weight:600">未启用</span>
+            <button class="btn sm" id="chooseThemeBtn">选择主题</button>
+          </div>
+          <div class="settings-hint" style="margin-top:4px">激活主题后，配色和字体由主题控制</div>
+        </div>
+        <div class="settings-section">
           <div class="settings-label">配色方案</div>
           <div class="settings-row theme-options">
             <button class="theme-opt" data-theme="system">跟随系统</button>
@@ -595,6 +603,23 @@
       </div>
       <div class="prompt-actions" style="margin-top:16px;justify-content:center">
         <button class="btn sm" id="donateClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主题选择器弹窗 -->
+  <div class="modal-mask" id="themeSelectorModal">
+    <div class="modal settings-modal" style="max-width:640px">
+      <button class="modal-close" id="themeSelectorClose">✕</button>
+      <div class="modal-content">
+      <h3>选择主题</h3>
+      <div class="theme-selector-grid" id="themeSelectorGrid"></div>
+      <div class="prompt-actions" style="margin-top:16px;gap:8px">
+        <button class="btn sm" id="themeDeactivateBtn" style="background:var(--danger);color:#fff">取消主题</button>
+        <div style="flex:1"></div>
+        <button class="btn sm" id="themeCancelBtn">关闭</button>
+        <button class="btn sm green" id="themeApplyBtn">应用</button>
+      </div>
       </div>
     </div>
   </div>
