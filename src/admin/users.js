@@ -7,16 +7,26 @@ import { state } from '../state.js';
 let currentRole = 'viewer';
 let activeView = 'active'; // 'active' | 'archived'
 let currentPage = 1;
+let detailUserId = null; // 非 null 时显示用户详情页
+
+function fmtDur(sec) {
+  if (!sec || sec <= 0) return '-';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
 
 export async function renderUsers(container, role) {
   currentRole = role;
   activeView = 'active';
   currentPage = 1;
+  detailUserId = null;
   ensureNotesModal();
   container.innerHTML = `
     <div class="admin-section">
       <h2 class="admin-section-title">用户管理</h2>
-      <div class="admin-tabs">
+      <div class="admin-tabs" id="adminUserTabs">
         <button class="admin-tab-btn active" data-view="active">活跃用户</button>
         ${currentRole === 'super_admin' ? '<button class="admin-tab-btn" data-view="archived">归档用户</button>' : ''}
       </div>
@@ -31,6 +41,7 @@ export async function renderUsers(container, role) {
       btn.classList.add('active');
       activeView = btn.dataset.view;
       currentPage = 1;
+      detailUserId = null;
       loadPage(1);
     };
   });
@@ -80,6 +91,11 @@ function ensureNotesModal() {
 
 async function loadPage(page) {
   try {
+    if (detailUserId) {
+      // 显示用户详情
+      await loadUserDetail(detailUserId);
+      return;
+    }
     if (activeView === 'archived') {
       const { users } = await api('/admin/archived-users');
       renderArchivedUsers(users);
@@ -100,14 +116,16 @@ function renderActiveUsers(data) {
   list.innerHTML = `
     <table class="admin-table">
       <thead><tr>
-        <th>用户名</th><th>角色</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>备注</th><th>操作</th>
+        <th>用户名</th><th>角色</th><th>状态</th><th>近30天播放</th><th>播放次数</th><th>注册时间</th><th>最近登录</th><th>备注</th><th>操作</th>
       </tr></thead>
       <tbody>
         ${data.users.map((u) => `
           <tr>
-            <td><strong>${esc(u.username)}</strong></td>
+            <td><a class="user-detail-link" data-action="detail" data-id="${u.id}" data-username="${esc(u.username)}"><strong>${esc(u.username)}</strong></a></td>
             <td><span class="admin-badge badge-${u.role}">${roleLabel(u.role)}</span></td>
             <td><span class="admin-badge badge-${u.status}">${statusLabel(u.status)}</span></td>
+            <td>${fmtDur(u.total_sec_30d)}</td>
+            <td>${u.play_count_30d || 0}</td>
             <td>${fmtTime(u.created_at)}</td>
             <td>${fmtTime(u.last_login_at)}</td>
             <td class="admin-notes-cell${canEdit ? ' clickable' : ''}"${u.notes ? ` title="${esc(u.notes)}"` : ''}${canEdit ? ` data-action="notes" data-id="${u.id}" data-username="${esc(u.username)}" data-notes="${esc(u.notes || '')}"` : ''}>
@@ -124,7 +142,7 @@ function renderActiveUsers(data) {
               ` : ''}
             </td>
           </tr>
-        `).join('') || '<tr><td colspan="7" class="empty">暂无用户</td></tr>'}
+        `).join('') || '<tr><td colspan="9" class="empty">暂无用户</td></tr>'}
       </tbody>
     </table>
   `;
@@ -139,6 +157,14 @@ function renderActiveUsers(data) {
       };
     });
   }
+  // 用户名点击进入详情
+  list.querySelectorAll('.user-detail-link').forEach((link) => {
+    link.onclick = (e) => {
+      e.preventDefault();
+      detailUserId = link.dataset.id;
+      showUserDetailView(link.dataset.id, link.dataset.username);
+    };
+  });
 }
 
 function renderArchivedUsers(users) {
@@ -253,6 +279,115 @@ function bindActions(container) {
       }
     };
   });
+}
+
+// ============ 用户使用数据详情页 ============
+
+async function loadUserDetail(userId) {
+  const list = document.getElementById('adminUserList');
+  const pg = document.getElementById('adminUserPagination');
+  list.innerHTML = '<div class="loading">加载中...</div>';
+  if (pg) pg.innerHTML = '';
+
+  try {
+    const stats = await api(`/admin/users/${userId}/stats`);
+    renderUserDetail(stats);
+  } catch (e) {
+    list.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+function showUserDetailView(userId, username) {
+  // 隐藏子 tab 和分页
+  const tabs = document.getElementById('adminUserTabs');
+  if (tabs) tabs.style.display = 'none';
+  const pg = document.getElementById('adminUserPagination');
+  if (pg) pg.innerHTML = '';
+
+  loadUserDetail(userId);
+}
+
+function renderUserDetail(data) {
+  const list = document.getElementById('adminUserList');
+  const r = data.recent30d;
+  const a = data.allTime;
+
+  // 趋势柱状图：计算最大值为 100%
+  const maxSec = Math.max(1, ...data.trend.map((d) => d.sec || 0));
+
+  list.innerHTML = `
+    <div class="user-detail">
+      <div class="user-detail-header">
+        <button class="user-detail-back" id="userDetailBack">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          返回用户列表
+        </button>
+        <h2 class="user-detail-name">${esc(data.username)} 的使用数据</h2>
+      </div>
+
+      <div class="user-detail-section">
+        <h3 class="user-detail-section-title">近 30 天概览</h3>
+        <div class="admin-cards">
+          <div class="admin-card">
+            <div class="admin-card-value">${fmtDur(r.totalSec)}</div>
+            <div class="admin-card-label">播放时长</div>
+          </div>
+          <div class="admin-card">
+            <div class="admin-card-value">${r.playCount}</div>
+            <div class="admin-card-label">播放次数</div>
+          </div>
+          <div class="admin-card">
+            <div class="admin-card-value">${r.activeDays}</div>
+            <div class="admin-card-label">活跃天数</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="user-detail-section">
+        <h3 class="user-detail-section-title">全部历史</h3>
+        <div class="admin-cards">
+          <div class="admin-card">
+            <div class="admin-card-value">${fmtDur(a.totalSec)}</div>
+            <div class="admin-card-label">总播放时长</div>
+          </div>
+          <div class="admin-card">
+            <div class="admin-card-value">${a.playCount}</div>
+            <div class="admin-card-label">总播放次数</div>
+          </div>
+          <div class="admin-card">
+            <div class="admin-card-value">${data.songCount}</div>
+            <div class="admin-card-label">歌曲数</div>
+          </div>
+          <div class="admin-card">
+            <div class="admin-card-value">${data.playlistCount}</div>
+            <div class="admin-card-label">歌单数</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="user-detail-section">
+        <h3 class="user-detail-section-title">近 30 天每日播放趋势</h3>
+        <div class="admin-trend">
+          ${data.trend.map((d) => `
+            <div class="admin-trend-item">
+              <div class="admin-trend-bar" style="height:${Math.max(2, (d.sec || 0) / maxSec * 100)}%"></div>
+              <span class="admin-trend-date">${d.date}</span>
+              <span class="admin-trend-val">${d.sec ? Math.round(d.sec / 60) + '分' : '0'}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 返回按钮
+  document.getElementById('userDetailBack').onclick = () => {
+    detailUserId = null;
+    const tabs = document.getElementById('adminUserTabs');
+    if (tabs) tabs.style.display = '';
+    currentPage = 1;
+    loadPage(1);
+  };
 }
 
 function roleLabel(r) {

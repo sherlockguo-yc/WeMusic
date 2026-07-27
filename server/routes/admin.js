@@ -20,6 +20,12 @@ const stmt = {
   roleLookup: db.prepare('SELECT role FROM users WHERE id = ?'),
   userById: db.prepare('SELECT * FROM users WHERE id = ?'),
   userByUsername: db.prepare('SELECT id, username, role, archived_at FROM users WHERE username = ?'),
+  userPlayStats30d: db.prepare('SELECT COUNT(*) AS play_count_30d, COALESCE(SUM(played_sec), 0) AS total_sec_30d FROM play_logs WHERE user_id = ? AND played_at >= ?'),
+  userPlayAllTime: db.prepare('SELECT COUNT(*) AS play_count, COALESCE(SUM(played_sec), 0) AS total_sec FROM play_logs WHERE user_id = ?'),
+  userPlayTrend: db.prepare('SELECT COALESCE(SUM(played_sec), 0) AS sec, COUNT(*) AS cnt FROM play_logs WHERE user_id = ? AND played_at >= ? AND played_at < ?'),
+  userActiveDays: db.prepare("SELECT COUNT(DISTINCT DATE(played_at / 1000, 'unixepoch')) AS cnt FROM play_logs WHERE user_id = ? AND played_at >= ?"),
+  userSongCount: db.prepare('SELECT COUNT(*) AS cnt FROM songs s JOIN playlists pl ON s.playlist_id = pl.id WHERE pl.user_id = ?'),
+  userPlaylistCount: db.prepare('SELECT COUNT(*) AS cnt FROM playlists WHERE user_id = ?'),
   archiveUser: db.prepare("UPDATE users SET archived_at = ?, status = 'banned' WHERE id = ?"),
   restoreUser: db.prepare("UPDATE users SET archived_at = NULL, status = 'active' WHERE id = ?"),
   updateRole: db.prepare('UPDATE users SET role = ? WHERE id = ?'),
@@ -96,6 +102,26 @@ router.get('/users', requireRole('moderator'), (req, res) => {
     FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?
   `).all(...params, Number(limit), offset);
 
+  // 批量查询近 30 天播放统计
+  if (rows.length > 0) {
+    const thirtyDaysAgo = Date.now() - 30 * 86400000;
+    const userIds = rows.map((u) => u.id);
+    const placeholders = userIds.map(() => '?').join(',');
+    const statsRows = db.prepare(`
+      SELECT user_id, COUNT(*) AS play_count_30d, COALESCE(SUM(played_sec), 0) AS total_sec_30d
+      FROM play_logs WHERE user_id IN (${placeholders}) AND played_at >= ?
+      GROUP BY user_id
+    `).all(...userIds, thirtyDaysAgo);
+    const statsMap = Object.fromEntries(statsRows.map((r) => [r.user_id, r]));
+    rows.forEach((u) => {
+      const s = statsMap[u.id] || { play_count_30d: 0, total_sec_30d: 0 };
+      u.play_count_30d = s.play_count_30d;
+      u.total_sec_30d = s.total_sec_30d;
+    });
+  } else {
+    rows.forEach((u) => { u.play_count_30d = 0; u.total_sec_30d = 0; });
+  }
+
   res.json({ users: rows, total, page: Number(page), limit: Number(limit) });
 });
 
@@ -108,6 +134,45 @@ router.get('/users/:id', requireRole('moderator'), (req, res) => {
   const songCount = db.prepare('SELECT COUNT(*) AS cnt FROM songs s JOIN playlists pl ON s.playlist_id = pl.id WHERE pl.user_id = ?').get(user.id).cnt;
   const playlistCount = db.prepare('SELECT COUNT(*) AS cnt FROM playlists WHERE user_id = ?').get(user.id).cnt;
   res.json({ id: user.id, username: user.username, role: user.role, status: user.status, archived_at: user.archived_at, created_at: user.created_at, last_login_at: user.last_login_at, notes: user.notes || '', playCount, totalSec, songCount, playlistCount });
+});
+
+// 用户使用数据详情
+router.get('/users/:id/stats', requireRole('moderator'), (req, res) => {
+  const user = stmt.userById.get(req.params.id);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+
+  const thirtyDaysAgo = Date.now() - 30 * 86400000;
+
+  const stats30d = stmt.userPlayStats30d.get(req.params.id, thirtyDaysAgo);
+  const statsAll = stmt.userPlayAllTime.get(req.params.id);
+  const activeDays = stmt.userActiveDays.get(req.params.id, thirtyDaysAgo);
+  const songCount = stmt.userSongCount.get(req.params.id).cnt;
+  const playlistCount = stmt.userPlaylistCount.get(req.params.id).cnt;
+
+  // 近 30 天每日播放趋势
+  const trend = [];
+  for (let i = 29; i >= 0; i--) {
+    const start = Date.now() - (i + 1) * 86400000;
+    const end = Date.now() - i * 86400000;
+    const row = stmt.userPlayTrend.get(req.params.id, start, end);
+    trend.push({ date: new Date(end).toISOString().slice(5, 10), sec: row.sec, playCount: row.cnt });
+  }
+
+  res.json({
+    username: user.username,
+    recent30d: {
+      playCount: stats30d.play_count_30d,
+      totalSec: stats30d.total_sec_30d,
+      activeDays: activeDays.cnt,
+    },
+    allTime: {
+      playCount: statsAll.play_count,
+      totalSec: statsAll.total_sec,
+    },
+    trend,
+    songCount,
+    playlistCount,
+  });
 });
 
 // 修改用户角色（已归档用户不可修改）
