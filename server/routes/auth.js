@@ -31,10 +31,11 @@ router.post('/register', (req, res) => {
   if (exists) {
     return res.status(409).json({ error: '用户名已存在' });
   }
+  const now = Date.now();
   const hash = bcrypt.hashSync(String(password), 12); // cost=12，比 10 更安全
   const info = db
-    .prepare('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)')
-    .run(username, hash, Date.now());
+    .prepare('INSERT INTO users (username, password_hash, created_at, last_login_at) VALUES (?, ?, ?, ?)')
+    .run(username, hash, now, now);
   const userId = info.lastInsertRowid;
   db.prepare('INSERT INTO playlists (user_id, name, created_at) VALUES (?, ?, ?)').run(
     userId, '我喜欢的音乐', Date.now()
