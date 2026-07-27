@@ -267,6 +267,8 @@
 
 .admin-action-btn.restore:hover { border-color: var(--accent); color: var(--accent); }
 
+.admin-action-btn.notes.has-notes { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
+
 /* ---- 标签 ---- */
 .admin-badge {
   display: inline-block;

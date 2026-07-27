@@ -24,6 +24,7 @@ const stmt = {
   restoreUser: db.prepare("UPDATE users SET archived_at = NULL, status = 'active' WHERE id = ?"),
   updateRole: db.prepare('UPDATE users SET role = ? WHERE id = ?'),
   updateStatus: db.prepare('UPDATE users SET status = ? WHERE id = ?'),
+  updateNotes: db.prepare('UPDATE users SET notes = ? WHERE id = ?'),
   deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
   archivedUsers: db.prepare('SELECT id, username, status, archived_at, created_at FROM users WHERE archived_at IS NOT NULL ORDER BY archived_at DESC'),
   feedbackTotal: db.prepare('SELECT COUNT(*) AS cnt FROM feedback'),
@@ -91,7 +92,7 @@ router.get('/users', requireRole('moderator'), (req, res) => {
 
   const total = db.prepare(`SELECT COUNT(*) AS cnt FROM users ${where}`).get(...params).cnt;
   const rows = db.prepare(`
-    SELECT id, username, role, status, archived_at, created_at, last_login_at, avatar
+    SELECT id, username, role, status, archived_at, created_at, last_login_at, avatar, notes
     FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?
   `).all(...params, Number(limit), offset);
 
@@ -106,7 +107,7 @@ router.get('/users/:id', requireRole('moderator'), (req, res) => {
   const totalSec = db.prepare('SELECT SUM(played_sec) AS sec FROM play_logs WHERE user_id = ?').get(user.id).sec || 0;
   const songCount = db.prepare('SELECT COUNT(*) AS cnt FROM songs s JOIN playlists pl ON s.playlist_id = pl.id WHERE pl.user_id = ?').get(user.id).cnt;
   const playlistCount = db.prepare('SELECT COUNT(*) AS cnt FROM playlists WHERE user_id = ?').get(user.id).cnt;
-  res.json({ id: user.id, username: user.username, role: user.role, status: user.status, archived_at: user.archived_at, created_at: user.created_at, last_login_at: user.last_login_at, playCount, totalSec, songCount, playlistCount });
+  res.json({ id: user.id, username: user.username, role: user.role, status: user.status, archived_at: user.archived_at, created_at: user.created_at, last_login_at: user.last_login_at, notes: user.notes || '', playCount, totalSec, songCount, playlistCount });
 });
 
 // 修改用户角色（已归档用户不可修改）
@@ -150,6 +151,19 @@ router.put('/users/:id/status', requireRole('admin'), (req, res) => {
   stmt.updateStatus.run(status, req.params.id);
   audit('change_status', req.user.username, target.username, JSON.stringify({ status }), req.ip);
   res.json({ ok: true });
+});
+
+// 修改用户备注
+router.put('/users/:id/notes', requireRole('admin'), (req, res) => {
+  const { notes } = req.body;
+  if (typeof notes !== 'string') return res.status(400).json({ error: '备注内容无效' });
+  const target = stmt.userById.get(req.params.id);
+  if (!target) return res.status(404).json({ error: '用户不存在' });
+  if (target.archived_at) return res.status(400).json({ error: '已归档用户不可修改备注' });
+  const trimmed = notes.trim().slice(0, 500);
+  stmt.updateNotes.run(trimmed, req.params.id);
+  audit('update_notes', req.user.username, target.username, JSON.stringify({ notes: trimmed }), req.ip);
+  res.json({ ok: true, notes: trimmed });
 });
 
 // 获取归档用户列表

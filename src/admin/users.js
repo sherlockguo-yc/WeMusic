@@ -12,6 +12,7 @@ export async function renderUsers(container, role) {
   currentRole = role;
   activeView = 'active';
   currentPage = 1;
+  ensureNotesModal();
   container.innerHTML = `
     <div class="admin-section">
       <h2 class="admin-section-title">用户管理</h2>
@@ -35,6 +36,34 @@ export async function renderUsers(container, role) {
   });
 
   loadPage(1);
+}
+
+// 确保备注编辑弹窗已存在于 DOM
+let notesModalEl = null;
+function ensureNotesModal() {
+  if (notesModalEl) return;
+  notesModalEl = document.createElement('div');
+  notesModalEl.id = 'notesModal';
+  notesModalEl.className = 'modal-mask';
+  notesModalEl.style.cssText = 'display:none; z-index: 150;';
+  notesModalEl.innerHTML = `
+    <div class="modal-box" style="max-width:420px;">
+      <h3 id="notesModalTitle">备注</h3>
+      <textarea id="notesInput" style="width:100%; min-height:100px; resize:vertical; padding:8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg); color:var(--text); font:inherit; box-sizing:border-box;" maxlength="500" placeholder="输入备注信息，例如：这是 XX 的朋友 / 张三"></textarea>
+      <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn" id="notesCancel">取消</button>
+        <button class="btn green" id="notesSave">保存</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(notesModalEl);
+
+  notesModalEl.querySelector('#notesCancel').onclick = () => {
+    notesModalEl.style.display = 'none';
+  };
+  notesModalEl.addEventListener('click', (e) => {
+    if (e.target === notesModalEl) notesModalEl.style.display = 'none';
+  });
 }
 
 async function loadPage(page) {
@@ -75,6 +104,7 @@ function renderActiveUsers(data) {
               ${['admin', 'super_admin'].includes(currentRole) ? `
                 <button class="admin-action-btn" data-action="status" data-id="${u.id}" data-username="${esc(u.username)}" data-status="${u.status}">状态</button>
                 <button class="admin-action-btn" data-action="archive" data-id="${u.id}" data-username="${esc(u.username)}">归档</button>
+                <button class="admin-action-btn notes${u.notes ? ' has-notes' : ''}" data-action="notes" data-id="${u.id}" data-username="${esc(u.username)}" data-notes="${esc(u.notes || '')}" title="${u.notes ? esc(u.notes) : '添加备注'}">备注</button>
               ` : ''}
             </td>
           </tr>
@@ -140,6 +170,8 @@ function bindActions(container) {
         await api(`/admin/users/${id}/archive`, { method: 'POST' });
         toast(`已归档 ${username}`);
         loadPage(currentPage);
+      } else if (action === 'notes') {
+        openNotesModal(id, username, btn.dataset.notes || '');
       } else if (action === 'restore') {
         const ok = await uiConfirm(`确认恢复用户「${username}」？`);
         if (!ok) return;
@@ -205,4 +237,26 @@ function roleLabel(r) {
 function statusLabel(s) {
   const map = { active: '正常', warned: '已警告', banned: '已封禁' };
   return map[s] || s;
+}
+
+function openNotesModal(userId, username, currentNotes) {
+  const title = document.getElementById('notesModalTitle');
+  const input = document.getElementById('notesInput');
+  const saveBtn = document.getElementById('notesSave');
+
+  title.textContent = `备注 - ${username}`;
+  input.value = currentNotes;
+  notesModalEl.style.display = 'flex';
+
+  saveBtn.onclick = async () => {
+    const notes = input.value.trim().slice(0, 500);
+    try {
+      await api(`/admin/users/${userId}/notes`, { method: 'PUT', body: { notes } });
+      notesModalEl.style.display = 'none';
+      toast(notes ? `已保存「${username}」的备注` : `已清除「${username}」的备注`);
+      loadPage(currentPage);
+    } catch (e) {
+      toast(e.message || '保存失败');
+    }
+  };
 }

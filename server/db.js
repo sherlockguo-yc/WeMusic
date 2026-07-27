@@ -200,6 +200,9 @@ if (!userCols.includes('archived_at')) {
 if (!userCols.includes('status')) {
   db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
 }
+if (!userCols.includes('notes')) {
+  db.exec("ALTER TABLE users ADD COLUMN notes TEXT DEFAULT ''");
+}
 
 // blocked_sources 展示元信息（name/artist/source_label）— 之前只存了 source_id，
 // 旧数据回显为 raw id；重新屏蔽一次或服务端补齐后即可用元信息显示
