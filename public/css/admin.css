@@ -269,6 +269,107 @@
 
 .admin-action-btn.notes.has-notes { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
 
+/* ---- 备注列 ---- */
+.admin-notes-cell {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(var(--font-size) * 0.88);
+  color: var(--text-dim);
+}
+
+.admin-notes-cell.clickable:hover {
+  color: var(--accent);
+}
+
+.admin-notes-text {
+  color: var(--text);
+}
+
+.admin-notes-empty {
+  color: var(--text-dim);
+  opacity: 0.4;
+}
+
+/* ---- 备注弹窗 ---- */
+.notes-modal-box {
+  max-width: 440px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: calc(var(--radius) * 1.5);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.notes-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notes-modal-header h3 {
+  margin: 0;
+  font-size: calc(var(--font-size) * 1.15);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.notes-char-hint {
+  font-size: calc(var(--font-size) * 0.78);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.notes-textarea {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  padding: 14px 20px;
+  border: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--font-size) * 0.95);
+  line-height: 1.6;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.notes-textarea::placeholder {
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.notes-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.notes-modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-clear {
+  color: var(--text-dim);
+  border-color: transparent;
+  font-size: calc(var(--font-size) * 0.85);
+  padding: 5px 12px;
+}
+
+.btn-clear:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
 /* ---- 标签 ---- */
 .admin-badge {
   display: inline-block;

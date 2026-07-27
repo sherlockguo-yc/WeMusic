@@ -44,25 +44,37 @@ function ensureNotesModal() {
   if (notesModalEl) return;
   notesModalEl = document.createElement('div');
   notesModalEl.id = 'notesModal';
-  notesModalEl.className = 'modal-mask';
+  notesModalEl.className = 'modal-mask notes-modal-mask';
   notesModalEl.style.cssText = 'display:none; z-index: 150;';
   notesModalEl.innerHTML = `
-    <div class="modal-box" style="max-width:420px;">
-      <h3 id="notesModalTitle">备注</h3>
-      <textarea id="notesInput" style="width:100%; min-height:100px; resize:vertical; padding:8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg); color:var(--text); font:inherit; box-sizing:border-box;" maxlength="500" placeholder="输入备注信息，例如：这是 XX 的朋友 / 张三"></textarea>
-      <div class="modal-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
-        <button class="btn" id="notesCancel">取消</button>
-        <button class="btn green" id="notesSave">保存</button>
+    <div class="modal-box notes-modal-box">
+      <div class="notes-modal-header">
+        <h3 id="notesModalTitle">备注</h3>
+        <span class="notes-char-hint" id="notesCharCount">0 / 500</span>
+      </div>
+      <textarea id="notesInput" class="notes-textarea" maxlength="500" placeholder="输入备注信息，例如：这是张三的朋友、XX 部门同事"></textarea>
+      <div class="notes-modal-footer">
+        <button class="btn btn-clear" id="notesClear">清空</button>
+        <div class="notes-modal-actions">
+          <button class="btn" id="notesCancel">取消</button>
+          <button class="btn green" id="notesSave">保存</button>
+        </div>
       </div>
     </div>
   `;
   document.body.appendChild(notesModalEl);
 
-  notesModalEl.querySelector('#notesCancel').onclick = () => {
-    notesModalEl.style.display = 'none';
-  };
+  const cancel = () => { notesModalEl.style.display = 'none'; };
+  notesModalEl.querySelector('#notesCancel').onclick = cancel;
   notesModalEl.addEventListener('click', (e) => {
-    if (e.target === notesModalEl) notesModalEl.style.display = 'none';
+    if (e.target === notesModalEl) cancel();
+  });
+
+  // 字数统计
+  const input = notesModalEl.querySelector('#notesInput');
+  const charCount = notesModalEl.querySelector('#notesCharCount');
+  input.addEventListener('input', () => {
+    charCount.textContent = `${input.value.length} / 500`;
   });
 }
 
@@ -84,10 +96,11 @@ async function loadPage(page) {
 
 function renderActiveUsers(data) {
   const list = document.getElementById('adminUserList');
+  const canEdit = ['admin', 'super_admin'].includes(currentRole);
   list.innerHTML = `
     <table class="admin-table">
       <thead><tr>
-        <th>用户名</th><th>角色</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>操作</th>
+        <th>用户名</th><th>角色</th><th>状态</th><th>注册时间</th><th>最近登录</th><th>备注</th><th>操作</th>
       </tr></thead>
       <tbody>
         ${data.users.map((u) => `
@@ -97,23 +110,35 @@ function renderActiveUsers(data) {
             <td><span class="admin-badge badge-${u.status}">${statusLabel(u.status)}</span></td>
             <td>${fmtTime(u.created_at)}</td>
             <td>${fmtTime(u.last_login_at)}</td>
+            <td class="admin-notes-cell${canEdit ? ' clickable' : ''}"${u.notes ? ` title="${esc(u.notes)}"` : ''}${canEdit ? ` data-action="notes" data-id="${u.id}" data-username="${esc(u.username)}" data-notes="${esc(u.notes || '')}"` : ''}>
+              ${u.notes ? `<span class="admin-notes-text">${esc(u.notes)}</span>` : '<span class="admin-notes-empty">-</span>'}
+            </td>
             <td class="admin-actions">
               ${currentRole !== 'moderator' ? `
                 <button class="admin-action-btn" data-action="role" data-id="${u.id}" data-username="${esc(u.username)}">角色</button>
               ` : ''}
-              ${['admin', 'super_admin'].includes(currentRole) ? `
+              ${canEdit ? `
                 <button class="admin-action-btn" data-action="status" data-id="${u.id}" data-username="${esc(u.username)}" data-status="${u.status}">状态</button>
-                <button class="admin-action-btn" data-action="archive" data-id="${u.id}" data-username="${esc(u.username)}">归档</button>
                 <button class="admin-action-btn notes${u.notes ? ' has-notes' : ''}" data-action="notes" data-id="${u.id}" data-username="${esc(u.username)}" data-notes="${esc(u.notes || '')}" title="${u.notes ? esc(u.notes) : '添加备注'}">备注</button>
+                <button class="admin-action-btn" data-action="archive" data-id="${u.id}" data-username="${esc(u.username)}">归档</button>
               ` : ''}
             </td>
           </tr>
-        `).join('') || '<tr><td colspan="6" class="empty">暂无用户</td></tr>'}
+        `).join('') || '<tr><td colspan="7" class="empty">暂无用户</td></tr>'}
       </tbody>
     </table>
   `;
 
   bindActions(list);
+  // 备注列可点击（admin+）
+  if (canEdit) {
+    list.querySelectorAll('.admin-notes-cell.clickable').forEach((cell) => {
+      cell.style.cursor = 'pointer';
+      cell.onclick = () => {
+        openNotesModal(cell.dataset.id, cell.dataset.username, cell.dataset.notes || '');
+      };
+    });
+  }
 }
 
 function renderArchivedUsers(users) {
@@ -243,12 +268,16 @@ function openNotesModal(userId, username, currentNotes) {
   const title = document.getElementById('notesModalTitle');
   const input = document.getElementById('notesInput');
   const saveBtn = document.getElementById('notesSave');
+  const clearBtn = document.getElementById('notesClear');
+  const charCount = document.getElementById('notesCharCount');
 
   title.textContent = `备注 - ${username}`;
   input.value = currentNotes;
+  charCount.textContent = `${currentNotes.length} / 500`;
   notesModalEl.style.display = 'flex';
+  input.focus();
 
-  saveBtn.onclick = async () => {
+  const doSave = async () => {
     const notes = input.value.trim().slice(0, 500);
     try {
       await api(`/admin/users/${userId}/notes`, { method: 'PUT', body: { notes } });
@@ -257,6 +286,21 @@ function openNotesModal(userId, username, currentNotes) {
       loadPage(currentPage);
     } catch (e) {
       toast(e.message || '保存失败');
+    }
+  };
+
+  saveBtn.onclick = doSave;
+  clearBtn.onclick = () => {
+    input.value = '';
+    charCount.textContent = '0 / 500';
+    input.focus();
+  };
+
+  // Enter 保存（Ctrl+Enter 换行）
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      doSave();
     }
   };
 }
