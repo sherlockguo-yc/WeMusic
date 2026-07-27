@@ -342,6 +342,8 @@ export function stopPlayback() {
   destroyVideo();
   setStatus('已停止');
   document.title = 'WeMusic · 个人音乐';
+  $('playPauseBtn').innerHTML = PLAY_ICON;
+  $('playPauseBtn').title = '播放';
 }
 
 // 更新当前播放歌曲的 UI（歌名、封面、进度条等），供 playCurrent 和 autoAdvance 共用

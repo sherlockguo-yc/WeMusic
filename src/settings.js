@@ -58,13 +58,23 @@ export function applyThemeSlots(slots) {
     const bg = slots.bg;
     if (bg.type === 'image' && bg.value) {
       root.style.setProperty('--theme-bg-image', `url(${bg.value})`);
+      if (bg.overlay) {
+        root.style.setProperty('--theme-bg-overlay', bg.overlay);
+      } else {
+        // 亮度自适应：未显式指定 overlay，自动采样图片亮度计算遮罩
+        const isLight = document.body.classList.contains('light');
+        _getImageBrightness(bg.value).then((brightness) => {
+          root.style.setProperty('--theme-bg-overlay', _computeAutoOverlay(brightness, isLight));
+        });
+      }
     } else if (bg.type === 'gradient' && bg.value) {
       root.style.setProperty('--theme-bg-image', bg.value);
+      root.style.setProperty('--theme-bg-overlay', bg.overlay || 'transparent');
     } else {
       root.style.setProperty('--theme-bg-image', 'none');
+      root.style.setProperty('--theme-bg-overlay', bg.overlay || 'transparent');
     }
-    root.style.setProperty('--theme-bg-overlay', bg.overlay || 'transparent');
-    // 渐变融合色：取强调色或底色
+    // 渐变融合色
     const fadeColor = bg.fadeColor || getComputedStyle(root).getPropertyValue('--bg').trim();
     root.style.setProperty('--theme-bg-fade-color', fadeColor);
   }
@@ -132,20 +142,65 @@ export function applyThemeSlots(slots) {
   }
 }
 
+// ---- 亮度自适应检测 ----
+
+/** Canvas 采样图片平均亮度（0-255） */
+function _getImageBrightness(imageUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const scale = Math.min(1, 50 / Math.min(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      let sum = 0, count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        count++;
+      }
+      resolve(sum / count);
+    };
+    img.onerror = () => resolve(128); // 加载失败 → 中等亮度兜底
+    img.src = imageUrl;
+  });
+}
+
+/** 根据图片亮度和当前深浅色模式自动计算遮罩透明度 */
+function _computeAutoOverlay(brightness, isLightMode) {
+  if (isLightMode) {
+    if (brightness > 170) return 'rgba(255,255,255,0.05)';
+    if (brightness >= 85) return 'rgba(255,255,255,0.1)';
+    return 'rgba(255,255,255,0.2)';
+  } else {
+    // 深色模式
+    if (brightness > 170) return 'rgba(0,0,0,0.7)';
+    if (brightness >= 85) return 'rgba(0,0,0,0.5)';
+    return 'rgba(0,0,0,0.3)';
+  }
+}
+
 /** 激活主题：设置 data-theme 并应用 Slot */
 export function activateTheme(themeId) {
   if (!themeId) { deactivateTheme(); return; }
   document.body.setAttribute('data-theme', themeId);
-  // Phase 1：从 localStorage 读取硬编码测试数据
+  // Phase 1：从硬编码测试数据加载 Slot
   // Phase 2 后改为从 API / 预设数据加载
   const testSlots = _getTestSlots();
   applyThemeSlots(testSlots);
+  // 持久化当前激活主题
+  localStorage.setItem('wemusic_activeTheme', themeId);
 }
 
 /** 取消主题：移除 data-theme，恢复独立设置 */
 export function deactivateTheme() {
   document.body.removeAttribute('data-theme');
   document.body.removeAttribute('data-decorations');
+  localStorage.removeItem('wemusic_activeTheme');
   const root = document.documentElement;
   // 清除主题变量，回退到 :root 默认值
   [
