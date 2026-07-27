@@ -26,6 +26,14 @@ export function openAdminPanel(initialTab = 'overview') {
   const main = $('main');
   document.body.classList.add('admin-view');
 
+  // 管理面板不适用主题：保存并移除
+  const themeId = document.body.getAttribute('data-theme');
+  const deco = document.body.getAttribute('data-decorations');
+  if (themeId) document.body.setAttribute('data-saved-theme', themeId);
+  if (deco) document.body.setAttribute('data-saved-decorations', deco);
+  document.body.removeAttribute('data-theme');
+  document.body.removeAttribute('data-decorations');
+
   main.innerHTML = `
     <div class="admin-layout">
       <nav class="admin-sidebar">
@@ -49,6 +57,13 @@ export function openAdminPanel(initialTab = 'overview') {
   // 返回主站
   $('adminBackBtn').onclick = () => {
     document.body.classList.remove('admin-view');
+    // 恢复管理面板进入前保存的主题
+    const savedTheme = document.body.getAttribute('data-saved-theme');
+    const savedDeco = document.body.getAttribute('data-saved-decorations');
+    document.body.removeAttribute('data-saved-theme');
+    document.body.removeAttribute('data-saved-decorations');
+    if (savedTheme) document.body.setAttribute('data-theme', savedTheme);
+    if (savedDeco) document.body.setAttribute('data-decorations', savedDeco);
     cachedRole = null;
     cleanupCurrentTab();
     history.pushState({ view: 'discover' }, '', '/');

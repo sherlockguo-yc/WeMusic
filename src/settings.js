@@ -953,6 +953,13 @@ function setupCustomColorEditor() {
 export async function openSettings() {
   hideColorEditor();
   _updateThemeLabel();
+
+  // 主题激活时灰掉独立配色/字体设置
+  const themeActive = document.body.hasAttribute('data-theme');
+  ['paletteSection', 'fontSection'].forEach((id) => {
+    const el = $(id); if (el) el.classList.toggle('theme-controlled', themeActive);
+  });
+
   $('settingsUser').textContent = Auth.user?.username || '';
   renderAvatar(Auth.user?.avatar || null);
   const avatarPreview = $('avatarPreview');

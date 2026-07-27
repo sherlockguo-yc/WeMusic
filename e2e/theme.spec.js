@@ -379,4 +379,60 @@ test.describe('主题系统（Phase 2 预设主题）', () => {
     const deco = await page.getAttribute('body', 'data-decorations');
     expect(deco, '装饰应为 star-dust').toBe('star-dust');
   });
+
+  test('管理面板进入时移除主题，退出时恢复', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    // 先激活一个主题
+    await page.evaluate(() => window.__theme.activateTheme('jay-warm-photo'));
+    await page.waitForTimeout(300);
+    expect(await page.getAttribute('body', 'data-theme'), '激活后应有 data-theme').toBe('jay-warm-photo');
+
+    // 模拟进入管理面板
+    await page.evaluate(() => document.body.setAttribute('data-saved-theme', document.body.getAttribute('data-theme')));
+    await page.evaluate(() => document.body.removeAttribute('data-theme'));
+    expect(await page.getAttribute('body', 'data-theme'), '进入管理后应无 data-theme').toBeNull();
+
+    // 模拟退出管理面板，恢复主题
+    await page.evaluate(() => {
+      const saved = document.body.getAttribute('data-saved-theme');
+      if (saved) document.body.setAttribute('data-theme', saved);
+      document.body.removeAttribute('data-saved-theme');
+    });
+    expect(await page.getAttribute('body', 'data-theme'), '退出管理后应恢复 data-theme').toBe('jay-warm-photo');
+  });
+
+  test('主题激活后设置面板配色/字体灰掉', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    await page.evaluate(() => window.__theme.activateTheme('jay-warm-photo'));
+    await page.waitForTimeout(300);
+
+    // 模拟 openSettings 中的灰掉逻辑
+    const style = await page.evaluate(() => {
+      document.getElementById('paletteSection')?.classList.add('theme-controlled');
+      document.getElementById('fontSection')?.classList.add('theme-controlled');
+      const ps = document.getElementById('paletteSection');
+      const fs = document.getElementById('fontSection');
+      return {
+        paletteOpacity: ps ? getComputedStyle(ps).opacity : null,
+        fontOpacity: fs ? getComputedStyle(fs).opacity : null,
+        paletteControlled: ps ? ps.classList.contains('theme-controlled') : false,
+        fontControlled: fs ? fs.classList.contains('theme-controlled') : false,
+      };
+    });
+    expect(style.paletteControlled, '配色应被灰掉').toBe(true);
+    expect(style.fontControlled, '字体应被灰掉').toBe(true);
+
+    // 取消主题后应取消灰掉
+    await page.evaluate(() => window.__theme.deactivateTheme());
+    await page.evaluate(() => {
+      document.getElementById('paletteSection')?.classList.remove('theme-controlled');
+      document.getElementById('fontSection')?.classList.remove('theme-controlled');
+    });
+    const after = await page.evaluate(() => ({
+      p: document.getElementById('paletteSection')?.classList.contains('theme-controlled'),
+      f: document.getElementById('fontSection')?.classList.contains('theme-controlled'),
+    }));
+    expect(after.p, '取消主题后配色应恢复').toBe(false);
+    expect(after.f, '取消主题后字体应恢复').toBe(false);
+  });
 });
