@@ -162,4 +162,95 @@ test.describe('主题系统（Phase 1 冒烟测试）', () => {
     await page.waitForTimeout(100);
     await page.screenshot({ path: 'generated-images/e2e-theme-active-hover.png', clip: { x: 20, y: 200, width: 400, height: 44 } });
   });
+
+  test('activeTheme 持久化：激活后 reload，主题仍生效', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    // 先确保之前没有残留的主题
+    await page.evaluate(() => { localStorage.removeItem('wemusic_activeTheme'); });
+
+    // 激活主题（此时会写入 localStorage）
+    await page.evaluate(() => window.__theme.activateTheme('test'));
+    await page.waitForTimeout(200);
+
+    // 确认 localStorage 已写入
+    const saved = await page.evaluate(() => localStorage.getItem('wemusic_activeTheme'));
+    expect(saved, 'localStorage 应保存 activeTheme').toBe('test');
+
+    // 重新加载页面（模拟关闭浏览器再打开）
+    await page.reload();
+    await page.waitForFunction(
+      () => window.__theme && typeof window.__theme.activateTheme === 'function',
+      null,
+      { timeout: 20000 }
+    );
+    await page.waitForTimeout(300);
+
+    // 启动自激活应恢复主题
+    const dt = await page.getAttribute('body', 'data-theme');
+    expect(dt, 'reload 后 body[data-theme] 应为 test').toBe('test');
+
+    const accent = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    );
+    expect(accent.toLowerCase(), 'reload 后强调色应仍为测试粉 #FF6B9D').toBe('#ff6b9d');
+  });
+
+  test('Decorations：激活主题后 star-dust 装饰生效', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    await page.evaluate(() => window.__theme.activateTheme('test'));
+
+    // 验证 data-decorations 属性已设置
+    const deco = await page.getAttribute('body', 'data-decorations');
+    expect(deco, 'body[data-decorations] 应为 star-dust').toBe('star-dust');
+
+    // 验证 ::before 伪元素有 twinkle 动画（通过 getComputedStyle 检查 animation 属性）
+    const hasAnim = await page.evaluate(() => {
+      const style = getComputedStyle(document.body, '::before');
+      return style.animationName !== 'none' && style.animationName.includes('twinkle');
+    });
+    expect(hasAnim, '::before 伪元素应应用 twinkle 动画').toBe(true);
+
+    // 验证 dust-color CSS 变量已设置
+    const dustColor = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--theme-dust-color').trim()
+    );
+    expect(dustColor, '--theme-dust-color 应不为空').toBeTruthy();
+  });
+
+  test('Decorations 清除：取消主题后 data-decorations 移除', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    await page.evaluate(() => window.__theme.activateTheme('test'));
+    await page.waitForTimeout(100);
+
+    // 确认存在
+    let hasDeco = await page.evaluate(() => document.body.hasAttribute('data-decorations'));
+    expect(hasDeco, '激活后应有 data-decorations').toBe(true);
+
+    // 取消主题
+    await page.evaluate(() => window.__theme.deactivateTheme());
+    await page.waitForTimeout(100);
+
+    hasDeco = await page.evaluate(() => document.body.hasAttribute('data-decorations'));
+    expect(hasDeco, '取消后不应有 data-decorations').toBe(false);
+
+    // activeTheme 也应清除
+    const saved = await page.evaluate(() => localStorage.getItem('wemusic_activeTheme'));
+    expect(saved, '取消后 localStorage 应无 activeTheme').toBeNull();
+  });
+
+  test('Decorations 截图：star-dust / music-notes-corner / vinyl-record / wave-bottom', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+
+    const decorations = ['star-dust', 'music-notes-corner', 'vinyl-record', 'wave-bottom'];
+    for (const deco of decorations) {
+      // 直接用 applyThemeSlots 修改 decorations 而不用完整 activateTheme
+      await page.evaluate((d) => window.__theme.activateTheme('test'), deco);
+      // 覆盖 decorations：手动设置 data-decorations
+      await page.evaluate((d) => {
+        document.body.setAttribute('data-decorations', d);
+      }, deco);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `generated-images/e2e-deco-${deco}.png`, fullPage: true });
+    }
+  });
 });

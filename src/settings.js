@@ -284,7 +284,7 @@ function _getTestSlots() {
     font:     { type: 'font',  value: 'serif' },
     player:   { type: 'preset', value: 'rounded-cover' },
     sidebar:  { type: 'color', value: '#0f080a' },
-    decorations: { type: 'preset', value: 'none' },
+    decorations: { type: 'preset', value: 'star-dust' },
     scrollbar:{ type: 'color', value: '#553344' },
     // Phase 1：card/row 设为 default（CSS 端尚未真正使用这些变量的细节）
     card:     { type: 'preset', value: 'default' },
@@ -307,6 +307,8 @@ const FONTS = {
 };
 
 export function applyFont(key) {
+  // 主题激活时跳过独立字体设置（主题已接管 --font）
+  if (document.body.hasAttribute('data-theme')) return;
   key = FONTS[key] ? key : 'default';
   document.documentElement.style.setProperty('--font', FONTS[key]);
   document.querySelectorAll('.font-opt').forEach((b) => {
@@ -400,6 +402,8 @@ async function deleteCustomPaletteFromServer(id) {
 }
 
 export function applyPalette(key) {
+  // 主题激活时跳过独立配色设置（主题已接管 --accent）
+  if (document.body.hasAttribute('data-theme')) return;
   const color = getColorByKey(key);
   document.documentElement.style.setProperty('--accent', color);
   // 高亮系统预设色块
@@ -1035,3 +1039,9 @@ export function initSettings() {
     });
   }
 }
+
+// 启动时恢复已保存的主题（Phase 1：仅测试主题 'test' 可用）
+(function () {
+  const saved = localStorage.getItem('wemusic_activeTheme');
+  if (saved) activateTheme(saved);
+})();
