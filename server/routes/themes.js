@@ -9,7 +9,7 @@ const router = Router();
 // GET /api/themes/presets — 返回所有预设主题（元数据 + 预览字段）
 router.get('/presets', (req, res) => {
   try {
-    const presetsPath = path.join(__dirname, '../../data/themes/presets.json');
+    const presetsPath = path.join(__dirname, '../presets.json');
     const raw = fs.readFileSync(presetsPath, 'utf-8');
     const presets = JSON.parse(raw);
 
@@ -50,7 +50,7 @@ router.get('/presets', (req, res) => {
 // GET /api/themes/presets/:id — 返回单个预设主题的全部 slot 配置
 router.get('/presets/:id', (req, res) => {
   try {
-    const presetsPath = path.join(__dirname, '../../data/themes/presets.json');
+    const presetsPath = path.join(__dirname, '../presets.json');
     const raw = fs.readFileSync(presetsPath, 'utf-8');
     const presets = JSON.parse(raw);
     const preset = presets.find((p) => p.id === req.params.id);
