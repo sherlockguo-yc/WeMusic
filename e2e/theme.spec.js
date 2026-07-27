@@ -265,7 +265,7 @@ test.describe('主题系统（Phase 2 预设主题）', () => {
     expect(jay, '应有 jay-warm-photo').toBeTruthy();
     expect(jay.name).toBe('暖粉写真');
     expect(jay.artist).toBe('周杰伦');
-    expect(jay.dayAccent).toBe('#FF8FAB');
+    expect(jay.preview?.dayAccent).toBe('#FF8FAB');
   });
 
   test('API GET /api/themes/presets/:id 返回完整 Slot 配置', async ({ request }) => {

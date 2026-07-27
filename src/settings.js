@@ -349,43 +349,81 @@ async function _renderThemeSelector() {
 
   const grid = $('themeSelectorGrid');
   if (!grid) return;
-  grid.innerHTML = '';
+
+  // 加载中状态
+  if (!_presetsCache || _presetsCache.length === 0) {
+    grid.innerHTML = '<div class="theme-grid-loading">加载中…</div>';
+    return;
+  }
 
   const activeId = localStorage.getItem('wemusic_activeTheme') || '';
+  const isLight = document.body.classList.contains('light');
 
-  _presetsCache.forEach((p) => {
-    const card = document.createElement('div');
-    card.className = 'theme-card' + (p.id === activeId ? ' active' : '');
-    card.dataset.themeId = p.id;
+  grid.innerHTML = _presetsCache.map((p) => {
+    const pv = p.preview || {};
+    const bg = isLight ? (pv.dayBgColor || pv.dayBg) : (pv.nightBgColor || pv.nightBg);
+    const accent = isLight ? pv.dayAccent : pv.nightAccent;
+    const sidebarBg = isLight ? pv.daySidebar : pv.nightSidebar;
+    const textColor = isLight ? pv.dayText : pv.nightText;
+    const rowBg = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.06)';
+    const chromeBg = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.18)';
+    const playerBg = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.15)';
 
-    // 主题色块预览
-    const preview = document.createElement('div');
-    preview.className = 'theme-card-preview';
-    preview.style.background = p.dayAccent
-      ? `linear-gradient(135deg, ${p.nightAccent || p.dayAccent}, ${p.dayAccent})`
-      : 'var(--bg-card)';
+    // 装饰图标映射
+    const decoMap = { 'star-dust': '✦', 'music-notes-corner': '♪', 'vinyl-record': '◉', 'wave-bottom': '~' };
+    const decoIcon = decoMap[p.decorations] || '';
+    const isActive = p.id === activeId;
 
-    const info = document.createElement('div');
-    info.className = 'theme-card-info';
-    info.innerHTML = `<div class="theme-card-name">${escHtml(p.name)}</div>
-      <div class="theme-card-artist">${escHtml(p.artist || '通用主题')}</div>
-      ${p.id === activeId ? '<div class="theme-card-badge">使用中</div>' : ''}`;
+    return `<div class="theme-card${isActive ? ' active' : ''}" data-theme-id="${escHtml(p.id)}"
+        style="
+          --tcard-accent: ${escHtml(accent)};
+          --tcard-row-bg: ${rowBg};
+          --tcard-cover-r: ${escHtml(pv.coverRadius || '3px')};">
+      <div class="tcard-chrome" style="background:${chromeBg}">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+      <div class="tcard-body">
+        <div class="tcard-sidebar" style="background:${escHtml(sidebarBg)}"></div>
+        <div class="tcard-main" style="background:${typeof bg === 'string' && bg.startsWith('linear') ? bg : escHtml(bg)}">
+          <div class="tcard-row" style="background:${rowBg}"></div>
+          <div class="tcard-row short" style="background:${rowBg}"></div>
+          <div class="tcard-row accent" style="background:${escHtml(accent)};opacity:0.5"></div>
+        </div>
+      </div>
+      <div class="tcard-player" style="background:${playerBg}">
+        <div class="tcard-cover" style="background:${escHtml(accent)};border-radius:${escHtml(pv.coverRadius || '3px')}"></div>
+        <div class="tcard-progress"><div style="width:35%;height:100%;border-radius:1.5px;background:${escHtml(accent)}"></div></div>
+      </div>
+      <div class="tcard-footer" style="color:${escHtml(textColor)}">
+        <span class="tcard-name">${escHtml(p.name)}</span>
+        <span class="tcard-artist">${escHtml(p.artist || '通用主题')}</span>
+        ${decoIcon ? `<span class="tcard-deco">${decoIcon}</span>` : ''}
+        ${isActive ? '<span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 5px;border-radius:3px;font-weight:600">使用中</span>' : ''}
+      </div>
+    </div>`;
+  }).join('');
 
-    card.appendChild(preview);
-    card.appendChild(info);
-    card.onclick = () => {
+  // 绑定点击事件：选中卡片
+  grid.querySelectorAll('.theme-card').forEach((card) => {
+    card.addEventListener('click', () => {
       grid.querySelectorAll('.theme-card').forEach((c) => c.classList.remove('active'));
       card.classList.add('active');
-    };
-
-    // 双击直接应用
-    card.ondblclick = () => {
+    });
+    card.addEventListener('dblclick', () => {
       $('themeSelectorModal').classList.remove('show');
       _applySelectedTheme();
-    };
-
-    grid.appendChild(card);
+    });
   });
+}
+
+/** 打开主题选择器（预加载预设避免空网格） */
+export function openThemeSelector() {
+  // 加载中状态先展示
+  const grid = $('themeSelectorGrid');
+  if (grid) grid.innerHTML = '<div class="theme-grid-loading">加载中…</div>';
+  $('themeSelectorModal').classList.add('show');
+  // 预加载并渲染
+  _renderThemeSelector();
 }
 
 function escHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -407,11 +445,6 @@ async function _applySelectedTheme() {
   toast(`已应用「${themeName}」`);
 }
 
-/** 打开主题选择器 */
-export function openThemeSelector() {
-  $('themeSelectorModal').classList.add('show');
-  _renderThemeSelector();
-}
 
 // ---- 主题 ----
 const mq = window.matchMedia('(prefers-color-scheme: light)');

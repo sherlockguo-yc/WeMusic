@@ -6,23 +6,39 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = Router();
 
-// GET /api/themes/presets — 返回所有预设主题（不含 dayVariant/nightVariant 完整细节，仅元数据）
+// GET /api/themes/presets — 返回所有预设主题（元数据 + 预览字段）
 router.get('/presets', (req, res) => {
   try {
     const presetsPath = path.join(__dirname, '../../data/themes/presets.json');
     const raw = fs.readFileSync(presetsPath, 'utf-8');
     const presets = JSON.parse(raw);
 
-    // 只暴露元数据（不返回完整 slot 配置，减小响应体）
-    const meta = presets.map((p) => ({
-      id: p.id,
-      name: p.name,
-      artist: p.artist,
-      artistNames: p.artistNames,
-      dayAccent: p.dayVariant?.slots?.accent?.value || null,
-      nightAccent: p.nightVariant?.slots?.accent?.value || null,
-      decorations: p.dayVariant?.slots?.decorations?.value || 'none',
-    }));
+    const meta = presets.map((p) => {
+      const ds = p.dayVariant?.slots || {};
+      const ns = p.nightVariant?.slots || {};
+      return {
+        id: p.id,
+        name: p.name,
+        artist: p.artist,
+        artistNames: p.artistNames,
+        decorations: ds.decorations?.value || 'none',
+        // 预览字段：足够渲染微型 UI 预览卡片
+        preview: {
+          dayBg: ds.bg?.type === 'gradient' ? ds.bg.value : (ds.bg?.value || '#f4f6f9'),
+          nightBg: ns.bg?.type === 'gradient' ? ns.bg.value : (ns.bg?.value || '#0d0f12'),
+          dayBgColor: ds.bg?.type === 'color' ? ds.bg.value : null,
+          nightBgColor: ns.bg?.type === 'color' ? ns.bg.value : null,
+          dayAccent: ds.accent?.value || '#2ab758',
+          nightAccent: ns.accent?.value || '#2ab758',
+          daySidebar: (ds.sidebar?.value || '#fafbfd'),
+          nightSidebar: (ns.sidebar?.value || '#0d0f12'),
+          dayText: '#1b1d22',
+          nightText: '#e0e3e8',
+          coverRadius: ds.player?.value === 'pill-cover' ? '50%' : (ds.player?.value === 'rounded-cover' ? '12px' : '6px'),
+          cardPreset: ds.card?.value || 'default',
+        },
+      };
+    });
 
     res.json({ presets: meta });
   } catch (err) {

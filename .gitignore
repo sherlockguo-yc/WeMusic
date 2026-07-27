@@ -2,6 +2,7 @@ node_modules/
 *.log
 .env
 data/
+!data/themes/
 *.sqlite
 *.sqlite3
 .DS_Store
