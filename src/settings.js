@@ -308,6 +308,9 @@ export async function activateTheme(themeId) {
   if (!slots) slots = _getTestSlots();
 
   applyThemeSlots(slots);
+  // 重播背景层淡入动画
+  const layer = document.querySelector('.theme-bg-layer');
+  if (layer) { layer.style.animation = 'none'; layer.offsetHeight; layer.style.animation = ''; }
   localStorage.setItem('wemusic_activeTheme', themeId);
   // 更新设置面板中的主题名称显示
   _updateThemeLabel();
@@ -497,7 +500,8 @@ async function _renderThemeSelector() {
     const decoIcon = decoMap[p.decorations] || '';
     const isActive = p.id === activeId;
 
-    return `<div class="theme-card${isActive ? ' active' : ''}" data-theme-id="${escHtml(p.id)}"
+    const tip = `${p.name}${p.artist ? ' · ' + p.artist : ''}${decoIcon ? ' ' + decoIcon : ''}`;
+    return `<div class="theme-card${isActive ? ' active' : ''}" data-theme-id="${escHtml(p.id)}" data-tip="${escHtml(tip)}"
         style="
           --tcard-accent: ${escHtml(accent)};
           --tcard-row-bg: ${rowBg};

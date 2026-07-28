@@ -68,7 +68,9 @@ body.light ::-webkit-scrollbar-thumb { background: #ccd2dc; }
 .theme-bg-layer { display: none; }
 body[data-theme] .theme-bg-layer {
   display: block; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  animation: theme-fade-in 0.5s ease both;
 }
+@keyframes theme-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .theme-bg-blur {
   position: absolute; inset: -20px;
   background-image: var(--theme-bg-image);
@@ -195,6 +197,16 @@ body[data-decorations="wave-bottom"]::before {
 }
 .theme-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
 .theme-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transform: translateY(-1px); }
+/* hover 提示 */
+.theme-card::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--bg-card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; font-size: calc(var(--font-size)*0.78);
+  white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s;
+  z-index: 10;
+}
+.theme-card:hover::after { opacity: 1; }
 
 /* 窗口顶栏（迷你 chrome） */
 .tcard-chrome {
