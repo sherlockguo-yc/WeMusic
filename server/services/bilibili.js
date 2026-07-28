@@ -350,13 +350,25 @@ export function evictAudioStream(bvid, cid) {
 }
 
 /** 实际解析音频流（无缓存）：优先 DASH，被风控时回退 H5 durl */
-async function _resolveAudioStream(bvid, cid) {
+async function _resolveAudioStream(bvid, cid, logTag = '') {
+  const prefix = logTag ? `${logTag} ` : '';
+  const t0 = Date.now();
+
   // 1) 优先 DASH（纯音频高音质），失败重试一次刷新鉴权
+  let dashErr = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      return await getDashAudio(bvid, cid);
+      const tDash = Date.now();
+      const result = await getDashAudio(bvid, cid);
+      console.log(`${prefix}[resolve:stream] bvid=${bvid.slice(0,12)} DASH ✅ (attempt ${attempt + 1}, ${Date.now() - tDash}ms, bandwidth=${result.bandwidth})`);
+      return result;
     } catch (e) {
-      if (e.message === 'NO_DASH_AUDIO') break; // 无 dash 音频，直接走 html5
+      dashErr = e;
+      if (e.message === 'NO_DASH_AUDIO') {
+        console.log(`${prefix}[resolve:stream] bvid=${bvid.slice(0,12)} DASH: NO_DASH_AUDIO → fallback to durl`);
+        break; // 无 dash 音频，直接走 html5
+      }
+      console.warn(`${prefix}[resolve:stream] bvid=${bvid.slice(0,12)} DASH attempt ${attempt + 1} failed: ${e.message}`);
       resetAuth();
       await sleep(300);
     }
@@ -366,12 +378,18 @@ async function _resolveAudioStream(bvid, cid) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return await getHtml5Durl(bvid, cid);
+      const tDurl = Date.now();
+      const result = await getHtml5Durl(bvid, cid);
+      console.log(`${prefix}[resolve:stream] bvid=${bvid.slice(0,12)} durl ✅ (attempt ${attempt + 1}, ${Date.now() - tDurl}ms, total=${Date.now() - t0}ms)`);
+      return result;
     } catch (e) {
       lastErr = e;
+      console.warn(`${prefix}[resolve:stream] bvid=${bvid.slice(0,12)} durl attempt ${attempt + 1} failed: ${e.message}`);
       await sleep(300);
     }
   }
+  const totalMs = Date.now() - t0;
+  console.error(`${prefix}[resolve:stream] bvid=${bvid.slice(0,12)} ALL FAILED after ${totalMs}ms — last error: ${lastErr?.message}`);
   throw new Error('获取音频流失败（可能被风控）：' + (lastErr && lastErr.message));
 }
 
@@ -380,24 +398,39 @@ async function _resolveAudioStream(bvid, cid) {
  * 优先命中缓存（同一 bvid+cid 短时间内重复播放无需重新请求 B 站）；
  * 未命中则解析：优先 DASH 纯音频；被风控（412/RISK_CONTROL）时回退 H5 durl。
  * 返回 { cid, url, backup, bandwidth, mime }，url 需经后端代理（带 Referer）后才能播放。
+ *
+ * @param {string} [logTag] 可选日志前缀（如 reqId），用于关联同一请求的多条日志
  */
-export async function getAudioStream(bvid, cid) {
+export async function getAudioStream(bvid, cid, logTag = '') {
+  const prefix = logTag ? `${logTag} ` : '';
+  const t0 = Date.now();
+
   if (!cid) {
+    const tPages = Date.now();
     const pages = await getVideoPages(bvid);
     cid = pages[0]?.cid;
+    console.log(`${prefix}[stream:cid] bvid=${bvid.slice(0,12)} getVideoPages → cid=${cid} (${Date.now() - tPages}ms)`);
   }
   if (!cid) throw new Error('未获取到视频 cid');
 
   const key = _streamCacheKey(bvid, cid);
   const cached = _streamCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
+    console.log(`${prefix}[stream:cache] bvid=${bvid.slice(0,12)} cid=${cid} HIT (TTL ${Math.round((cached.expiresAt - Date.now()) / 1000)}s, total=${Date.now() - t0}ms)`);
     return cached.data;
   }
+  if (cached) {
+    console.log(`${prefix}[stream:cache] bvid=${bvid.slice(0,12)} cid=${cid} EXPIRED → re-fetch`);
+  } else {
+    console.log(`${prefix}[stream:cache] bvid=${bvid.slice(0,12)} cid=${cid} MISS → resolving`);
+  }
 
-  const result = await _resolveAudioStream(bvid, cid);
+  const result = await _resolveAudioStream(bvid, cid, logTag);
   const deadlineMs = _parseDeadlineMs(result.url);
   const expiresAt = deadlineMs ? (deadlineMs - STREAM_CACHE_SAFETY_MARGIN) : (Date.now() + STREAM_CACHE_DEFAULT_TTL);
   _streamCache.set(key, { data: result, expiresAt });
+  const ttl = Math.round((expiresAt - Date.now()) / 1000);
+  console.log(`${prefix}[stream:resolved] bvid=${bvid.slice(0,12)} cid=${cid} cached (TTL ${ttl}s, total=${Date.now() - t0}ms)`);
   return result;
 }
 
@@ -405,12 +438,17 @@ export async function getAudioStream(bvid, cid) {
  * 代理音频流：带 Referer 从 B 站拉取并透传给客户端（支持 Range）。
  * @returns 上游 fetch 的 Response
  */
-export async function fetchAudio(streamUrl, bvid, range) {
+export async function fetchAudio(streamUrl, bvid, range, logTag = '') {
+  const prefix = logTag ? `${logTag} ` : '';
+  const t0 = Date.now();
   const headers = {
     'User-Agent': UA,
     Referer: `https://www.bilibili.com/video/${bvid || ''}`,
     Accept: '*/*',
   };
   if (range) headers.Range = range;
-  return fetch(streamUrl, { headers });
+  const res = await fetch(streamUrl, { headers });
+  const cl = res.headers.get('content-length') || '?';
+  console.log(`${prefix}[stream:fetch] bvid=${bvid?.slice(0,12) || '?'} status=${res.status} size=${cl} range=${range || 'none'} (${Date.now() - t0}ms)`);
+  return res;
 }

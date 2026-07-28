@@ -732,9 +732,19 @@ router.get('/video', authRequired, async (req, res) => {
  *
  * 同时触发音量归一化分析：DB 中无此 bvid+cid 的 gain → 后台异步下载完整文件 → ffprobe 分析
  */
+// ---- 简单 request ID（4 位 hex，足够区分并发请求） ----
+let _reqSeq = 0;
+function nextReqId() {
+  _reqSeq = (_reqSeq + 1) & 0xFFFF;
+  return _reqSeq.toString(16).padStart(4, '0');
+}
+
 router.get('/stream', async (req, res) => {
   const { bvid, cid, token } = req.query;
   if (!bvid) return res.status(400).send('缺少 bvid');
+
+  const reqId = nextReqId();
+  const tTotal = Date.now();
 
   // token 可选认证：验证通过则记录 user_id 用于日志
   let userId = null;
@@ -745,12 +755,18 @@ router.get('/stream', async (req, res) => {
     } catch { /* token 无效，不拒绝，仅不记录用户 */ }
   }
 
-  console.log(`[bg:stream] request bvid=${bvid} range=${req.headers.range || 'none'} user=${userId || 'anon'}`);
+  const range = req.headers.range;
+  console.log(`[r:${reqId}] ▶ stream START bvid=${bvid.slice(0,12)} range=${range || 'none'} user=${userId || 'anon'}`);
   try {
-    const stream = await getAudioStream(bvid, cid ? Number(cid) : undefined);
+    // Step 1: 解析音频流地址（含缓存/DASH/durl 降级链）
+    const tResolve = Date.now();
+    const stream = await getAudioStream(bvid, cid ? Number(cid) : undefined, `r:${reqId}`);
     const resolvedCid = stream.cid;
-    const range = req.headers.range;
-    const upstream = await fetchAudio(stream.url, bvid, range);
+    console.log(`[r:${reqId}]   step1 getAudioStream ✅ (${Date.now() - tResolve}ms)`);
+
+    // Step 2: 代理拉取 B 站 CDN 音频数据
+    const tFetch = Date.now();
+    const upstream = await fetchAudio(stream.url, bvid, range, `r:${reqId}`);
 
     if (!upstream.ok && upstream.status !== 206 && upstream.status !== 200) {
       // 主地址失败：缓存的直链可能已失效，清掉避免在 TTL 内反复返回死链接
@@ -758,11 +774,12 @@ router.get('/stream', async (req, res) => {
       // 尝试备用地址
       const backup = stream.backup && stream.backup[0];
       if (backup) {
-        console.log(`[bg:stream] primary failed (${upstream.status}), trying backup`);
-        const up2 = await fetchAudio(backup, bvid, range);
-        return pipeAudio(up2, res, stream.mime);
+        console.log(`[r:${reqId}]   primary failed (${upstream.status}), trying backup`);
+        const up2 = await fetchAudio(backup, bvid, range, `r:${reqId}`);
+        console.log(`[r:${reqId}]   backup fetch status=${up2.status} (total=${Date.now() - tTotal}ms)`);
+        return pipeAudio(up2, res, stream.mime, reqId);
       }
-      console.warn(`[bg:stream] FAILED bvid=${bvid} status=${upstream.status}`);
+      console.warn(`[r:${reqId}] ✗ FAILED bvid=${bvid.slice(0,12)} status=${upstream.status} (${Date.now() - tTotal}ms)`);
       return res.status(502).send('音频拉取失败');
     }
 
@@ -772,14 +789,13 @@ router.get('/stream', async (req, res) => {
       const now = Date.now();
       db.prepare('INSERT OR REPLACE INTO gain_cache (bvid, cid, gain_mult, status, created_at, updated_at) VALUES (?, ?, 1.0, ?, ?, ?)')
         .run(bvid, resolvedCid, 'pending', now, now);
-      // 异步分析，不阻塞客户端播放。注意：分析使用独立的 B站 fetch（无 Range），与客户端 stream 互不影响
       enqueueAnalysis(bvid, resolvedCid, stream.url);
     }
 
-    console.log(`[bg:stream] piping bvid=${bvid} status=${upstream.status} size=${upstream.headers.get('content-length') || '?'}`);
-    pipeAudio(upstream, res, stream.mime);
+    console.log(`[r:${reqId}]   step2 fetchAudio ✅ (${Date.now() - tFetch}ms) → piping (total=${Date.now() - tTotal}ms)`);
+    pipeAudio(upstream, res, stream.mime, reqId);
   } catch (e) {
-    console.warn(`[bg:stream] ERROR bvid=${bvid}: ${e.message}`);
+    console.warn(`[r:${reqId}] ✗ ERROR bvid=${bvid.slice(0,12)}: ${e.message} (${Date.now() - tTotal}ms)`);
     res.status(502).send(e.message);
   }
 });
@@ -796,9 +812,14 @@ router.get('/stream', async (req, res) => {
 router.get('/direct-url', authRequired, async (req, res) => {
   const { bvid, cid } = req.query;
   if (!bvid) return res.status(400).json({ error: '缺少 bvid' });
+
+  const reqId = nextReqId();
+  const t0 = Date.now();
+  console.log(`[r:${reqId}] ▶ direct-url START bvid=${bvid.slice(0,12)}`);
   try {
-    const stream = await getAudioStream(bvid, cid ? Number(cid) : undefined);
+    const stream = await getAudioStream(bvid, cid ? Number(cid) : undefined, `r:${reqId}`);
     const resolvedCid = stream.cid;
+    console.log(`[r:${reqId}]   getAudioStream ✅ (${Date.now() - t0}ms)`);
 
     // 音量归一化：DB 中无此 bvid+cid 的 gain → 触发后台异步分析（逻辑与 /stream 一致）
     const row = db.prepare('SELECT status FROM gain_cache WHERE bvid = ? AND cid = ?').get(bvid, resolvedCid);
@@ -816,10 +837,11 @@ router.get('/direct-url', authRequired, async (req, res) => {
       if (m) expiresAt = Number(m[1]) * 1000;
     } catch { /* 忽略解析失败 */ }
 
-    console.log(`[play:direct-url] bvid=${bvid} cid=${resolvedCid}`);
+    const totalMs = Date.now() - t0;
+    console.log(`[r:${reqId}]   direct-url DONE cid=${resolvedCid} bandwidth=${stream.bandwidth} (total=${totalMs}ms)`);
     res.json({ url: stream.url, backup: stream.backup || [], cid: resolvedCid, mime: stream.mime, expiresAt });
   } catch (e) {
-    console.warn(`[play:direct-url] ERROR bvid=${bvid}: ${e.message}`);
+    console.warn(`[r:${reqId}] ✗ direct-url ERROR bvid=${bvid.slice(0,12)}: ${e.message} (${Date.now() - t0}ms)`);
     res.status(502).json({ error: e.message });
   }
 });
@@ -876,7 +898,8 @@ router.get('/gains', (req, res) => {
   });
 });
 
-function pipeAudio(upstream, res, mime) {
+function pipeAudio(upstream, res, mime, reqId = '') {
+  const prefix = reqId ? `r:${reqId}` : 'stream';
   res.status(upstream.status);
   const passHeaders = ['content-length', 'content-range', 'accept-ranges', 'content-type'];
   for (const h of passHeaders) {
@@ -889,9 +912,26 @@ function pipeAudio(upstream, res, mime) {
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Cache-Control', 'no-store');
   if (upstream.body) {
+    let bytesSent = 0;
     const stream = Readable.fromWeb(upstream.body);
-    stream.on('error', () => { if (!res.headersSent) res.status(502).end('流中断'); });
-    res.on('error', () => stream.destroy());
+    stream.on('data', (chunk) => { bytesSent += chunk.length; });
+    stream.on('error', (err) => {
+      console.warn(`[${prefix}] ✗ stream error: ${err.message} (bytesSent=${bytesSent}, headersSent=${res.headersSent})`);
+      if (!res.headersSent) res.status(502).end('流中断');
+    });
+    stream.on('end', () => {
+      console.log(`[${prefix}]   stream END (bytesSent=${bytesSent})`);
+    });
+    res.on('error', (err) => {
+      console.warn(`[${prefix}] ✗ client disconnected: ${err.message} (bytesSent=${bytesSent})`);
+      stream.destroy();
+    });
+    res.on('close', () => {
+      // 'close' 在连接关闭时触发（正常或异常）。用 close 而非 end 是因为客户端可能在传输中途断开（abort）
+      if (!res.writableEnded) {
+        console.warn(`[${prefix}] ⚠ stream closed prematurely (bytesSent=${bytesSent})`);
+      }
+    });
     stream.pipe(res);
   } else {
     res.end();
