@@ -458,6 +458,156 @@ export function openThemeSelector() {
 
 function escHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+// ---- 主题编辑器（Phase 3）----
+
+/** 当前编辑的变体：'day' | 'night' */
+let _editorVariant = 'day';
+/** 编辑中的自定义主题 id（null = 新建） */
+let _editingThemeId = null;
+
+/** 打开主题编辑器 */
+export async function openThemeEditor(themeId) {
+  await loadPresets();
+  _editorVariant = 'day';
+  _editingThemeId = null;
+
+  let initialSlots = _emptySlots();
+  // 加载已有自定义主题的数据
+  if (themeId && themeId.startsWith('custom-')) {
+    const ct = (_customThemes || []).find((t) => t.id === themeId);
+    if (ct) {
+      _editingThemeId = themeId;
+      $('editThemeName').value = ct.name || '';
+      if (ct.dayVariant?.slots) initialSlots = { ...initialSlots, ...ct.dayVariant.slots };
+    }
+  } else if (themeId && !themeId.startsWith('custom-')) {
+    // 从预设主题复制 slot 配置
+    try {
+      const { theme } = await api(`/themes/presets/${themeId}`);
+      if (theme?.dayVariant?.slots) initialSlots = { ...initialSlots, ...theme.dayVariant.slots };
+      $('editThemeName').value = theme?.name ? `${theme.name} (我的)` : '';
+    } catch (e) { /* fallthrough */ }
+  } else {
+    $('editThemeName').value = '';
+  }
+
+  _populateEditor(initialSlots);
+  _updatePreview();
+  $('themeEditorModal').classList.add('show');
+}
+
+function _emptySlots() {
+  return {
+    bg: { type: 'color', value: '#0d0f12', overlay: 'transparent' },
+    accent: { type: 'color', value: '#FF6B9D' },
+    font: { type: 'font', value: 'serif' },
+    player: { type: 'preset', value: 'rounded-cover' },
+    card: { type: 'preset', value: 'default' },
+    sidebar: { type: 'color', value: '#0f080a' },
+    decorations: { type: 'preset', value: 'star-dust' },
+    lyrics: { type: 'color', value: '#FF6B9D' },
+    scrollbar: { type: 'color', value: '#553344' },
+    row: { type: 'preset', value: 'default' },
+  };
+}
+
+function _populateEditor(slots) {
+  const s = slots;
+  $('editBgType').value = s.bg?.type || 'color';
+  $('editBgValue').value = s.bg?.value || '';
+  $('editAccent').value = s.accent?.value || '#FF6B9D';
+  $('editAccentText').value = s.accent?.value || '#FF6B9D';
+  $('editFont').value = s.font?.value || 'default';
+  $('editPlayer').value = s.player?.value || 'default';
+  $('editCard').value = s.card?.value || 'default';
+  $('editSidebar').value = s.sidebar?.value || '';
+  $('editDecorations').value = s.decorations?.value || 'none';
+  $('editLyrics').value = s.lyrics?.value || '';
+  $('editScrollbar').value = s.scrollbar?.value || '';
+  $('editRow').value = s.row?.value || 'default';
+
+  // 日/夜 tab
+  document.querySelectorAll('.theme-variant-tab').forEach((t) => t.classList.toggle('active', t.dataset.variant === _editorVariant));
+}
+
+function _readEditorSlots() {
+  return {
+    bg: { type: $('editBgType').value, value: $('editBgValue').value.trim() || '#0d0f12' },
+    accent: { type: 'color', value: $('editAccentText').value || $('editAccent').value },
+    font: { type: 'font', value: $('editFont').value },
+    player: { type: 'preset', value: $('editPlayer').value },
+    card: { type: 'preset', value: $('editCard').value },
+    sidebar: { type: 'color', value: $('editSidebar').value.trim() || 'transparent' },
+    decorations: { type: 'preset', value: $('editDecorations').value },
+    lyrics: { type: 'color', value: $('editLyrics').value.trim() || $('editAccentText').value },
+    scrollbar: { type: 'color', value: $('editScrollbar').value.trim() || '#553344' },
+    row: { type: 'preset', value: $('editRow').value },
+  };
+}
+
+/** 更新预览窗口 */
+function _updatePreview() {
+  const slots = _readEditorSlots();
+  const accent = slots.accent.value;
+  const bgVal = slots.bg.value;
+  const isGradient = slots.bg.type === 'gradient' && bgVal.startsWith('linear');
+  const sidebarVal = slots.sidebar.value || 'transparent';
+  const coverRadius = slots.player.value === 'pill-cover' ? '50%' : (slots.player.value === 'rounded-cover' ? '12px' : '3px');
+
+  // 背景
+  const contentEl = $('epContent');
+  if (isGradient) contentEl.style.background = bgVal;
+  else if (slots.bg.type === 'color') contentEl.style.background = bgVal;
+  else contentEl.style.background = '';
+
+  // 强调色
+  $('epAccentRow').style.background = accent;
+  $('epCover').style.background = accent;
+  $('epCover').style.borderRadius = coverRadius;
+  $('epProgress').style.background = accent;
+
+  // 侧边栏
+  $('epSidebar').style.background = sidebarVal;
+
+  // 字体预览
+  const fontMap = {
+    serif: '"Noto Serif SC", Georgia, serif',
+    hei: '"Hiragino Sans GB", "PingFang SC", sans-serif',
+    mono: '"SF Mono", Consolas, monospace',
+    rounded: '"SF Pro Rounded", system-ui, sans-serif',
+    default: '-apple-system, sans-serif',
+    kai: '"KaiTi", "STKaiti", serif',
+  };
+  $('editorPreview').style.fontFamily = fontMap[slots.font.value] || fontMap['default'];
+}
+
+/** 保存自定义主题 */
+async function _saveTheme() {
+  const name = $('editThemeName').value.trim();
+  if (!name) return toast('请输入主题名称');
+
+  const slots = _readEditorSlots();
+  const dayVariant = { slots: _editorVariant === 'day' ? slots : _readEditorSlots() };
+  const nightVariant = { slots: _editorVariant === 'night' ? slots : _readEditorSlots() };
+
+  // 简化：当前编辑的变体作为 dayVariant
+  const body = {
+    id: _editingThemeId || undefined,
+    name,
+    dayVariant: { slots },
+    nightVariant: { slots }, // Phase 3 先同体，后续支持双模式
+  };
+
+  try {
+    const { theme } = await api('/auth/themes', { method: 'POST', body });
+    $('themeEditorModal').classList.remove('show');
+    await loadPresets();
+    toast(_editingThemeId ? '主题已更新' : '主题已创建');
+    // 刷新选择器
+    _updateThemeLabel();
+  } catch (e) { toast('保存失败：' + e.message); }
+}
+
 /** 应用当前选中的主题 */
 async function _applySelectedTheme() {
   const grid = $('themeSelectorGrid');
@@ -1162,11 +1312,29 @@ export function initSettings() {
   $('themeSelectorModal').onclick = (e) => { if (e.target.id === 'themeSelectorModal') $('themeSelectorModal').classList.remove('show'); };
   $('themeApplyBtn').onclick = _applySelectedTheme;
   $('themeCancelBtn').onclick = () => $('themeSelectorModal').classList.remove('show');
+  $('themeNewCustomBtn')?.addEventListener('click', () => { $('themeSelectorModal').classList.remove('show'); openThemeEditor(); });
   $('themeDeactivateBtn').onclick = async () => {
     deactivateTheme();
     $('themeSelectorModal').classList.remove('show');
     toast('已取消主题，恢复默认外观');
   };
+  // 编辑器
+  $('themeEditorClose').onclick = () => $('themeEditorModal').classList.remove('show');
+  $('themeEditorModal').onclick = (e) => { if (e.target.id === 'themeEditorModal') $('themeEditorModal').classList.remove('show'); };
+  $('editorCancelBtn').onclick = () => $('themeEditorModal').classList.remove('show');
+  $('editorResetBtn').onclick = () => { _populateEditor(_emptySlots()); _updatePreview(); };
+  $('editorSaveBtn').onclick = _saveTheme;
+  // 实时预览
+  ['editBgType', 'editBgValue', 'editAccent', 'editAccentText', 'editFont', 'editPlayer', 'editCard',
+   'editSidebar', 'editDecorations', 'editLyrics', 'editScrollbar', 'editRow'].forEach((id) => {
+    const el = $(id);
+    if (el) el.addEventListener('input', _updatePreview);
+  });
+  // 日/夜 tab
+  $('editorDayTab').onclick = () => { _editorVariant = 'day'; document.querySelectorAll('.theme-variant-tab').forEach(t => t.classList.toggle('active', t.dataset.variant === 'day')); };
+  $('editorNightTab').onclick = () => { _editorVariant = 'night'; document.querySelectorAll('.theme-variant-tab').forEach(t => t.classList.toggle('active', t.dataset.variant === 'night')); };
+  // 在主题选择器中添加「编辑主题」按钮（自定义主题出现时才有意义）
+  // Phase 3：从选择器卡片进入编辑
   $('settingsModal').onclick = (e) => { if (e.target.id === 'settingsModal') $('settingsModal').classList.remove('show'); };
   $('settingsLogout').onclick = () => { Auth.clear(); location.href = '/login.html'; };
 

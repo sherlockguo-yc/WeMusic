@@ -263,6 +263,35 @@ body[data-decorations="wave-bottom"]::before {
   opacity: 0.5;
 }
 
+/* ---- 主题编辑器 ---- */
+.editor-preview {
+  background: var(--bg-card); border: 2px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; margin-bottom: 14px;
+}
+.ep-chrome { height: 16px; background: rgba(0,0,0,0.15); display: flex; align-items: center; gap: 4px; padding: 0 8px; }
+.ep-chrome .ep-dot { width: 6px; height: 6px; border-radius: 50%; }
+.ep-chrome .ep-dot:nth-child(1) { background: #ff5f57; }
+.ep-chrome .ep-dot:nth-child(2) { background: #febc2e; }
+.ep-chrome .ep-dot:nth-child(3) { background: #28c840; }
+.ep-body { display: flex; height: 80px; }
+.ep-sidebar { width: 38px; flex-shrink: 0; }
+.ep-content { flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+.ep-row { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); }
+.ep-row.ep-short { width: 55%; }
+.ep-row.ep-accent { width: 35%; }
+.ep-player { height: 22px; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+.ep-cover { width: 14px; height: 14px; border-radius: 3px; background: var(--accent); }
+.ep-progress { flex: 1; height: 3px; border-radius: 1.5px; background: rgba(255,255,255,0.08); }
+.ep-progress-fill { height: 100%; width: 35%; border-radius: 1.5px; background: var(--accent); }
+
+.editor-sections { display: flex; flex-direction: column; gap: 10px; }
+.editor-slot { display: flex; align-items: center; gap: 8px; }
+.editor-slot-label { font-size: calc(var(--font-size)*0.85); color: var(--text-dim); width: 90px; flex-shrink: 0; white-space: nowrap; }
+.editor-slot input, .editor-slot select { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-size: calc(var(--font-size)*0.85); }
+.editor-advanced { margin-top: 4px; }
+.editor-advanced summary { cursor: pointer; font-size: calc(var(--font-size)*0.9); color: var(--text-dim); padding: 4px 0; }
+.editor-advanced summary:hover { color: var(--accent); }
+
 html {
   font-size: var(--font-size);
 }
