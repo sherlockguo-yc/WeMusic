@@ -624,6 +624,8 @@
       <div class="theme-selector-grid" id="themeSelectorGrid"></div>
       <div class="prompt-actions" style="margin-top:16px;gap:8px">
         <button class="btn sm" id="themeNewCustomBtn">+ 新建自定义</button>
+        <button class="btn sm" id="themeImportBtn" style="background:var(--bg-soft)">导入</button>
+        <input type="file" id="themeImportFile" accept=".json" style="display:none">
         <button class="btn sm" id="themeDeactivateBtn" style="background:var(--danger);color:#fff">取消主题</button>
         <div style="flex:1"></div>
         <button class="btn sm" id="themeCancelBtn">关闭</button>
@@ -735,6 +737,7 @@
       <div class="prompt-actions" style="margin-top:16px;gap:8px">
         <button class="btn sm" id="editorResetBtn">重置</button>
         <input type="text" id="editThemeName" placeholder="主题名称（必填）" style="flex:1;height:32px;max-width:200px">
+        <button class="btn sm" id="editorExportBtn">导出</button>
         <button class="btn sm" id="editorCancelBtn">关闭</button>
         <button class="btn sm green" id="editorSaveBtn">保存</button>
       </div>

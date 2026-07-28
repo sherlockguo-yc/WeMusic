@@ -1446,6 +1446,47 @@ export function initSettings() {
   $('editorCancelBtn').onclick = () => $('themeEditorModal').classList.remove('show');
   $('editorResetBtn').onclick = () => { _daySlots = _emptySlots(); _nightSlots = _emptySlots(); _populateEditorVariant(_editorVariant); _updatePreview(); };
   $('editorSaveBtn').onclick = _saveTheme;
+  // 导出主题 JSON
+  $('editorExportBtn').onclick = () => {
+    const curSlots = _readEditorSlots();
+    if (_editorVariant === 'day') _daySlots = curSlots;
+    else _nightSlots = curSlots;
+    const data = {
+      wemusic_theme_version: 1,
+      name: $('editThemeName').value.trim() || '我的主题',
+      dayVariant: { slots: _daySlots },
+      nightVariant: { slots: _nightSlots },
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (data.name || 'theme') + '.wetheme.json';
+    a.click();
+    toast('主题已导出');
+  };
+  // 导入主题
+  $('themeImportBtn').addEventListener('click', () => $('themeImportFile').click());
+  $('themeImportFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.dayVariant?.slots) return toast('无效的主题文件');
+      const body = {
+        name: data.name || '导入主题',
+        dayVariant: data.dayVariant,
+        nightVariant: data.nightVariant || data.dayVariant,
+      };
+      await api('/auth/themes', { method: 'POST', body });
+      await loadPresets();
+      $('themeSelectorModal').classList.remove('show');
+      $('themeSelectorModal').classList.add('show');
+      _renderThemeSelector();
+      toast('主题已导入');
+    } catch (err) { toast('导入失败：' + err.message); }
+    $('themeImportFile').value = '';
+  });
   // 实时预览
   ['editBgType', 'editBgValue', 'editAccent', 'editAccentText', 'editFont', 'editPlayer', 'editCard',
    'editSidebar', 'editDecorations', 'editLyrics', 'editScrollbar', 'editRow'].forEach((id) => {

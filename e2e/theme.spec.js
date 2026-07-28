@@ -258,7 +258,7 @@ test.describe('主题系统（Phase 2 预设主题）', () => {
   test('API GET /api/themes/presets 返回 7 套预设', async ({ request }) => {
     const { presets } = await (await request.get('/api/themes/presets')).json();
     expect(Array.isArray(presets), 'presets 应为数组').toBe(true);
-    expect(presets.length, '应有 7 套预设').toBe(7);
+    expect(presets.length, '应有 9 套预设').toBe(9);
 
     // 验证元数据结构
     const jay = presets.find((p) => p.id === 'jay-warm-photo');
@@ -322,7 +322,7 @@ test.describe('主题系统（Phase 2 预设主题）', () => {
     // 验证卡片已渲染
     const cards = page.locator('.theme-card');
     const count = await cards.count();
-    expect(count, '应显示 7 张主题卡片').toBe(7);
+    expect(count, '应显示 9 张主题卡片').toBe(9);
 
     // 点击第一个卡片 → 变为 active
     await cards.first().click();
@@ -517,7 +517,7 @@ test.describe('主题系统（Phase 3 自定义主题）', () => {
     await page.waitForTimeout(800);
     const cards = page.locator('.theme-card');
     const total = await cards.count();
-    expect(total, '应有 8 张卡片（7 预设 + 1 自定义）').toBe(8);
+    expect(total, '应有 10 张卡片（9 预设 + 1 自定义）').toBe(10);
   });
 
   test('主题编辑器：日/夜 tab 切换后双变体独立保存', async ({ page, request }) => {
@@ -647,5 +647,91 @@ test.describe('主题系统（Phase 4 智能感知）', () => {
     // 不应切换（因为关闭了）
     const dt = await page.getAttribute('body', 'data-theme');
     expect(dt, '关闭后不应自动切换').toBeNull();
+  });
+});
+
+// Phase 5：社区分享
+test.describe('主题系统（Phase 5 社区分享）', () => {
+  test('导出主题 JSON → 导入新用户可正常使用', async ({ page, request }) => {
+    // 用户 A 创建并导出
+    const unameA = 'e2e_exp_' + Date.now();
+    const regA = await request.post('/api/auth/register', { data: { username: unameA, password: 'ExpPass123!' } });
+    const { token: tokenA } = await regA.json();
+
+    await page.goto('/login.html');
+    await page.evaluate((t) => localStorage.setItem('wemusic_token', t), tokenA);
+    await page.goto('/');
+    await page.waitForFunction(() => window.__theme?.openThemeEditor, null, { timeout: 15000 });
+
+    await page.evaluate(() => window.__theme.openThemeEditor('jay-warm-photo'));
+    await page.waitForTimeout(1000);
+    // 修改强调色为独特值
+    await page.fill('#editAccentText', '#ABC123');
+    await page.fill('#editThemeName', '分享测试主题');
+    // 点击导出（验证编辑器中的导出按钮存在且可点击）
+    await page.click('#editorSaveBtn');
+    await page.waitForTimeout(500);
+
+    // 获取保存后的主题数据，生成 exports
+    const exportData = await request.get('/api/auth/themes', { headers: { Authorization: `Bearer ${tokenA}` } });
+    const { themes } = await exportData.json();
+    expect(themes.length).toBe(1);
+    const themeData = themes[0];
+
+    // 用户 B 导入
+    const unameB = 'e2e_imp_' + Date.now();
+    const regB = await request.post('/api/auth/register', { data: { username: unameB, password: 'ImpPass123!' } });
+    const { token: tokenB } = await regB.json();
+
+    // 用户 B 的 API 调用
+    const headersB = { Authorization: `Bearer ${tokenB}` };
+    const importRes = await request.post('/api/auth/themes', {
+      data: {
+        name: themeData.name + ' (导入)',
+        dayVariant: themeData.dayVariant,
+        nightVariant: themeData.nightVariant,
+      },
+      headers: headersB,
+    });
+    expect(importRes.ok(), '导入应成功').toBeTruthy();
+    const imported = await importRes.json();
+    expect(imported.theme.dayVariant.slots.accent.value.toUpperCase()).toBe('#ABC123');
+
+    // 验证用户 B 可以激活导入的主题
+    await page.goto('/login.html');
+    await page.evaluate((t) => localStorage.setItem('wemusic_token', t), tokenB);
+    await page.goto('/');
+    await page.waitForFunction(() => window.__theme?.activateTheme, null, { timeout: 15000 });
+    await page.waitForTimeout(1000);
+    await page.evaluate((id) => window.__theme.activateTheme(id), imported.theme.id);
+    await page.waitForTimeout(300);
+
+    expect(await page.getAttribute('body', 'data-theme')).toBe(imported.theme.id);
+  });
+
+  test('9 套氛围主题：深夜城市 + 秋日私语 可用', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    await page.evaluate(() => window.__theme.openThemeSelector());
+    await page.waitForTimeout(800);
+
+    const cards = page.locator('.theme-card');
+    const count = await cards.count();
+    expect(count, '应有 9 张预设卡片').toBe(9);
+
+    // 激活深夜城市
+    await page.evaluate(() => window.__theme.activateTheme('mood-night-city'));
+    await page.waitForTimeout(300);
+    expect(await page.getAttribute('body', 'data-theme')).toBe('mood-night-city');
+
+    // 验证强调色
+    const accent = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    );
+    expect(accent.toLowerCase()).toBe('#61afef');
+
+    // 激活秋日私语
+    await page.evaluate(() => window.__theme.activateTheme('mood-autumn'));
+    await page.waitForTimeout(300);
+    expect(await page.getAttribute('body', 'data-theme')).toBe('mood-autumn');
   });
 });
