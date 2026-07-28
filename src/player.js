@@ -726,8 +726,17 @@ export async function playCurrent() {
   console.log(`[player] playCurrent queueIndex=${state.queueIndex}/${state.queue.length}, crossfading=${_crossfading}, mode=${mode}`);
   _flushLog(elapsed);
   stopTimer();
+  // 清理 crossfade 残留状态：用户通过列表/队列/搜索等入口切歌时，
+  // 不走 playNext/playPrev（它们会调 _cancelCrossfade），必须在此处主动取消。
+  // 否则 _tick() 会继续走 crossfade 分支（elapsed 合成错误、停顿检测被绕过），
+  // _applyNormVol() 也会因 _crossfading=true 而不恢复 gain → 新歌静默"播放"。
+  if (_crossfading) _cancelCrossfade();
+  // 清理上个曲目的遗留定时器，避免对新曲目产生副作用
+  if (_stalledTimer) { clearTimeout(_stalledTimer); _stalledTimer = null; }
+  if (_healthCheckId) { clearTimeout(_healthCheckId); _healthCheckId = null; }
   if (_cacheUrl) { URL.revokeObjectURL(_cacheUrl); _cacheUrl = null; }
   _cacheUse = null;
+  _stallTicks = 0;
   const song = state.queue[state.queueIndex];
   if (!song) return;
 
@@ -1222,15 +1231,27 @@ async function _loadBgTrack(bvid) {
 // 播放 bgAudio，必要时 seek 到指定秒数；play() 失败自动重试（最多 10 次，间隔递增）
 function _playBgAudioWithRetry(seekSec) {
   let retries = 0;
+  let healthRetries = 0; // 健康检查重试上限（防止 AudioContext 挂起导致的无限循环）
+  const MAX_HEALTH_RETRIES = 3;
   const doPlay = () => {
     if (mode !== 'bg') return; // 用户已展开视频，不再尝试播放 bgAudio（避免双声道）
+    // AudioContext 挂起会导致 play() 成功但无声，先尝试恢复
+    if (_audioCtx && _audioCtx.state === 'suspended') {
+      _audioCtx.resume().catch(() => {});
+    }
     bgAudio.play().then(() => {
       if (_healthCheckId) clearTimeout(_healthCheckId);
       // play() 成功后 5 秒做健康检查：如果又停了且没被用户手动暂停，重试
       _healthCheckId = setTimeout(() => {
         _healthCheckId = null;
         if (mode === 'bg' && !timerPaused && bgAudio.paused) {
-          console.warn(`[bgAudio] health-check FAILED (paused at ${bgAudio.currentTime?.toFixed(1)}s) — retrying`);
+          healthRetries++;
+          if (healthRetries > MAX_HEALTH_RETRIES) {
+            console.warn(`[bgAudio] health-check FAILED ${healthRetries}x — auto advancing`);
+            autoAdvance();
+            return;
+          }
+          console.warn(`[bgAudio] health-check FAILED (paused at ${bgAudio.currentTime?.toFixed(1)}s) — retrying ${healthRetries}/${MAX_HEALTH_RETRIES}`);
           retries = 0;
           doPlay();
         }
@@ -1243,7 +1264,8 @@ function _playBgAudioWithRetry(seekSec) {
         console.log(`[bg:retry] play() attempt ${retries}/10 failed (${e.name}) — retry in ${delay}ms`);
         setTimeout(doPlay, delay);
       } else {
-        console.warn('[bg:retry] play() FAILED after 10 retries — giving up');
+        console.warn('[bg:retry] play() FAILED after 10 retries — auto advancing');
+        autoAdvance();
       }
     });
   };
