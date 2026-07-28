@@ -327,7 +327,9 @@ export function deactivateTheme() {
   // 清除主题变量，回退到 :root 默认值
   [
     '--theme-bg-image', '--theme-bg-overlay', '--theme-bg-fade-color',
-    '--theme-sidebar-bg', '--theme-card-backdrop',
+    '--theme-sidebar-bg', '--theme-card-backdrop', '--theme-card-bg',
+    '--theme-card-shadow', '--theme-card-radius', '--theme-card-border',
+    '--theme-player-cover-radius', '--theme-player-progress-height',
     '--theme-lyrics-highlight', '--theme-scrollbar-thumb',
     '--theme-row-playing-bg', '--theme-row-hover-bg',
     '--theme-dust-color',
@@ -462,8 +464,8 @@ async function _renderThemeSelector() {
   if (!grid) return;
 
   // 加载中状态：骨架屏
-  const allThemes = [...(_presetsCache || []), ...((_customThemes || []).map((t) => ({ ...t, preview: {}, decorations: 'none', artist: '' })))];
-  if (!_presetsCache && !_customThemes.length) {
+  const allThemes = [...(_presetsCache || []), ...((_customThemes || []).map((t) => ({ ...t, artist: t.artist || '' })))];
+  if ((!_presetsCache || _presetsCache.length === 0) && _customThemes.length === 0) {
     grid.innerHTML = '<div class="theme-grid-loading">' +
       Array(4).fill('<div class="theme-skeleton"></div>').join('') + '</div>';
     return;
@@ -632,38 +634,43 @@ function _switchEditorVariant(target) {
 
 function _populateEditorVariant(variant) {
   const s = variant === 'day' ? _daySlots : _nightSlots;
-  $('editBgType').value = s.bg?.type || 'color';
-  $('editBgValue').value = s.bg?.value || '';
-  $('editAccent').value = s.accent?.value || '#FF6B9D';
-  $('editAccentText').value = s.accent?.value || '#FF6B9D';
-  $('editFont').value = s.font?.value || 'default';
-  $('editPlayer').value = s.player?.value || 'default';
-  $('editCard').value = s.card?.value || 'default';
-  $('editSidebar').value = s.sidebar?.value || '';
-  $('editDecorations').value = s.decorations?.value || 'none';
-  $('editLyrics').value = s.lyrics?.value || '';
-  $('editScrollbar').value = s.scrollbar?.value || '';
-  $('editRow').value = s.row?.value || 'default';
+  const setVal = (id, val) => { const el = $(id); if (el) el.value = val; };
+  setVal('editBgType', s.bg?.type || 'color');
+  setVal('editBgValue', s.bg?.value || '');
+  setVal('editAccent', s.accent?.value || '#FF6B9D');
+  setVal('editAccentText', s.accent?.value || '#FF6B9D');
+  setVal('editFont', s.font?.value || 'default');
+  setVal('editPlayer', s.player?.value || 'default');
+  setVal('editCard', s.card?.value || 'default');
+  setVal('editSidebar', s.sidebar?.value || '');
+  setVal('editDecorations', s.decorations?.value || 'none');
+  setVal('editLyrics', s.lyrics?.value || '');
+  setVal('editScrollbar', s.scrollbar?.value || '');
+  setVal('editRow', s.row?.value || 'default');
   document.querySelectorAll('.theme-variant-tab').forEach((t) => t.classList.toggle('active', t.dataset.variant === variant));
 }
 
 function _readEditorSlots() {
+  const v = (id, fallback) => { const el = $(id); return el ? el.value.trim() : fallback; };
   return {
-    bg: { type: $('editBgType').value, value: $('editBgValue').value.trim() || '#0d0f12' },
-    accent: { type: 'color', value: $('editAccentText').value || $('editAccent').value },
-    font: { type: 'font', value: $('editFont').value },
-    player: { type: 'preset', value: $('editPlayer').value },
-    card: { type: 'preset', value: $('editCard').value },
-    sidebar: { type: 'color', value: $('editSidebar').value.trim() || 'transparent' },
-    decorations: { type: 'preset', value: $('editDecorations').value },
-    lyrics: { type: 'color', value: $('editLyrics').value.trim() || $('editAccentText').value },
-    scrollbar: { type: 'color', value: $('editScrollbar').value.trim() || '#553344' },
-    row: { type: 'preset', value: $('editRow').value },
+    bg: { type: v('editBgType', 'color'), value: v('editBgValue', '#0d0f12') },
+    accent: { type: 'color', value: v('editAccentText', '') || v('editAccent', '#FF6B9D') },
+    font: { type: 'font', value: v('editFont', 'default') },
+    player: { type: 'preset', value: v('editPlayer', 'default') },
+    card: { type: 'preset', value: v('editCard', 'default') },
+    sidebar: { type: 'color', value: v('editSidebar', 'transparent') },
+    decorations: { type: 'preset', value: v('editDecorations', 'none') },
+    lyrics: { type: 'color', value: v('editLyrics', '') || v('editAccentText', '#FF6B9D') },
+    scrollbar: { type: 'color', value: v('editScrollbar', '#553344') },
+    row: { type: 'preset', value: v('editRow', 'default') },
   };
 }
 
 /** 更新预览窗口（使用当前变体 Slot + 表单即时值） */
 function _updatePreview() {
+  const contentEl = $('epContent');
+  if (!contentEl) return; // 编辑器未打开时安全退出
+
   const slots = _readEditorSlots();
   const accent = slots.accent.value;
   const bgVal = slots.bg.value;
@@ -671,17 +678,16 @@ function _updatePreview() {
   const sidebarVal = slots.sidebar.value || 'transparent';
   const coverRadius = slots.player.value === 'pill-cover' ? '50%' : (slots.player.value === 'rounded-cover' ? '12px' : '3px');
 
-  const contentEl = $('epContent');
   if (slots.bg.type === 'image') contentEl.style.background = `url(${bgVal}) center/cover`;
   else if (isGradient) contentEl.style.background = bgVal;
   else if (slots.bg.type === 'color') contentEl.style.background = bgVal;
   else contentEl.style.background = 'var(--bg)';
 
-  $('epAccentRow').style.background = accent;
-  $('epCover').style.background = accent;
-  $('epCover').style.borderRadius = coverRadius;
-  $('epProgress').style.background = accent;
-  $('epSidebar').style.background = sidebarVal;
+  const accentRow = $('epAccentRow'), cover = $('epCover'), progress = $('epProgress'), sidebar = $('epSidebar');
+  if (accentRow) accentRow.style.background = accent;
+  if (cover) { cover.style.background = accent; cover.style.borderRadius = coverRadius; }
+  if (progress) progress.style.background = accent;
+  if (sidebar) sidebar.style.background = sidebarVal;
 
   const fontMap = {
     serif: '"Noto Serif SC", Georgia, serif',
@@ -691,7 +697,8 @@ function _updatePreview() {
     default: '-apple-system, sans-serif',
     kai: '"KaiTi", "STKaiti", serif',
   };
-  $('editorPreview').style.fontFamily = fontMap[slots.font.value] || fontMap['default'];
+  const preview = $('editorPreview');
+  if (preview) preview.style.fontFamily = fontMap[slots.font.value] || fontMap['default'];
 }
 
 /** 保存自定义主题（使用 _daySlots / _nightSlots） */
