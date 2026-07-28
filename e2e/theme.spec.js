@@ -579,3 +579,73 @@ test.describe('主题系统（Phase 3 自定义主题）', () => {
     expect(fileRes.ok(), '上传的文件应可访问').toBeTruthy();
   });
 });
+
+// Phase 4：智能切换
+test.describe('主题系统（Phase 4 智能感知）', () => {
+  test('智能切换：state.current.singer 匹配主题时自动切换', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    // 等待监控启动 + 预设加载
+    await page.waitForTimeout(2500);
+
+    // 模拟播放周杰伦的歌曲（通过 window.__state 修改）
+    await page.evaluate(() => {
+      window.__state.current = { name: '晴天', singer: '周杰伦', song_mid: 'test123' };
+    });
+    await page.waitForTimeout(2500); // 等待智能切换定时器触发
+
+    // 验证：应有 data-theme，且为 jay-* 主题
+    const dt = await page.getAttribute('body', 'data-theme');
+    expect(dt, '应自动切换到周杰伦主题').toMatch(/^jay-/);
+  });
+
+  test('智能切换：手动切换后暂停 24h', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    await page.waitForTimeout(2000);
+
+    // 通过选择器 UI 切换主题（这会触发 _applySelectedTheme → pauseSmartTheme）
+    await page.evaluate(() => window.__theme.openThemeSelector());
+    await page.waitForTimeout(500);
+    // 点击第一张卡片
+    await page.locator('.theme-card').first().click();
+    // 点击「应用」
+    await page.click('#themeApplyBtn');
+    await page.waitForTimeout(800);
+
+    // 验证：pause 标记已设
+    const paused = await page.evaluate(() => {
+      const pauseUntil = parseInt(localStorage.getItem('wemusic_smart_pause') || '0', 10);
+      return pauseUntil > Date.now();
+    });
+    expect(paused, '手动切换后应设置 pause 标记').toBe(true);
+
+    // 模拟播邓紫棋的歌曲（在暂停期内不应切换）
+    await page.evaluate(() => {
+      window.__state.current = { name: '泡沫', singer: '邓紫棋', song_mid: 'test456' };
+    });
+    await page.waitForTimeout(2500);
+
+    // 主题应保持 jay-warm-photo 不变（因为暂停中）
+    expect(await page.getAttribute('body', 'data-theme'), '暂停期不应切换').toBe('jay-warm-photo');
+  });
+
+  test('智能切换：toggle 关闭后不再切换', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+    await page.waitForTimeout(2000);
+
+    // 关闭智能切换并重新加载
+    await page.evaluate(() => { localStorage.setItem('wemusic_smart_theme', '0'); });
+    await page.reload();
+    await page.waitForFunction(() => window.__theme?.openThemeSelector, null, { timeout: 15000 });
+    await page.waitForTimeout(2000);
+
+    // 模拟播放周杰伦
+    await page.evaluate(() => {
+      window.__state.current = { name: '晴天', singer: '周杰伦', song_mid: 'test123' };
+    });
+    await page.waitForTimeout(2500);
+
+    // 不应切换（因为关闭了）
+    const dt = await page.getAttribute('body', 'data-theme');
+    expect(dt, '关闭后不应自动切换').toBeNull();
+  });
+});

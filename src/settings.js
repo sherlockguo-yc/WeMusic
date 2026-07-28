@@ -3,6 +3,100 @@ import { $, toast, debounce, esc } from './utils.js';
 import { Auth, api } from './api.js';
 import { state } from './state.js';
 
+// ---- 智能切换（Phase 4）----
+/** 智能切换是否启用（默认 true） */
+let _smartEnabled = localStorage.getItem('wemusic_smart_theme') !== '0';
+/** 手动切换后暂停智能切换的截止时间戳 */
+let _smartPauseUntil = parseInt(localStorage.getItem('wemusic_smart_pause') || '0', 10) || 0;
+/** 上次检测到的歌曲，避免重复触发 */
+let _lastSongKey = '';
+/** 智能切换检测定时器 */
+let _smartTimer = null;
+
+function _saveSmartState() {
+  localStorage.setItem('wemusic_smart_theme', _smartEnabled ? '1' : '0');
+  localStorage.setItem('wemusic_smart_pause', String(_smartPauseUntil));
+}
+
+/** 检查当前歌曲是否需要切换主题 */
+async function _trySmartThemeSwitch(song) {
+  if (!_smartEnabled) return;
+  if (Date.now() < _smartPauseUntil) return;
+  if (!song || !song.singer) return;
+
+  await loadPresets();
+  const allThemes = [...(_presetsCache || []), ...(_customThemes || [])];
+  const singer = (song.singer || '').split('/')[0].trim(); // 取主歌手（多歌手用 / 分隔）
+  if (!singer) return;
+
+  // 匹配：主题的 artistNames 任一项与歌手名相符（双向包含匹配）
+  const matched = allThemes.find((t) => {
+    if (!t || t.id === 'classic-wemusic') return false;
+    const names = t.artistNames && t.artistNames.length ? t.artistNames : (t.artist ? [t.artist] : []);
+    return names.some((n) => {
+      if (!n) return false;
+      const n2 = n.split('/')[0].trim();
+      return singer === n2 || singer.includes(n2) || n2.includes(singer);
+    });
+  });
+  if (!matched) return;
+
+  const currentId = localStorage.getItem('wemusic_activeTheme');
+  if (currentId === matched.id) return; // 已是目标主题
+
+  await activateTheme(matched.id);
+  localStorage.setItem('wemusic_activeThemeName', matched.name);
+  _updateThemeLabel();
+  toast(`智能切换：「${matched.name}」`);
+}
+
+/** 启动智能切换定时检测 */
+function _startSmartSwitchMonitor() {
+  if (_smartTimer) return;
+  _smartTimer = setInterval(() => {
+    const cur = state.current;
+    if (!cur) return;
+    const key = `${cur.name || ''}__${cur.singer || ''}`;
+    if (key === _lastSongKey) return;
+    _lastSongKey = key;
+    _trySmartThemeSwitch(cur);
+  }, 2000);
+}
+
+/** 用户手动切换主题：暂停智能切换 24h */
+export function pauseSmartTheme() {
+  _smartPauseUntil = Date.now() + 24 * 60 * 60 * 1000;
+  _saveSmartState();
+}
+
+export function setSmartThemeEnabled(enabled) {
+  _smartEnabled = enabled;
+  _saveSmartState();
+}
+
+export function getSmartThemeStatus() {
+  return {
+    enabled: _smartEnabled,
+    pauseUntil: _smartPauseUntil,
+    paused: Date.now() < _smartPauseUntil,
+  };
+}
+
+/** 更新智能切换状态文本 */
+function _updateSmartStatus() {
+  const el = $('smartThemeStatus');
+  if (!el) return;
+  const status = getSmartThemeStatus();
+  if (!status.enabled) {
+    el.textContent = '已关闭';
+  } else if (status.paused) {
+    const hrs = Math.max(1, Math.round((status.pauseUntil - Date.now()) / 3600000));
+    el.textContent = `已暂停（${hrs}h 后恢复）`;
+  } else {
+    el.textContent = '已启用';
+  }
+}
+
 // ---- 偏好同步（localStorage + 服务端） ----
 // 收集所有需要同步的偏好 -> 上传服务端
 export function syncPrefsToServer() {
@@ -635,6 +729,7 @@ async function _applySelectedTheme() {
 
   await activateTheme(themeId);
   localStorage.setItem('wemusic_activeThemeName', themeName);
+  pauseSmartTheme(); // 手动切换后暂停智能切换 24h
   $('themeSelectorModal').classList.remove('show');
   _updateThemeLabel();
   toast(`已应用「${themeName}」`);
@@ -1328,6 +1423,18 @@ export function initSettings() {
   $('themeApplyBtn').onclick = _applySelectedTheme;
   $('themeCancelBtn').onclick = () => $('themeSelectorModal').classList.remove('show');
   $('themeNewCustomBtn')?.addEventListener('click', () => { $('themeSelectorModal').classList.remove('show'); openThemeEditor(); });
+
+  // 智能切换 toggle
+  const smartToggle = $('smartThemeToggle');
+  if (smartToggle) {
+    smartToggle.checked = _smartEnabled;
+    smartToggle.onchange = () => {
+      setSmartThemeEnabled(smartToggle.checked);
+      _updateSmartStatus();
+    };
+  }
+  _updateSmartStatus();
+  _startSmartSwitchMonitor();
   $('themeDeactivateBtn').onclick = async () => {
     deactivateTheme();
     $('themeSelectorModal').classList.remove('show');

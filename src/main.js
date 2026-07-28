@@ -24,6 +24,7 @@ offline.init().catch(e => console.warn('offline init failed', e)); // 打开 Ind
 initSettings();
 // Phase 1：控制台测试接口（Phase 2 后移除）
 window.__theme = { activateTheme, deactivateTheme, applyThemeSlots, openThemeSelector, openThemeEditor, loadPresets };
+window.__state = state; // Phase 4：智能切换测试用，生产可删除
 initPlayer();
 initQueue();
 initSearch();
