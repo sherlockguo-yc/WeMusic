@@ -482,4 +482,41 @@ test.describe('主题系统（Phase 3 自定义主题）', () => {
     const after = await request.get('/api/auth/themes', { headers });
     expect((await after.json()).themes.length, '删除后应为 0').toBe(0);
   });
+
+  test('主题编辑器：实时预览 + 保存 → 选择器显示新主题', async ({ page, request }) => {
+    await loginAndEnter(page, request);
+
+    // 打开编辑器（从预设 jay-warm-photo 复制 slots 作为起点）
+    await page.evaluate(() => window.__theme.openThemeEditor('jay-warm-photo'));
+    await page.waitForTimeout(1000);
+
+    // 编辑器应可见
+    const editorModal = page.locator('#themeEditorModal');
+    await expect(editorModal).toBeVisible();
+
+    // 修改几个 slot
+    await page.fill('#editAccentText', '#00FF88');
+    await page.selectOption('#editPlayer', 'pill-cover');
+    await page.fill('#editBgValue', '#0a0a1a');
+    await page.waitForTimeout(300);
+
+    // 验证预览窗口的强调色已更新（cover 和 progress 用 accent）
+    const coverBg = await page.evaluate(() => getComputedStyle(document.getElementById('epCover')).backgroundColor);
+    expect(coverBg, '预览封面应反映新强调色').toBe('rgb(0, 255, 136)');
+
+    // 命名并保存
+    await page.fill('#editThemeName', 'E2E测试主题');
+    await page.click('#editorSaveBtn');
+    await page.waitForTimeout(500);
+
+    // 编辑器应关闭
+    await expect(editorModal).toBeHidden();
+
+    // 打开选择器，应能看到刚保存的自定义主题
+    await page.evaluate(() => window.__theme.openThemeSelector());
+    await page.waitForTimeout(800);
+    const cards = page.locator('.theme-card');
+    const total = await cards.count();
+    expect(total, '应有 8 张卡片（7 预设 + 1 自定义）').toBe(8);
+  });
 });
