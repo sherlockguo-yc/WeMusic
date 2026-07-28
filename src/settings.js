@@ -1401,7 +1401,7 @@ export async function openSettings() {
   // 渲染自定义色板（仅登录用户）
   if (Auth.user) {
     await loadCustomPalettes();
-    renderCustomPalettesUI(curPalette);
+    renderCustomPalettesUI(localStorage.getItem('wemusic_palette') || 'green');
     setupCustomColorEditor();
   } else {
     const container = $('customPalettes');
