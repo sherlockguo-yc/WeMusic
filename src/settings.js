@@ -190,25 +190,31 @@ export async function activateTheme(themeId) {
   if (!themeId) { deactivateTheme(); return; }
   document.body.setAttribute('data-theme', themeId);
 
-  // 尝试从预设数据加载 Slot 配置
+  const isLight = document.body.classList.contains('light');
   let slots = null;
-  try {
-    const { theme } = await api(`/themes/presets/${themeId}`);
-    if (theme) {
-      // 根据当前深浅色模式选择变体
-      const isLight = document.body.classList.contains('light');
-      const variant = isLight ? (theme.dayVariant || theme.nightVariant) : (theme.nightVariant || theme.dayVariant);
+
+  // 自定义主题：从本地缓存加载
+  if (themeId.startsWith('custom-')) {
+    const ct = (_customThemes || []).find((t) => t.id === themeId);
+    if (ct) {
+      const variant = isLight ? (ct.dayVariant || ct.nightVariant) : (ct.nightVariant || ct.dayVariant);
       if (variant?.slots) slots = variant.slots;
     }
-  } catch (e) { /* 预设加载失败，回退到测试数据 */ }
+  } else {
+    // 预设主题：从 API 加载
+    try {
+      const { theme } = await api(`/themes/presets/${themeId}`);
+      if (theme) {
+        const variant = isLight ? (theme.dayVariant || theme.nightVariant) : (theme.nightVariant || theme.dayVariant);
+        if (variant?.slots) slots = variant.slots;
+      }
+    } catch (e) { /* 加载失败，回退到测试数据 */ }
+  }
 
-  // 回退：硬编码测试数据（Phase 1 兼容）
   if (!slots) slots = _getTestSlots();
 
   applyThemeSlots(slots);
-  // 持久化
   localStorage.setItem('wemusic_activeTheme', themeId);
-  localStorage.setItem('wemusic_activeThemeName', slots.accent ? '' : ''); // 预设会覆盖
   // 更新设置面板中的主题名称显示
   _updateThemeLabel();
 }
@@ -315,15 +321,23 @@ function _getTestSlots() {
 /** 预设主题元数据缓存（id → { name, artist, decorations, ... }） */
 let _presetsCache = null;
 
-/** 从服务端加载预设主题元数据 */
+/** 从服务端加载预设主题元数据 + 用户自定义主题 */
 export async function loadPresets() {
   try {
-    const { presets } = await api('/themes/presets');
-    _presetsCache = presets || [];
+    const [presetRes, customRes] = await Promise.allSettled([
+      api('/themes/presets'),
+      api('/auth/themes'),
+    ]);
+    _presetsCache = (presetRes.status === 'fulfilled' ? presetRes.value.presets : []) || [];
+    _customThemes = (customRes.status === 'fulfilled' ? customRes.value.themes : []) || [];
   } catch (e) {
     _presetsCache = [];
+    _customThemes = [];
   }
 }
+
+// 自定义主题缓存
+let _customThemes = [];
 
 /** 更新设置面板中的主题名称标签 */
 function _updateThemeLabel() {
@@ -351,7 +365,8 @@ async function _renderThemeSelector() {
   if (!grid) return;
 
   // 加载中状态：骨架屏
-  if (!_presetsCache || _presetsCache.length === 0) {
+  const allThemes = [...(_presetsCache || []), ...((_customThemes || []).map((t) => ({ ...t, preview: {}, decorations: 'none', artist: '' })))];
+  if (!_presetsCache && !_customThemes.length) {
     grid.innerHTML = '<div class="theme-grid-loading">' +
       Array(4).fill('<div class="theme-skeleton"></div>').join('') + '</div>';
     return;
@@ -360,8 +375,21 @@ async function _renderThemeSelector() {
   const activeId = localStorage.getItem('wemusic_activeTheme') || '';
   const isLight = document.body.classList.contains('light');
 
-  grid.innerHTML = _presetsCache.map((p) => {
-    const pv = p.preview || {};
+  // 为自定义主题生成最小预览字段
+  const _makePreview = (t) => {
+    if (t.preview) return t.preview;
+    const ds = t.dayVariant?.slots || {};
+    return {
+      dayBg: ds.bg?.value || '#f4f6f9', nightBg: '#0d0f12',
+      dayAccent: ds.accent?.value || '#2ab758', nightAccent: ds.accent?.value || '#2ab758',
+      daySidebar: ds.sidebar?.value || '#fafbfd', nightSidebar: '#0d0f12',
+      dayText: '#1b1d22', nightText: '#e0e3e8',
+      coverRadius: ds.player?.value === 'pill-cover' ? '50%' : '6px',
+    };
+  };
+
+  grid.innerHTML = allThemes.map((p) => {
+    const pv = _makePreview(p);
     const bg = isLight ? (pv.dayBgColor || pv.dayBg) : (pv.nightBgColor || pv.nightBg);
     const accent = isLight ? pv.dayAccent : pv.nightAccent;
     const sidebarBg = isLight ? pv.daySidebar : pv.nightSidebar;

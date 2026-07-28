@@ -436,3 +436,50 @@ test.describe('主题系统（Phase 2 预设主题）', () => {
     expect(after.f, '取消主题后字体应恢复').toBe(false);
   });
 });
+
+// Phase 3：自定义主题 CRUD 基础
+test.describe('主题系统（Phase 3 自定义主题）', () => {
+  test('POST /api/auth/themes 创建 → GET 返回 → DELETE 删除', async ({ page, request }) => {
+    const uname = 'e2e_custom_' + Date.now();
+    const reg = await request.post('/api/auth/register', { data: { username: uname, password: 'Custom123!' } });
+    const { token } = await reg.json();
+
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // 创建自定义主题
+    const create = await request.post('/api/auth/themes', {
+      data: {
+        name: '测试自定义',
+        dayVariant: { slots: { accent: { type: 'color', value: '#123456' }, font: { type: 'font', value: 'hei' } } },
+      },
+      headers,
+    });
+    expect(create.ok(), '创建应成功').toBeTruthy();
+    const { theme } = await create.json();
+    expect(theme.id, '应有 id').toMatch(/^custom-/);
+    expect(theme.name).toBe('测试自定义');
+    expect(theme.dayVariant.slots.accent.value).toBe('#123456');
+
+    // 获取列表
+    const list = await request.get('/api/auth/themes', { headers });
+    const { themes } = await list.json();
+    expect(themes.length, '应有 1 个自定义主题').toBe(1);
+
+    // 更新
+    const update = await request.post('/api/auth/themes', {
+      data: { id: theme.id, name: '改名了', dayVariant: { slots: { accent: { type: 'color', value: '#654321' } } } },
+      headers,
+    });
+    expect(update.ok(), '更新应成功').toBeTruthy();
+    const updated = await update.json();
+    expect(updated.theme.name).toBe('改名了');
+
+    // 删除
+    const del = await request.delete(`/api/auth/themes/${theme.id}`, { headers });
+    expect(del.ok(), '删除应成功').toBeTruthy();
+
+    // 确认已删除
+    const after = await request.get('/api/auth/themes', { headers });
+    expect((await after.json()).themes.length, '删除后应为 0').toBe(0);
+  });
+});

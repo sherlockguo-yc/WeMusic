@@ -237,4 +237,59 @@ router.get('/admin/stats', authRequired, adminOnly, (req, res) => {
   });
 });
 
+// ---- 自定义主题（Phase 3）----
+
+// GET /auth/themes — 获取当前用户的自定义主题列表
+router.get('/themes', authRequired, (req, res) => {
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const prefs = row ? JSON.parse(row.data) : {};
+  res.json({ themes: prefs.themes || [] });
+});
+
+// POST /auth/themes — 创建或更新自定义主题
+router.post('/themes', authRequired, (req, res) => {
+  const { id, name, dayVariant, nightVariant, artistIds } = req.body || {};
+  if (!name || typeof name !== 'string') return res.status(400).json({ error: '主题名称必填' });
+  if (!dayVariant || !dayVariant.slots) return res.status(400).json({ error: '至少需要日间主题配置' });
+
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const prefs = row ? JSON.parse(row.data) : {};
+  const list = prefs.themes || [];
+
+  if (id) {
+    // 更新已有主题
+    const idx = list.findIndex((t) => t.id === id);
+    if (idx === -1) return res.status(404).json({ error: '主题不存在' });
+    list[idx] = { ...list[idx], name, dayVariant, nightVariant: nightVariant || null, artistIds: artistIds || [], updatedAt: Date.now() };
+    prefs.themes = list;
+    db.prepare('INSERT OR REPLACE INTO user_preferences (user_id, data, updated_at) VALUES (?, ?, ?)')
+      .run(req.user.id, JSON.stringify(prefs), Date.now());
+    return res.json({ theme: list[idx] });
+  }
+
+  // 创建新主题
+  if (list.length >= 10) return res.status(400).json({ error: '已达上限（10个）' });
+  const newId = 'custom-' + Date.now().toString(36);
+  const theme = { id: newId, name, dayVariant, nightVariant: nightVariant || null, artistIds: artistIds || [], createdAt: Date.now(), updatedAt: Date.now() };
+  list.push(theme);
+  prefs.themes = list;
+  db.prepare('INSERT OR REPLACE INTO user_preferences (user_id, data, updated_at) VALUES (?, ?, ?)')
+    .run(req.user.id, JSON.stringify(prefs), Date.now());
+  res.json({ theme });
+});
+
+// DELETE /auth/themes/:id — 删除自定义主题
+router.delete('/themes/:id', authRequired, (req, res) => {
+  const row = db.prepare('SELECT data FROM user_preferences WHERE user_id = ?').get(req.user.id);
+  const prefs = row ? JSON.parse(row.data) : {};
+  const list = prefs.themes || [];
+  const idx = list.findIndex((t) => t.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: '主题不存在' });
+  list.splice(idx, 1);
+  prefs.themes = list;
+  db.prepare('INSERT OR REPLACE INTO user_preferences (user_id, data, updated_at) VALUES (?, ?, ?)')
+    .run(req.user.id, JSON.stringify(prefs), Date.now());
+  res.json({ ok: true });
+});
+
 export default router;

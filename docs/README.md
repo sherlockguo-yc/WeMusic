@@ -2,11 +2,6 @@
 
 > 此文件由 `npm run codegraph` 自动生成，无需手动维护。
 
-## 项目级文档
-
-- [CSS布局故障历史](CSS布局故障历史.md)
-- [devserver-qspace 磁盘清理与迁移](devserver-qspace-磁盘清理与迁移.md)
-
 ## 功能规格/
 
 - [QQ 音乐接口文档](功能规格/QQ音乐接口文档.md)
