@@ -422,6 +422,7 @@ let _presetsCache = null;
 
 /** 从服务端加载预设主题元数据 + 用户自定义主题 */
 export async function loadPresets() {
+  if (_presetsCache !== null) return; // 已缓存，快速返回
   try {
     const [presetRes, customRes] = await Promise.allSettled([
       api('/themes/presets'),
@@ -435,8 +436,38 @@ export async function loadPresets() {
   }
 }
 
+/** 强制刷新预设缓存（创建/更新自定义主题后调用） */
+export async function refreshPresets() {
+  _presetsCache = null;
+  _customThemes = [];
+  await loadPresets();
+}
+
 // 自定义主题缓存
 let _customThemes = [];
+
+// 骨架屏 HTML 常量
+const SKELETON_HTML = '<div class="theme-grid-loading">' +
+  Array(4).fill('<div class="theme-skeleton"></div>').join('') + '</div>';
+
+/** 高亮一组选项按钮并设置点击回调（仅首次绑定，后续只更新高亮） */
+function _bindOptionGroup(selector, { getActive, getDataKey, onSelect }) {
+  const els = document.querySelectorAll(selector);
+  if (els.length === 0) return;
+  // 检查是否已绑定（通过 data-bound 属性）
+  const bound = els[0].dataset.bound === '1';
+  const activeVal = getActive();
+  els.forEach((el) => {
+    el.classList.toggle('active', el.dataset[getDataKey] === activeVal);
+    if (!bound) {
+      el.dataset.bound = '1';
+      el.addEventListener('click', () => {
+        onSelect(el.dataset[getDataKey], el);
+        els.forEach((x) => x.classList.toggle('active', x === el));
+      });
+    }
+  });
+}
 
 /** 更新设置面板中的主题名称标签 */
 function _updateThemeLabel() {
@@ -466,8 +497,7 @@ async function _renderThemeSelector() {
   // 加载中状态：骨架屏
   const allThemes = [...(_presetsCache || []), ...((_customThemes || []).map((t) => ({ ...t, artist: t.artist || '' })))];
   if ((!_presetsCache || _presetsCache.length === 0) && _customThemes.length === 0) {
-    grid.innerHTML = '<div class="theme-grid-loading">' +
-      Array(4).fill('<div class="theme-skeleton"></div>').join('') + '</div>';
+    grid.innerHTML = SKELETON_HTML;
     return;
   }
 
@@ -532,10 +562,11 @@ async function _renderThemeSelector() {
     </div>`;
   }).join('');
 
-  // 绑定点击事件：选中卡片
-  grid.querySelectorAll('.theme-card').forEach((card) => {
+  // 绑定点击事件：选中卡片（缓存 NodeList 避免重复查询）
+  const allCards = grid.querySelectorAll('.theme-card');
+  allCards.forEach((card) => {
     card.addEventListener('click', () => {
-      grid.querySelectorAll('.theme-card').forEach((c) => c.classList.remove('active'));
+      allCards.forEach((c) => c.classList.remove('active'));
       card.classList.add('active');
     });
     card.addEventListener('dblclick', () => {
@@ -549,8 +580,7 @@ async function _renderThemeSelector() {
 export function openThemeSelector() {
   // 加载中状态：骨架屏
   const grid = $('themeSelectorGrid');
-  if (grid) grid.innerHTML = '<div class="theme-grid-loading">' +
-    Array(4).fill('<div class="theme-skeleton"></div>').join('') + '</div>';
+  if (grid) grid.innerHTML = SKELETON_HTML;
   $('themeSelectorModal').classList.add('show');
   // 预加载并渲染
   _renderThemeSelector();
@@ -721,7 +751,7 @@ async function _saveTheme() {
   try {
     await api('/auth/themes', { method: 'POST', body });
     $('themeEditorModal').classList.remove('show');
-    await loadPresets();
+    await refreshPresets();
     toast(_editingThemeId ? '主题已更新' : '主题已创建');
     _updateThemeLabel();
   } catch (e) { toast('保存失败：' + e.message); }
@@ -1295,24 +1325,20 @@ export async function openSettings() {
     avatarPreview.onclick = () => avatarFileInput.click();
     avatarFileInput.onchange = (e) => { uploadAvatar(e.target.files[0]); avatarFileInput.value = ''; };
   }
-  const curTheme = localStorage.getItem('wemusic_theme') || 'light';
-  document.querySelectorAll('.theme-opt').forEach((b) => {
-    b.classList.toggle('active', b.dataset.theme === curTheme);
-    b.onclick = () => {
-      localStorage.setItem('wemusic_theme', b.dataset.theme);
-      applyTheme(b.dataset.theme);
-      _dbSyncPrefs();
-    };
+  _bindOptionGroup('.theme-opt', {
+    getActive: () => localStorage.getItem('wemusic_theme') || 'light',
+    getDataKey: 'theme',
+    onSelect: (val) => { localStorage.setItem('wemusic_theme', val); applyTheme(val); _dbSyncPrefs(); },
   });
-  const curFont = localStorage.getItem('wemusic_font') || 'default';
-  document.querySelectorAll('.font-opt').forEach((b) => {
-    b.classList.toggle('active', b.dataset.font === curFont);
-    b.onclick = () => { localStorage.setItem('wemusic_font', b.dataset.font); applyFont(b.dataset.font); _dbSyncPrefs(); };
+  _bindOptionGroup('.font-opt', {
+    getActive: () => localStorage.getItem('wemusic_font') || 'default',
+    getDataKey: 'font',
+    onSelect: (val) => { localStorage.setItem('wemusic_font', val); applyFont(val); _dbSyncPrefs(); },
   });
-  const curFontSize = localStorage.getItem('wemusic_font_size') || '14';
-  document.querySelectorAll('.size-opt').forEach((b) => {
-    b.classList.toggle('active', b.dataset.size === curFontSize);
-    b.onclick = () => { localStorage.setItem('wemusic_font_size', b.dataset.size); applyFontSize(b.dataset.size); _dbSyncPrefs(); };
+  _bindOptionGroup('.size-opt', {
+    getActive: () => localStorage.getItem('wemusic_font_size') || '14',
+    getDataKey: 'size',
+    onSelect: (val) => { localStorage.setItem('wemusic_font_size', val); applyFontSize(val); _dbSyncPrefs(); },
   });
 
   // 音量标准化开关
@@ -1327,27 +1353,24 @@ export async function openSettings() {
   }
 
   // 淡入淡出：直接选时长（含"关闭"）
-  const curCrossfadeDur = localStorage.getItem('wemusic_crossfade_duration') || '5';
-  const crossfadeEnabled = localStorage.getItem('wemusic_crossfade_enabled') === '1';
-  document.querySelectorAll('.crossfade-opt').forEach((b) => {
-    b.classList.toggle('active', crossfadeEnabled ? b.dataset.sec === curCrossfadeDur : b.dataset.sec === '0');
-    b.onclick = () => {
-      localStorage.setItem('wemusic_crossfade_duration', b.dataset.sec);
-      localStorage.setItem('wemusic_crossfade_enabled', b.dataset.sec === '0' ? '0' : '1');
-      document.querySelectorAll('.crossfade-opt').forEach((x) => x.classList.toggle('active', x === b));
+  _bindOptionGroup('.crossfade-opt', {
+    getActive: () => {
+      const enabled = localStorage.getItem('wemusic_crossfade_enabled') === '1';
+      return enabled ? (localStorage.getItem('wemusic_crossfade_duration') || '5') : '0';
+    },
+    getDataKey: 'sec',
+    onSelect: (val) => {
+      localStorage.setItem('wemusic_crossfade_duration', val);
+      localStorage.setItem('wemusic_crossfade_enabled', val === '0' ? '0' : '1');
       window.dispatchEvent(new CustomEvent('crossfade_changed'));
-    };
+    },
   });
 
   // EQ 预设选择
-  const curEQ = localStorage.getItem('wemusic_eq') || 'flat';
-  document.querySelectorAll('.eq-opt').forEach((b) => {
-    b.classList.toggle('active', b.dataset.eq === curEQ);
-    b.onclick = () => {
-      localStorage.setItem('wemusic_eq', b.dataset.eq);
-      document.querySelectorAll('.eq-opt').forEach((x) => x.classList.toggle('active', x === b));
-      window.dispatchEvent(new CustomEvent('eq_changed'));
-    };
+  _bindOptionGroup('.eq-opt', {
+    getActive: () => localStorage.getItem('wemusic_eq') || 'flat',
+    getDataKey: 'eq',
+    onSelect: (val) => { localStorage.setItem('wemusic_eq', val); window.dispatchEvent(new CustomEvent('eq_changed')); },
   });
 
   // 音频可视化：按钮组（含"关闭"）
@@ -1359,20 +1382,19 @@ export async function openSettings() {
   if (localStorage.getItem('wemusic_spectrum_style') === null) {
     localStorage.setItem('wemusic_spectrum_style', 'off');
   }
-  const curSpectrumStyle = localStorage.getItem('wemusic_spectrum_style') || 'off';
-  document.querySelectorAll('.spectrum-style-opt').forEach((b) => {
-    b.classList.toggle('active', b.dataset.style === curSpectrumStyle);
-    b.onclick = () => {
-      localStorage.setItem('wemusic_spectrum_style', b.dataset.style);
-      document.querySelectorAll('.spectrum-style-opt').forEach((x) => x.classList.toggle('active', x === b));
+  _bindOptionGroup('.spectrum-style-opt', {
+    getActive: () => localStorage.getItem('wemusic_spectrum_style') || 'off',
+    getDataKey: 'style',
+    onSelect: (val) => {
+      localStorage.setItem('wemusic_spectrum_style', val);
       window.dispatchEvent(new CustomEvent('spectrum_changed'));
-    };
+    },
   });
 
-  const curPalette = localStorage.getItem('wemusic_palette') || 'green';
-  document.querySelectorAll('.palette-item').forEach((b) => {
-    b.classList.toggle('active', b.dataset.palette === curPalette);
-    b.onclick = () => { selectPalette(b.dataset.palette); };
+  _bindOptionGroup('.palette-item', {
+    getActive: () => localStorage.getItem('wemusic_palette') || 'green',
+    getDataKey: 'palette',
+    onSelect: (val) => { selectPalette(val); },
   });
   setupPaletteFold();
 
