@@ -69,8 +69,12 @@ body.light ::-webkit-scrollbar-thumb { background: #ccd2dc; }
 body[data-theme] .theme-bg-layer {
   display: block; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   animation: theme-fade-in 0.5s ease both;
+  will-change: opacity;
 }
 @keyframes theme-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* 旋转黑胶 GPU 加速 */
+body[data-decorations="vinyl-record"]::before { will-change: transform; }
 .theme-bg-blur {
   position: absolute; inset: -20px;
   background-image: var(--theme-bg-image);
@@ -120,6 +124,7 @@ body[data-decorations="star-dust"]::before {
   50% { opacity: 0.6; }
   100% { opacity: 1; }
 }
+body[data-decorations="star-dust"]::before { will-change: opacity; }
 
 /* 音符角落：4 角 Lucide music-4 图标 */
 body[data-decorations="music-notes-corner"]::before {
@@ -300,6 +305,15 @@ body[data-decorations="wave-bottom"]::before {
 .editor-slot { display: flex; align-items: center; gap: 8px; }
 .editor-slot-label { font-size: calc(var(--font-size)*0.85); color: var(--text-dim); width: 90px; flex-shrink: 0; white-space: nowrap; }
 .editor-slot input, .editor-slot select { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-size: calc(var(--font-size)*0.85); }
+.editor-inp-sm { width: 80px; height: 32px; }
+.editor-inp-full { flex: 1; height: 32px; min-width: 120px; }
+.editor-inp-lg { width: 150px; height: 32px; }
+.editor-inp-md { width: 120px; height: 32px; }
+.editor-inp-block { width: 100%; height: 32px; }
+.editor-inp-name { flex: 1; height: 32px; max-width: 200px; }
+.editor-inp-color { width: 60px; height: 32px; border: none; cursor: pointer; }
+.editor-slot-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.editor-actions { display: flex; gap: 12px; margin-top: 20px; }
 .editor-advanced { margin-top: 4px; }
 .editor-advanced summary { cursor: pointer; font-size: calc(var(--font-size)*0.9); color: var(--text-dim); padding: 4px 0; }
 .editor-advanced summary:hover { color: var(--accent); }
@@ -1318,6 +1332,13 @@ input[type='range']::-moz-range-thumb {
 .settings-label { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; gap: 8px; }
 .settings-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .settings-hint { font-size: 12px; color: var(--accent); margin-top: 6px; min-height: 16px; }
+
+/* 主题设置区域辅助类 */
+.settings-subtitle { font-size: calc(var(--font-size)*0.8); color: var(--text-dim); text-transform: none; font-weight: 400; }
+.settings-theme-active { color: var(--accent); font-weight: 600; }
+.settings-theme-hint { font-size: calc(var(--font-size)*0.85); color: var(--text-dim); white-space: nowrap; }
+.settings-theme-status { font-size: calc(var(--font-size)*0.75); color: var(--text-dim); margin-left: auto; }
+.settings-row-center { display: flex; align-items: center; gap: 10px; }
 
 /* Toggle Switch（二元开关） */
 .toggle-switch { position: relative; width: 38px; height: 20px; flex-shrink: 0; }

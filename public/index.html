@@ -373,18 +373,18 @@
           </div>
         </div>
         <div class="settings-section">
-          <div class="settings-label">主题<span style="font-size:calc(var(--font-size)*0.8);color:var(--text-dim);text-transform:none;font-weight:400">明星主题</span></div>
-          <div class="settings-row" style="align-items:center;gap:10px">
-            <span id="activeThemeName" style="color:var(--accent);font-weight:600">未启用</span>
+          <div class="settings-label">主题<span class="settings-subtitle">明星主题</span></div>
+          <div class="settings-row settings-row-center">
+            <span id="activeThemeName" class="settings-theme-active">未启用</span>
             <button class="btn sm" id="chooseThemeBtn">选择主题</button>
           </div>
-          <div class="settings-row" style="align-items:center;gap:10px;margin-top:8px">
+          <div class="settings-row settings-row-center" style="margin-top:8px">
             <label class="toggle-switch">
               <input type="checkbox" id="smartThemeToggle">
               <span class="toggle-track"></span>
             </label>
-            <span style="font-size:calc(var(--font-size)*0.85);color:var(--text-dim)">智能切换（按歌手自动选主题）</span>
-            <span id="smartThemeStatus" style="font-size:calc(var(--font-size)*0.75);color:var(--text-dim);margin-left:auto"></span>
+            <span class="settings-theme-hint">智能切换（按歌手自动选主题）</span>
+            <span id="smartThemeStatus" class="settings-theme-status"></span>
           </div>
           <div class="settings-hint" style="margin-top:4px">激活主题后，配色和字体由主题控制</div>
         </div>
@@ -664,21 +664,21 @@
       <div class="editor-sections" id="editorSections">
         <div class="editor-slot">
           <div class="editor-slot-label">页面背景</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <select id="editBgType" style="width:80px"><option value="color">纯色</option><option value="gradient">渐变</option><option value="image">图片</option></select>
-            <input type="text" id="editBgValue" placeholder="#0d0f12 或 linear-gradient(...)" style="flex:1;height:32px;min-width:120px">
+          <div class="editor-slot-row">
+            <select id="editBgType" class="editor-inp-sm"><option value="color">纯色</option><option value="gradient">渐变</option><option value="image">图片</option></select>
+            <input type="text" id="editBgValue" class="editor-inp-full" placeholder="#0d0f12 或 linear-gradient(...)">
             <input type="file" id="editBgFile" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none">
             <button class="btn sm" id="editBgUploadBtn" style="display:none">上传背景图</button>
           </div>
         </div>
         <div class="editor-slot">
           <div class="editor-slot-label">强调色</div>
-          <input type="color" id="editAccent" value="#FF6B9D" style="width:60px;height:32px;border:none;cursor:pointer">
-          <input type="text" id="editAccentText" value="#FF6B9D" style="width:80px;height:32px;margin-left:4px">
+          <input type="color" id="editAccent" value="#FF6B9D" class="editor-inp-color">
+          <input type="text" id="editAccentText" value="#FF6B9D" class="editor-inp-sm" style="margin-left:4px">
         </div>
         <div class="editor-slot">
           <div class="editor-slot-label">字体</div>
-          <select id="editFont" style="width:150px;height:32px">
+          <select id="editFont" class="editor-inp-lg">
             <option value="default">系统默认</option><option value="serif">衬线体</option>
             <option value="hei">黑体</option><option value="mono">等宽</option>
             <option value="rounded">圆体</option>
@@ -687,13 +687,13 @@
         </div>
         <div class="editor-slot">
           <div class="editor-slot-label">播放器封面</div>
-          <select id="editPlayer" style="width:120px;height:32px">
+          <select id="editPlayer" class="editor-inp-md">
             <option value="default">经典</option><option value="rounded-cover">圆角</option><option value="pill-cover">胶囊</option>
           </select>
         </div>
         <div class="editor-slot">
           <div class="editor-slot-label">卡片样式</div>
-          <select id="editCard" style="width:120px;height:32px">
+          <select id="editCard" class="editor-inp-md">
             <option value="default">经典</option><option value="glass-morphism">毛玻璃</option><option value="flat">扁平</option><option value="outlined">线框</option>
           </select>
         </div>
@@ -703,11 +703,11 @@
           <summary>高级设置</summary>
           <div class="editor-slot" style="margin-top:8px">
             <div class="editor-slot-label">侧边栏颜色</div>
-            <input type="text" id="editSidebar" placeholder="#0f080a / rgba(...)" style="width:100%;height:32px">
+            <input type="text" id="editSidebar" class="editor-inp-block" placeholder="#0f080a / rgba(...)">
           </div>
           <div class="editor-slot">
             <div class="editor-slot-label">装饰元素</div>
-            <select id="editDecorations" style="width:100%;height:32px">
+            <select id="editDecorations" class="editor-inp-block">
               <option value="none">无</option><option value="star-dust">星尘 ✦</option>
               <option value="music-notes-corner">音符角落 ♪</option><option value="vinyl-record">黑胶唱片 ◉</option>
               <option value="wave-bottom">底部波浪 ~</option>
@@ -715,24 +715,24 @@
           </div>
           <div class="editor-slot">
             <div class="editor-slot-label">歌词高亮色</div>
-            <input type="text" id="editLyrics" placeholder="#FF8FAB" style="width:100%;height:32px">
+            <input type="text" id="editLyrics" class="editor-inp-block" placeholder="#FF8FAB">
           </div>
           <div class="editor-slot">
             <div class="editor-slot-label">滚动条颜色</div>
-            <input type="text" id="editScrollbar" placeholder="#553344" style="width:100%;height:32px">
+            <input type="text" id="editScrollbar" class="editor-inp-block" placeholder="#553344">
           </div>
           <div class="editor-slot">
             <div class="editor-slot-label">表格行样式</div>
-            <select id="editRow" style="width:100%;height:32px">
+            <select id="editRow" class="editor-inp-block">
               <option value="default">经典</option><option value="subtle-stripe">细条纹</option><option value="highlight-hover">高亮悬停</option>
             </select>
           </div>
         </details>
       </div>
 
-      <div class="prompt-actions" style="margin-top:20px;gap:12px">
+      <div class="editor-actions">
         <button class="btn sm" id="editorResetBtn">重置</button>
-        <input type="text" id="editThemeName" placeholder="主题名称（必填）" style="flex:1;height:32px;max-width:200px">
+        <input type="text" id="editThemeName" class="editor-inp-name" placeholder="主题名称（必填）">
         <button class="btn sm" id="editorExportBtn">导出</button>
         <button class="btn sm" id="editorCancelBtn">关闭</button>
         <button class="btn sm green" id="editorSaveBtn">保存</button>
