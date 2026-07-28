@@ -157,18 +157,18 @@ body[data-decorations="wave-bottom"]::before {
 .theme-selector-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  gap: 18px;
   max-height: 440px;
   overflow-y: auto;
-  padding: 4px;
+  padding: 8px;
 }
 /* 加载占位：骨架屏 + 浅淡文案 */
 .theme-grid-loading {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
-  padding: 4px;
+  gap: 18px;
+  padding: 8px;
 }
 .theme-skeleton {
   background: var(--bg-card);
@@ -1378,6 +1378,17 @@ input[type='range']::-moz-range-thumb {
 }
 .palette-item:hover .palette-name { color: var(--text); }
 .palette-item.active .palette-name { color: var(--text); font-weight: 600; }
+.palette-item.palette-collapsed { display: none; }
+
+/* 系统颜色折叠按钮 */
+.palette-fold-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-top: 8px; padding: 4px 12px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); cursor: pointer; font-size: 12.5px; font-family: inherit;
+  transition: border-color .15s, color .15s;
+}
+.palette-fold-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* 自定义主题色 */
 .custom-palette-swatch {
@@ -2376,7 +2387,20 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 }
 .modal h3 { margin-bottom: 12px; }
 /* 设置面板：比通用 modal 更宽，避免离线用量行换行 */
-.modal.settings-modal { max-width: 480px; overflow: hidden; padding: 0; }
+.modal.settings-modal { max-width: 480px; overflow: hidden; padding: 0; position: relative; }
+/* 关闭按钮：右上角圆形 ghost 按钮，hover 填充 + 缩放反馈 */
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  width: 28px; height: 28px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: transparent; color: var(--text-dim);
+  cursor: pointer; z-index: 5;
+  transition: background .15s, color .15s, transform .15s;
+}
+.modal-close:hover { background: var(--bg-soft); color: var(--text); transform: scale(1.08); }
+.modal-close:active { transform: scale(0.92); }
+.modal-close svg { width: 16px; height: 16px; }
 /* overflow: hidden + border-radius 真正裁剪到圆角，内容滚动交给内部 .modal-content */
 /* 用 80vh 直接限制，避免 max-height: 100% 的循环依赖（父容器高度由内容决定） */
 /* 底部 padding 设为 0，让 modal-scroll-hint 通过 sticky bottom: 0 覆盖到 modal 圆角底部，
@@ -2384,7 +2408,7 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .modal.settings-modal .modal-content {
   overflow-y: auto;
   max-height: 80vh;
-  padding: 18px 18px 0 18px;
+  padding: 24px 24px 0 24px;
 }
 
 /* 打赏弹窗：双码并排 */

@@ -765,19 +765,18 @@ export function applyFont(key) {
 }
 applyFont(localStorage.getItem('wemusic_font') || 'default');
 
+// 系统颜色默认折叠展示的数量，超出部分隐藏，点击「显示全部」展开
+const PALETTE_FOLD_LIMIT = 8;
+
 const PALETTES = {
   green:            '#2ab758',
-  burgundy:         '#800020',
   'mummy-brown':    '#8F4B28',
   'prussian-blue':  '#003153',
-  'titian-red':     '#B05923',
   'cream-oat':      '#F2E9E4',
-  'matte-gold':     '#D4AF37',
   charcoal:         '#222222',
   'deep-gray':      '#444444',
   'page-gray':      '#F5F5F5',
   'deep-moss':      '#2D5546',
-  'wine-red':       '#660033',
   'lake-gray-blue': '#7E8D98',
   'bean-green':     '#9CAF88',
   'dusty-rose':     '#D4B0B5',
@@ -1033,6 +1032,33 @@ function selectPalette(key) {
   applyPalette(key);
   _dbSyncPrefs();
   hideColorEditor();
+}
+
+// 系统颜色折叠：默认只展示前 PALETTE_FOLD_LIMIT 种，其余隐藏，点击按钮展开/收起
+function setupPaletteFold() {
+  const wrap = $('systemPalettes');
+  const btn = $('paletteFoldBtn');
+  if (!wrap || !btn) return;
+  const items = Array.from(wrap.querySelectorAll('.palette-item'));
+  if (items.length <= PALETTE_FOLD_LIMIT) { btn.style.display = 'none'; return; }
+
+  let expanded = false;
+  const activeKey = localStorage.getItem('wemusic_palette') || 'green';
+
+  function apply() {
+    items.forEach((el, i) => {
+      const isActive = el.dataset.palette === activeKey;
+      const hidden = !expanded && i >= PALETTE_FOLD_LIMIT && !isActive;
+      el.classList.toggle('palette-collapsed', hidden);
+    });
+  }
+  apply();
+
+  btn.onclick = () => {
+    expanded = !expanded;
+    btn.textContent = expanded ? '收起' : '显示全部';
+    apply();
+  };
 }
 
 function renderCustomPalettesUI(curPalette) {
@@ -1341,6 +1367,7 @@ export async function openSettings() {
     b.classList.toggle('active', b.dataset.palette === curPalette);
     b.onclick = () => { selectPalette(b.dataset.palette); };
   });
+  setupPaletteFold();
 
   // 渲染自定义色板（仅登录用户）
   if (Auth.user) {

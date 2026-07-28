@@ -400,21 +400,16 @@
           <div class="settings-row palette-options" id="systemPalettes">
             <label class="palette-item active" data-palette="green"><span class="palette-swatch" style="background:#2ab758"></span><span class="palette-name">森林绿</span></label>
 
-            <label class="palette-item" data-palette="burgundy"><span class="palette-swatch" style="background:#800020"></span><span class="palette-name">勃艮第酒红</span></label>
             <label class="palette-item" data-palette="mummy-brown"><span class="palette-swatch" style="background:#8F4B28"></span><span class="palette-name">木乃伊棕</span></label>
             <label class="palette-item" data-palette="prussian-blue"><span class="palette-swatch" style="background:#003153"></span><span class="palette-name">普鲁士蓝</span></label>
-
-            <label class="palette-item" data-palette="titian-red"><span class="palette-swatch" style="background:#B05923"></span><span class="palette-name">复古提香橙红</span></label>
 
             <label class="palette-item" data-palette="cream-oat"><span class="palette-swatch" style="background:#F2E9E4"></span><span class="palette-name">奶油燕麦</span></label>
 
 
-            <label class="palette-item" data-palette="matte-gold"><span class="palette-swatch" style="background:#D4AF37"></span><span class="palette-name">哑光金</span></label>
             <label class="palette-item" data-palette="charcoal"><span class="palette-swatch" style="background:#222222"></span><span class="palette-name">炭黑灰</span></label>
             <label class="palette-item" data-palette="deep-gray"><span class="palette-swatch" style="background:#444444"></span><span class="palette-name">中性深灰</span></label>
             <label class="palette-item" data-palette="page-gray"><span class="palette-swatch" style="background:#F5F5F5"></span><span class="palette-name">页面浅灰</span></label>
             <label class="palette-item" data-palette="deep-moss"><span class="palette-swatch" style="background:#2D5546"></span><span class="palette-name">沉稳墨绿</span></label>
-            <label class="palette-item" data-palette="wine-red"><span class="palette-swatch" style="background:#660033"></span><span class="palette-name">酒红商务</span></label>
             <label class="palette-item" data-palette="lake-gray-blue"><span class="palette-swatch" style="background:#7E8D98"></span><span class="palette-name">灰湖蓝</span></label>
             <label class="palette-item" data-palette="bean-green"><span class="palette-swatch" style="background:#9CAF88"></span><span class="palette-name">灰豆绿</span></label>
             <label class="palette-item" data-palette="dusty-rose"><span class="palette-swatch" style="background:#D4B0B5"></span><span class="palette-name">灰豆沙粉</span></label>
@@ -424,6 +419,7 @@
             <label class="palette-item" data-palette="taupe"><span class="palette-swatch" style="background:#C89F94"></span><span class="palette-name">浅褐灰</span></label>
             <label class="palette-item" data-palette="deep-purple-gray"><span class="palette-swatch" style="background:#4B4453"></span><span class="palette-name">深紫灰</span></label>
           </div>
+          <button type="button" class="palette-fold-btn" id="paletteFoldBtn">显示全部</button>
           <div id="customPalettesSection" style="display:none">
             <div class="palette-section-label">我的颜色</div>
             <div class="settings-row palette-options" style="flex-wrap:wrap;gap:8px" id="customPalettes"></div>
@@ -618,11 +614,11 @@
   <!-- 主题选择器弹窗 -->
   <div class="modal-mask" id="themeSelectorModal">
     <div class="modal settings-modal" style="max-width:640px">
-      <button class="modal-close" id="themeSelectorClose">✕</button>
+      <button class="modal-close" id="themeSelectorClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       <div class="modal-content">
       <h3>选择主题</h3>
       <div class="theme-selector-grid" id="themeSelectorGrid"></div>
-      <div class="prompt-actions" style="margin-top:16px;gap:8px">
+      <div class="prompt-actions" style="margin-top:20px;gap:12px">
         <button class="btn sm" id="themeNewCustomBtn">+ 新建自定义</button>
         <button class="btn sm" id="themeImportBtn" style="background:var(--bg-soft)">导入</button>
         <input type="file" id="themeImportFile" accept=".json" style="display:none">
@@ -638,7 +634,7 @@
   <!-- 主题编辑器弹窗 -->
   <div class="modal-mask" id="themeEditorModal">
     <div class="modal settings-modal" style="max-width:700px">
-      <button class="modal-close" id="themeEditorClose">✕</button>
+      <button class="modal-close" id="themeEditorClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       <div class="modal-content">
       <h3>编辑主题</h3>
       <div style="display:flex;gap:10px;margin-bottom:12px">
@@ -734,7 +730,7 @@
         </details>
       </div>
 
-      <div class="prompt-actions" style="margin-top:16px;gap:8px">
+      <div class="prompt-actions" style="margin-top:20px;gap:12px">
         <button class="btn sm" id="editorResetBtn">重置</button>
         <input type="text" id="editThemeName" placeholder="主题名称（必填）" style="flex:1;height:32px;max-width:200px">
         <button class="btn sm" id="editorExportBtn">导出</button>
