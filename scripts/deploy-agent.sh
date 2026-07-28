@@ -375,14 +375,34 @@ download_artifact() {
   local base="https://github.com/$repo/releases/download"
   local mirror_url="https://ghproxy.net/$base/$tag/$file_name"
   local direct_url="$base/$tag/$file_name"
+  local version_marker="${tmp}.version"
+
+  # 弱网环境下单轮预算内可能下不完；只要仍是同一版本，保留断点续传进度供下一轮
+  # cron 任务继续（-C -），不要清零重来。切换到不同版本时才丢弃旧进度。
+  if [ "$(cat "$version_marker" 2>/dev/null)" != "$version" ]; then
+    rm -f "$tmp"
+    printf '%s' "$version" > "$version_marker"
+  fi
 
   DOWNLOAD_ERROR="下载失败"
-  rm -f "$tmp"
   if try_download_resumable "$project" "$version" 镜像 "$mirror_url" "$tmp" 360 90; then
+    rm -f "$version_marker"
     return 0
   fi
   if try_download_resumable "$project" "$version" GitHub直连 "$direct_url" "$tmp" 900 90; then
+    rm -f "$version_marker"
     return 0
+  fi
+
+  # 安全阀：若本地已积累的字节数达到（或超过）远端体积但校验仍失败，
+  # 说明文件已损坏而非未下载完，续传无法修复，清空以便下一轮重新下载。
+  local expected_size local_size
+  expected_size=$(curl -sIL --max-time 10 --connect-timeout 8 "$direct_url" 2>/dev/null \
+    | tr -d '\r' | grep -i '^content-length:' | tail -1 | awk '{print $2}' || true)
+  local_size=$(stat -c%s "$tmp" 2>/dev/null || echo 0)
+  if [ -n "$expected_size" ] && [ "${local_size:-0}" -ge "$expected_size" ] 2>/dev/null; then
+    echo "[$(date)] $project 已达远端体积但校验失败，判定损坏，清空重下" >> "$LOG_BASE/$project-deploy.log"
+    rm -f "$tmp" "$version_marker"
   fi
   return 1
 }
@@ -428,8 +448,10 @@ deploy_job() {
   local tmp="/tmp/${project}-deploy.tar.gz"
   local stage="/tmp/${project}-stage"
   if ! download_artifact "$project" "$repo" "$version" "$file_name" "$tmp" "$version"; then
-    finish_job "$running" "$project" "$version" failed downloading "${trigger:-cron}" "$DOWNLOAD_ERROR" 0
-    rm -f "$tmp"
+    local resumed_size
+    resumed_size=$(stat -c%s "$tmp" 2>/dev/null || echo 0)
+    # 不删除 $tmp：弱网下断点续传进度保留给下一轮任务继续（同版本才生效，见 download_artifact）。
+    finish_job "$running" "$project" "$version" failed downloading "${trigger:-cron}" "${DOWNLOAD_ERROR}（已续传 ${resumed_size} 字节）" 0
     return 1
   fi
 
