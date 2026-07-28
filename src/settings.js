@@ -460,38 +460,46 @@ function escHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;'
 
 // ---- 主题编辑器（Phase 3）----
 
-/** 当前编辑的变体：'day' | 'night' */
+/** 当前变体 */
 let _editorVariant = 'day';
+/** 日间 / 夜间 Slot 缓存 */
+let _daySlots = null;
+let _nightSlots = null;
 /** 编辑中的自定义主题 id（null = 新建） */
 let _editingThemeId = null;
 
 /** 打开主题编辑器 */
 export async function openThemeEditor(themeId) {
   await loadPresets();
-  _editorVariant = 'day';
   _editingThemeId = null;
+  _editorVariant = 'day';
+  _daySlots = _emptySlots();
+  _nightSlots = _emptySlots();
 
-  let initialSlots = _emptySlots();
-  // 加载已有自定义主题的数据
+  // 从已有主题加载数据
   if (themeId && themeId.startsWith('custom-')) {
     const ct = (_customThemes || []).find((t) => t.id === themeId);
     if (ct) {
       _editingThemeId = themeId;
       $('editThemeName').value = ct.name || '';
-      if (ct.dayVariant?.slots) initialSlots = { ...initialSlots, ...ct.dayVariant.slots };
+      if (ct.dayVariant?.slots) _daySlots = { ..._daySlots, ...ct.dayVariant.slots };
+      if (ct.nightVariant?.slots) _nightSlots = { ..._nightSlots, ...ct.nightVariant.slots };
+      else _nightSlots = { ..._daySlots }; // 无夜间变体时复制日间
     }
   } else if (themeId && !themeId.startsWith('custom-')) {
-    // 从预设主题复制 slot 配置
+    // 从预设主题复制
     try {
       const { theme } = await api(`/themes/presets/${themeId}`);
-      if (theme?.dayVariant?.slots) initialSlots = { ...initialSlots, ...theme.dayVariant.slots };
+      if (theme?.dayVariant?.slots) _daySlots = { ..._daySlots, ...theme.dayVariant.slots };
+      if (theme?.nightVariant?.slots) _nightSlots = { ..._nightSlots, ...theme.nightVariant.slots };
+      else _nightSlots = { ..._daySlots };
       $('editThemeName').value = theme?.name ? `${theme.name} (我的)` : '';
     } catch (e) { /* fallthrough */ }
   } else {
     $('editThemeName').value = '';
   }
 
-  _populateEditor(initialSlots);
+  _populateEditorVariant('day');
   _updatePreview();
   $('themeEditorModal').classList.add('show');
 }
@@ -511,8 +519,21 @@ function _emptySlots() {
   };
 }
 
-function _populateEditor(slots) {
-  const s = slots;
+/** 将当前表单值写回当前变体存储，用目标变体的值填充表单 */
+function _switchEditorVariant(target) {
+  // 保存当前变体
+  const curSlots = _readEditorSlots();
+  if (_editorVariant === 'day') _daySlots = curSlots;
+  else _nightSlots = curSlots;
+
+  _editorVariant = target;
+  _populateEditorVariant(target);
+  document.querySelectorAll('.theme-variant-tab').forEach((t) => t.classList.toggle('active', t.dataset.variant === target));
+  _updatePreview();
+}
+
+function _populateEditorVariant(variant) {
+  const s = variant === 'day' ? _daySlots : _nightSlots;
   $('editBgType').value = s.bg?.type || 'color';
   $('editBgValue').value = s.bg?.value || '';
   $('editAccent').value = s.accent?.value || '#FF6B9D';
@@ -525,9 +546,7 @@ function _populateEditor(slots) {
   $('editLyrics').value = s.lyrics?.value || '';
   $('editScrollbar').value = s.scrollbar?.value || '';
   $('editRow').value = s.row?.value || 'default';
-
-  // 日/夜 tab
-  document.querySelectorAll('.theme-variant-tab').forEach((t) => t.classList.toggle('active', t.dataset.variant === _editorVariant));
+  document.querySelectorAll('.theme-variant-tab').forEach((t) => t.classList.toggle('active', t.dataset.variant === variant));
 }
 
 function _readEditorSlots() {
@@ -545,7 +564,7 @@ function _readEditorSlots() {
   };
 }
 
-/** 更新预览窗口 */
+/** 更新预览窗口（使用当前变体 Slot + 表单即时值） */
 function _updatePreview() {
   const slots = _readEditorSlots();
   const accent = slots.accent.value;
@@ -554,22 +573,18 @@ function _updatePreview() {
   const sidebarVal = slots.sidebar.value || 'transparent';
   const coverRadius = slots.player.value === 'pill-cover' ? '50%' : (slots.player.value === 'rounded-cover' ? '12px' : '3px');
 
-  // 背景
   const contentEl = $('epContent');
-  if (isGradient) contentEl.style.background = bgVal;
+  if (slots.bg.type === 'image') contentEl.style.background = `url(${bgVal}) center/cover`;
+  else if (isGradient) contentEl.style.background = bgVal;
   else if (slots.bg.type === 'color') contentEl.style.background = bgVal;
-  else contentEl.style.background = '';
+  else contentEl.style.background = 'var(--bg)';
 
-  // 强调色
   $('epAccentRow').style.background = accent;
   $('epCover').style.background = accent;
   $('epCover').style.borderRadius = coverRadius;
   $('epProgress').style.background = accent;
-
-  // 侧边栏
   $('epSidebar').style.background = sidebarVal;
 
-  // 字体预览
   const fontMap = {
     serif: '"Noto Serif SC", Georgia, serif',
     hei: '"Hiragino Sans GB", "PingFang SC", sans-serif',
@@ -581,32 +596,32 @@ function _updatePreview() {
   $('editorPreview').style.fontFamily = fontMap[slots.font.value] || fontMap['default'];
 }
 
-/** 保存自定义主题 */
+/** 保存自定义主题（使用 _daySlots / _nightSlots） */
 async function _saveTheme() {
   const name = $('editThemeName').value.trim();
   if (!name) return toast('请输入主题名称');
 
-  const slots = _readEditorSlots();
-  const dayVariant = { slots: _editorVariant === 'day' ? slots : _readEditorSlots() };
-  const nightVariant = { slots: _editorVariant === 'night' ? slots : _readEditorSlots() };
+  // 将当前表单值写回当前变体
+  const curSlots = _readEditorSlots();
+  if (_editorVariant === 'day') _daySlots = curSlots;
+  else _nightSlots = curSlots;
 
-  // 简化：当前编辑的变体作为 dayVariant
   const body = {
     id: _editingThemeId || undefined,
     name,
-    dayVariant: { slots },
-    nightVariant: { slots }, // Phase 3 先同体，后续支持双模式
+    dayVariant: { slots: _daySlots },
+    nightVariant: { slots: _nightSlots },
   };
 
   try {
-    const { theme } = await api('/auth/themes', { method: 'POST', body });
+    await api('/auth/themes', { method: 'POST', body });
     $('themeEditorModal').classList.remove('show');
     await loadPresets();
     toast(_editingThemeId ? '主题已更新' : '主题已创建');
-    // 刷新选择器
     _updateThemeLabel();
   } catch (e) { toast('保存失败：' + e.message); }
 }
+
 
 /** 应用当前选中的主题 */
 async function _applySelectedTheme() {
@@ -615,7 +630,7 @@ async function _applySelectedTheme() {
   if (!active) { toast('请选择一套主题'); return; }
 
   const themeId = active.dataset.themeId;
-  const preset = _presetsCache?.find((p) => p.id === themeId);
+  const preset = _presetsCache?.find((p) => p.id === themeId) || (_customThemes || []).find((t) => t.id === themeId);
   const themeName = preset?.name || themeId;
 
   await activateTheme(themeId);
@@ -1322,7 +1337,7 @@ export function initSettings() {
   $('themeEditorClose').onclick = () => $('themeEditorModal').classList.remove('show');
   $('themeEditorModal').onclick = (e) => { if (e.target.id === 'themeEditorModal') $('themeEditorModal').classList.remove('show'); };
   $('editorCancelBtn').onclick = () => $('themeEditorModal').classList.remove('show');
-  $('editorResetBtn').onclick = () => { _populateEditor(_emptySlots()); _updatePreview(); };
+  $('editorResetBtn').onclick = () => { _daySlots = _emptySlots(); _nightSlots = _emptySlots(); _populateEditorVariant(_editorVariant); _updatePreview(); };
   $('editorSaveBtn').onclick = _saveTheme;
   // 实时预览
   ['editBgType', 'editBgValue', 'editAccent', 'editAccentText', 'editFont', 'editPlayer', 'editCard',
@@ -1330,9 +1345,31 @@ export function initSettings() {
     const el = $(id);
     if (el) el.addEventListener('input', _updatePreview);
   });
-  // 日/夜 tab
-  $('editorDayTab').onclick = () => { _editorVariant = 'day'; document.querySelectorAll('.theme-variant-tab').forEach(t => t.classList.toggle('active', t.dataset.variant === 'day')); };
-  $('editorNightTab').onclick = () => { _editorVariant = 'night'; document.querySelectorAll('.theme-variant-tab').forEach(t => t.classList.toggle('active', t.dataset.variant === 'night')); };
+  // 背景类型切换：显示/隐藏上传按钮
+  $('editBgType').addEventListener('change', () => {
+    const isImage = $('editBgType').value === 'image';
+    $('editBgUploadBtn').style.display = isImage ? '' : 'none';
+    $('editBgFile').style.display = 'none';
+    _updatePreview();
+  });
+  $('editBgUploadBtn').addEventListener('click', () => $('editBgFile').click());
+  $('editBgFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return toast('图片不能超过 10MB');
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch('/api/upload/themes', { method: 'POST', body: fd, headers: { Authorization: `Bearer ${Auth.token}` } });
+      if (!res.ok) { toast('上传失败'); return; }
+      const { url } = await res.json();
+      $('editBgValue').value = url;
+      _updatePreview();
+    } catch (e) { toast('上传失败：' + e.message); }
+  });
+  // 日/夜 tab 切换
+  $('editorDayTab').onclick = () => _switchEditorVariant('day');
+  $('editorNightTab').onclick = () => _switchEditorVariant('night');
   // 在主题选择器中添加「编辑主题」按钮（自定义主题出现时才有意义）
   // Phase 3：从选择器卡片进入编辑
   $('settingsModal').onclick = (e) => { if (e.target.id === 'settingsModal') $('settingsModal').classList.remove('show'); };

@@ -658,9 +658,11 @@
       <div class="editor-sections" id="editorSections">
         <div class="editor-slot">
           <div class="editor-slot-label">页面背景</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <select id="editBgType" style="width:80px"><option value="color">纯色</option><option value="gradient">渐变</option></select>
-            <input type="text" id="editBgValue" placeholder="#0d0f12 或 linear-gradient(...)" style="flex:1;height:32px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="editBgType" style="width:80px"><option value="color">纯色</option><option value="gradient">渐变</option><option value="image">图片</option></select>
+            <input type="text" id="editBgValue" placeholder="#0d0f12 或 linear-gradient(...)" style="flex:1;height:32px;min-width:120px">
+            <input type="file" id="editBgFile" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none">
+            <button class="btn sm" id="editBgUploadBtn" style="display:none">上传背景图</button>
           </div>
         </div>
         <div class="editor-slot">

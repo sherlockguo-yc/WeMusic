@@ -16,7 +16,11 @@ process.on('uncaughtException', (err) => { crashLog(`uncaughtException: ${err?.s
 process.on('unhandledRejection', (err) => { crashLog(`unhandledRejection: ${err?.stack || err}`); });
 
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config, PUBLIC_DIR } from './config.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import db from './db.js'; // 初始化数据库
 
 import authRouter from './routes/auth.js';
@@ -27,6 +31,7 @@ import statsRouter from './routes/stats.js';
 import adminRouter from './routes/admin.js';
 import migrationRouter from './routes/migration.js';
 import themesRouter from './routes/themes.js';
+import uploadRouter from './routes/upload.js';
 import { searchLyricsCandidates } from './services/lyrics.js';
 import { shortNameToSourceType } from '../shared/constants.js';
 
@@ -70,6 +75,9 @@ app.use('/api/play', playRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/themes', themesRouter);
+app.use('/api/upload', uploadRouter);
+// 静态文件服务：上传的主题素材
+app.use('/data/uploads', express.static(path.join(__dirname, '../data/uploads')));
 
 // 健康检查：只返回 ok，不暴露版本/环境等信息
 app.get('/api/health', (req, res) => res.json({ ok: true }));

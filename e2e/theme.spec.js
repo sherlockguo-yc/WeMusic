@@ -519,4 +519,63 @@ test.describe('主题系统（Phase 3 自定义主题）', () => {
     const total = await cards.count();
     expect(total, '应有 8 张卡片（7 预设 + 1 自定义）').toBe(8);
   });
+
+  test('主题编辑器：日/夜 tab 切换后双变体独立保存', async ({ page, request }) => {
+    const uname = 'e2e_var_' + Date.now();
+    const reg = await request.post('/api/auth/register', { data: { username: uname, password: 'VarPass123!' } });
+    const { token } = await reg.json();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    await page.goto('/login.html');
+    await page.evaluate((t) => localStorage.setItem('wemusic_token', t), token);
+    await page.goto('/');
+    await page.waitForFunction(() => window.__theme?.openThemeEditor, null, { timeout: 15000 });
+
+    // 从预设打开（应有 day+night 两套）
+    await page.evaluate(() => window.__theme.openThemeEditor('jay-warm-photo'));
+    await page.waitForTimeout(1000);
+
+    // 修改日间强调色
+    await page.fill('#editAccentText', '#FFAAAA');
+    // 切到夜间
+    await page.click('#editorNightTab');
+    await page.waitForTimeout(200);
+    // 验证夜间强调色是 jay-warm-photo 的 nightVariant（#FF6B9D），不是日间改后的 #FFAAAA
+    const nightAccent = await page.inputValue('#editAccentText');
+    expect(nightAccent.toUpperCase(), '夜间变体应保留独立的强调色').toBe('#FF6B9D');
+
+    // 改名保存
+    await page.fill('#editThemeName', '双变体测试');
+    await page.click('#editorSaveBtn');
+    await page.waitForTimeout(500);
+
+    // 验证服务端：双变体已独立存储
+    const list = await request.get('/api/auth/themes', { headers });
+    const { themes } = await list.json();
+    expect(themes.length).toBe(1);
+    expect(themes[0].dayVariant.slots.accent.value.toUpperCase()).toBe('#FFAAAA');
+    expect(themes[0].nightVariant.slots.accent.value.toUpperCase()).toBe('#FF6B9D');
+  });
+
+  test('图片上传 API：返回 URL 且文件可访问', async ({ request }) => {
+    const uname = 'e2e_up_' + Date.now();
+    const reg = await request.post('/api/auth/register', { data: { username: uname, password: 'UpPass123!' } });
+    const { token } = await reg.json();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // 创建最小 PNG（1x1 红色像素）
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+    const pngBuf = Buffer.from(pngBase64, 'base64');
+    const res = await request.post('/api/upload/themes', {
+      multipart: { file: { name: 'test.png', mimeType: 'image/png', buffer: pngBuf } },
+      headers,
+    });
+    expect(res.ok(), '上传应成功').toBeTruthy();
+    const { url } = await res.json();
+    expect(url, '应返回 url').toMatch(/^\/data\/uploads\/\d+\//);
+
+    // 验证文件可访问
+    const fileRes = await request.get(url);
+    expect(fileRes.ok(), '上传的文件应可访问').toBeTruthy();
+  });
 });
