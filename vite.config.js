@@ -29,9 +29,9 @@ export default defineConfig({
         },
       },
     },
-    esbuild: {
-      drop: ['console.log'], // 保留 console.error / console.warn 用于线上排查
-    },
+    // 注：此前生产构建会 drop console.log（只保留 warn/error）。
+    // 引入全量日志持久化基础设施（src/logger.js）后，console.log 也需要被
+    // monkey-patch 捕获并上报，因此不再 drop，改为全部保留。
   },
   server: {
     proxy: { '/api': 'http://localhost:5174' },

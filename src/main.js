@@ -1,4 +1,6 @@
 // WeMusic 主应用入口
+// 注：全量日志持久化的 console monkey-patch 由 public/js/log-shim.js（经典
+// <script>，在 index.html 中于本模块之前加载）完成，此处不需要再 import。
 import { Auth, api } from './api.js';
 import { state } from './state.js';
 import { $, initGlobalTooltip } from './utils.js';

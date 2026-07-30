@@ -227,3 +227,97 @@ git push → CI 构建 Release → curl POST webhook → deploy-agent 下载 tar
 - 频率限制：同一项目 60 秒内最多触发一次部署
 - `deploy-agent.sh` 使用 flock 锁防止并发部署
 - 同版本自动跳过，不重复下载
+
+## 八、新建文件前检查部署可达性
+
+### 规则
+
+**创建任何被服务端代码读取的文件之前，必须确认该路径不会被 N150 rsync 排除。** 若路径在排除列表内（如 `data/`、`.env`），该文件不会出现在生产服务器上，直接导致运行时错误（500/文件不可用）。
+
+### 危险路径
+
+| 路径 | 状态 | 原因 |
+|------|------|------|
+| `data/` | ❌ 排除 | 保护 SQLite 数据库（`--exclude 'data'`） |
+| `.env` | ❌ 排除 | 保护环境变量 |
+| `server/` | ✅ 安全 | 服务端代码会部署 |
+| `public/` | ✅ 安全 | 静态资源会部署 |
+| `src/` | ✅ 安全 | 前端源码构建后部署 |
+| `shared/` | ✅ 安全 | 共享模块会部署 |
+
+### 正确做法
+
+```bash
+# ✅ 正确：配置数据放在 server/ 子目录
+server/presets.json
+
+# ❌ 错误：配置数据放在 data/ 下
+data/themes/presets.json
+```
+
+### 检查清单
+
+新建服务端读取的文件前：
+1. 确认文件路径不在 `data/` 或 `.env` 下
+2. 若必须用 `data/`，检查 N150 部署脚本是否允许该子目录
+3. 已经创建了错误路径的文件 → 用 `git mv` 挪到安全路径 + 更新引用
+
+## 九、esbuild 配置变更影响检查
+
+### 规则
+
+**修改 `vite.config.js` 中 `esbuild` 配置（尤其是 `drop` 选项）前后，必须完整读取 vite.config.js 并确认变更不会破坏依赖 console.log/warn/error 的功能。**
+
+### 背景
+
+2026-07-29 引入全量日志持久化（基于 `console.log/warn/error` 全局劫持）时，Agent 在编码完成后 `vite build` 验证产物，才发现 `esbuild.drop: ['console.log']` 会将所有 `console.log` 从生产构建产物中移除——等于让整个前端日志持久化方案的 console 劫持全部失效。
+
+教训：花 20 秒读 vite.config.js，能省一次返工。
+
+### 受影响的场景
+
+- 任何依赖 `console.log/warn/error` 的全局机制（日志上报、错误追踪、monkey-patch）
+- 任何在生产构建中需要保留特定调试信息的场景
+
+### 检查清单
+
+新功能涉及以下任一情况时，必须先读 vite.config.js 的 `esbuild` 段：
+- console 劫持/拦截/上报
+- 依赖 console 日志字符串做字符串匹配的功能
+- 任何"需要在生产构建中保留某些代码"的需求
+
+## 十、脚本执行顺序与 Rollup 打包
+
+### 规则
+
+**需要严格保证脚本执行顺序（如 monkey-patch、polyfill）的场景，必须用经典 `<script>` 标签（同步）而非 ES module import，因为 Rollup/Vite 打包后 chunk 之间的 import 顺序由构建工具内部优化决定，不保证等于源码中的 import 书写顺序。**
+
+### 背景
+
+2026-07-29 全量日志持久化最初写成 ES module（`src/logger.js` + `main.js` 顶部 `import './logger.js'`），期望 logger 在所有其他模块之前执行。`vite build` 后检查产物发现 Rollup 将 logger chunk 排在了 playlist chunk 之后，失去了"最早时机劫持 console"的保证。最终改为 `public/js/log-shim.js`（经典 `<script>` 标签在 `<head>` 最前面同步加载）才解决问题。
+
+### 正确做法
+
+```html
+<!-- ✅ 正确：经典同步 <script>，在任何 module 脚本之前执行 -->
+<head>
+  <script src="/js/log-shim.js"></script>
+  <!-- 其他标签 -->
+</head>
+<body>
+  <script type="module" src="/dist/app.js"></script>
+</body>
+```
+
+```js
+// ❌ 错误：ES module import，打包后 chunk 顺序不可控
+import './logger.js';
+import { something } from './other-module.js';
+```
+
+### 检查清单
+
+新增或修改依赖"最早时机执行"的脚本前：
+1. 确认是否需要保证执行顺序（monkey-patch、polyfill、全局状态初始化）
+2. 如果需要 → 用经典 `<script>` 标签，不参与 Vite 构建
+3. 用 `vite build` + `grep` 产物验证执行顺序是否如预期

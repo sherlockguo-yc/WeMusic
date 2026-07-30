@@ -1,4 +1,6 @@
 // 登录页入口
+// 注：全量日志持久化的 console monkey-patch 由 public/js/log-shim.js（经典
+// <script>，在 login.html 中于本模块之前加载）完成，此处不需要再 import。
 import { Auth, api } from './api.js';
 
 // 已登录时：检查是否有保存的跳转 URL，恢复原来的页面

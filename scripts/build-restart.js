@@ -4,7 +4,7 @@
 // 作用: vite build + 杀掉旧进程 + 启动新进程
 
 import { execSync, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, openSync } from 'node:fs';
 
 const PORT = process.env.PORT || '5174';
 const LOG = '/tmp/wemusic.log';
@@ -57,11 +57,14 @@ try {
 }
 
 // 4. 启动新进程
-log('4/4', '启动新进程 ...');
+// 注：此前 stdio 全部 ignore 导致 console 输出被直接丢弃（新的 server/logger.js
+// 已经把 console.log/warn/error 落盘到 data/logs/，不再依赖 stdout 重定向，
+// 但仍保留一份 stdout/stderr 到文件，方便直接 tail 排查启动阶段的问题）。
+const outFd = openSync(LOG, 'a');
 const child = spawn('node', ['server/index.js'], {
   cwd,
   detached: true,
-  stdio: ['ignore', 'ignore', 'ignore'],
+  stdio: ['ignore', outFd, outFd],
 });
 child.unref();
 ok(`服务器已启动 (PID ${child.pid}, 端口 ${PORT}, 日志: ${LOG})`);

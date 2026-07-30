@@ -168,6 +168,15 @@ const STALL_TICK_THRESHOLD = 5; // 连续 5 次（约 5 秒）currentTime 无变
 let _hasStartedPlaying = false; // 当前曲目是否已经成功开始播放过一次（区分"加载中"与"意外暂停"）
 let _seekDragging = false; // 用户正在拖动进度条：暂停 tick 对进度条/时间文字的覆盖，避免和拖拽打架
 
+// ---- 播放异常提示（4 类，节流：同一类别 10 秒内只提示一次，避免连续重试刷屏） ----
+const _lastReasonToast = {}; // category → 上次提示的时间戳
+function _notifyReason(category, message) {
+  const now = Date.now();
+  if (now - (_lastReasonToast[category] || 0) < 10000) return;
+  _lastReasonToast[category] = now;
+  toast(message);
+}
+
 function _tick() {
   if (timerPaused || _seekDragging) return;
   if (mode === 'bg') {
@@ -200,6 +209,7 @@ function _tick() {
       if (_stallTicks >= STALL_TICK_THRESHOLD) {
         console.warn(`[bgAudio] currentTime 停滞 ${STALL_TICK_THRESHOLD}s+，自动切歌`);
         _stallTicks = 0;
+        _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
         autoAdvance();
         return;
       }
@@ -791,11 +801,11 @@ export async function playCurrent() {
         if (_resolveFailCount >= 5 || state.playMode === 'single' || state.queue.length <= 1) {
           stopPlayback();
           const reason = _resolveFailCount >= 5 ? '，已连续跳过 5 首' : '';
-          setStatus('未找到合适资源'); toast('⚠ 未找到合适资源' + reason);
+          setStatus('未找到合适资源'); toast('⚠ 多次尝试均失败，已停止播放' + reason);
           _resolveFailCount = 0;
           return;
         }
-        setStatus('未找到合适资源，已自动跳过'); toast('⚠ 未找到合适资源，自动切下一首');
+        setStatus('未找到合适资源，已自动跳过'); toast('⚠ 未找到匹配资源，已自动跳过');
         playNext(true);
         return;
       }
@@ -814,11 +824,11 @@ export async function playCurrent() {
       if (_resolveFailCount >= 5 || state.playMode === 'single' || state.queue.length <= 1) {
         stopPlayback();
         const reason = _resolveFailCount >= 5 ? '，已连续跳过 5 首' : '';
-        setStatus('匹配失败：' + esc(e.message)); toast('⚠ 匹配失败' + reason);
+        setStatus('匹配失败：' + esc(e.message)); toast('⚠ 多次尝试均失败，已停止播放' + reason);
         _resolveFailCount = 0;
         return;
       }
-      setStatus('匹配失败，已自动跳过'); toast('⚠ 匹配失败：' + esc(e.message) + '，自动切下一首');
+      setStatus('匹配失败，已自动跳过'); toast('⚠ 未找到匹配资源，已自动跳过');
       playNext(true);
       return;
     }
@@ -1248,6 +1258,7 @@ function _playBgAudioWithRetry(seekSec) {
           healthRetries++;
           if (healthRetries > MAX_HEALTH_RETRIES) {
             console.warn(`[bgAudio] health-check FAILED ${healthRetries}x — auto advancing`);
+            _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
             autoAdvance();
             return;
           }
@@ -1265,6 +1276,7 @@ function _playBgAudioWithRetry(seekSec) {
         setTimeout(doPlay, delay);
       } else {
         console.warn('[bg:retry] play() FAILED after 10 retries — auto advancing');
+        _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
         autoAdvance();
       }
     });
@@ -1307,6 +1319,7 @@ bgAudio.addEventListener('error', () => {
   if (!_usedFallback && state.current?.bvid) {
     _usedFallback = true;
     console.warn('[bgAudio] 直连 CDN 失败，降级为服务端代理');
+    _notifyReason('fallback', '已切换到备用播放线路');
     bgAudio.src = `/api/play/stream?bvid=${encodeURIComponent(state.current.bvid)}&token=${encodeURIComponent(Auth.token)}`;
     bgAudio.load();
     if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
@@ -1321,18 +1334,23 @@ bgAudio.addEventListener('error', () => {
         offline.touch(state.current.bvid);
         _cacheUse = { fromCache: true, reason: '网络不佳' };
         _setPlayStatus();
+        _notifyReason('fallback', '已切换到备用播放线路');
         bgAudio.src = url;
         bgAudio.load();
         if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
       } else if (mode === 'bg' && !timerPaused) {
         console.warn('[bgAudio] ERROR (fallback+缓存均用尽) — auto advance');
+        _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
         autoAdvance();
       }
-    }).catch(() => { if (mode === 'bg' && !timerPaused) autoAdvance(); });
+    }).catch(() => {
+      if (mode === 'bg' && !timerPaused) { _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首'); autoAdvance(); }
+    });
     return;
   }
   if (mode === 'bg' && !timerPaused) {
     console.warn('[bgAudio] ERROR during playback (fallback 已用尽) — auto advance');
+    _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
     autoAdvance();
   }
 });
@@ -1347,6 +1365,7 @@ bgAudio.addEventListener('stalled', () => {
       _stalledTimer = null;
       if (mode === 'bg' && !timerPaused) {
         console.warn('[bgAudio] STALLED 3s+ — auto advance');
+        _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
         autoAdvance();
       }
     }, 3000);

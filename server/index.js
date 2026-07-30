@@ -1,3 +1,7 @@
+// 全量日志持久化：必须是本文件第一个 import，确保在其他任何模块的顶层
+// console 调用（如 bilibili.js 的 ffmpeg 检测日志）之前完成 console monkey-patch。
+import './logger.js';
+
 import fs from 'node:fs';
 
 // ============================================================
@@ -32,6 +36,7 @@ import adminRouter from './routes/admin.js';
 import migrationRouter from './routes/migration.js';
 import themesRouter from './routes/themes.js';
 import uploadRouter from './routes/upload.js';
+import logsRouter from './routes/logs.js';
 import { searchLyricsCandidates } from './services/lyrics.js';
 import { shortNameToSourceType } from '../shared/constants.js';
 
@@ -76,6 +81,7 @@ app.use('/api/stats', statsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/themes', themesRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/logs', logsRouter);
 // 静态文件服务：上传的主题素材
 app.use('/data/uploads', express.static(path.join(__dirname, '../data/uploads')));
 
