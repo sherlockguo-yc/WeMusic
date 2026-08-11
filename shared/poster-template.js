@@ -187,6 +187,17 @@ export function posterCSSPro(themeKey) {
 .wpp-artist-chips { display: flex; flex-wrap: wrap; gap: 10px; }
 .wpp-chip { padding: 8px 16px; border-radius: 20px; background: ${palette.chipBg}; border: 1px solid ${palette.chipBorder}; font-size: 13.5px; font-weight: 600; }
 
+.wpp-fav-row { display: flex; gap: 10px; }
+.wpp-fav-item {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 12px;
+  background: ${palette.insetBg}; border: 1px solid ${palette.cardBorder};
+}
+.wpp-fav-cover { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; background: ${palette.statBg}; }
+.wpp-fav-cover.ph { display: flex; align-items: center; justify-content: center; font-size: 13px; color: ${palette.textSub}; }
+.wpp-fav-name { flex: 1; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wpp-fav-singer { font-size: 11px; color: ${palette.textSub}; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .wpp-stats-row { display: flex; gap: 14px; margin-top: 26px; }
 .wpp-mini-stat { flex: 1; text-align: center; padding: 15px 8px; border-radius: 16px; background: ${palette.statBg}; border: 1px solid ${palette.statBorder}; }
 .wpp-mini-stat b { display: block; font-size: 21px; font-weight: 800; color: ${palette.text}; }
@@ -209,6 +220,7 @@ export function posterHTMLPro(data, themeKey) {
     insightText = '',
     topSongs = [],
     topArtists = [],
+    favSongs = [],
     generatedAt = '',
   } = data || {};
 
@@ -250,6 +262,17 @@ export function posterHTMLPro(data, themeKey) {
   const artistChips = topArtists.slice(0, 6).map((a) => `<span class="wpp-chip">${esc(a.name)}</span>`).join('')
     || `<span class="wpp-chip">暂无数据</span>`;
 
+  // 周期内收藏歌曲（横排，带封面）
+  const favItems = favSongs.slice(0, 5).map((s) => {
+    const cover = s.albumMid ? coverUrl(s.albumMid, 120) : '';
+    return `
+    <div class="wpp-fav-item">
+      ${cover ? `<img class="wpp-fav-cover" src="${cover}" onerror="this.style.visibility='hidden'" />` : `<div class="wpp-fav-cover ph">⭐</div>`}
+      <span class="wpp-fav-name">${esc(s.name)}</span>
+      <span class="wpp-fav-singer">${esc(s.singer || '')}</span>
+    </div>`;
+  }).join('') || '<div class="wpp-fav-item"><span class="wpp-fav-name" style="color:var(--text-sub, inherit)">暂无收藏</span></div>';
+
   const collageHtml = collageCovers.length
     ? `<div class="wpp-collage">${collageCovers.map((c) => `<img src="${c}" onerror="this.style.visibility='hidden'" />`).join('')}</div>`
     : '';
@@ -288,6 +311,11 @@ export function posterHTMLPro(data, themeKey) {
       <div class="wpp-section">
         <div class="wpp-section-title">Top 歌手</div>
         <div class="wpp-artist-chips">${artistChips}</div>
+      </div>
+
+      <div class="wpp-section">
+        <div class="wpp-section-title">本周收藏</div>
+        <div class="wpp-fav-row">${favItems}</div>
       </div>
 
       <div class="wpp-stats-row">
@@ -525,6 +553,17 @@ export function posterCSSMobile(themeKey) {
 .wmp5-song-name { flex: 1; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wmp5-song-meta { font-size: 11.5px; color: ${palette.textSub}; flex: 0 0 auto; max-width: 70px; text-align: right; font-weight: 600; }
 .wmp5-song-singer { display: block; font-size: 10.5px; color: ${palette.textSub}; font-weight: 400; margin-top: 1px; }
+.wmp5-favs-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
+.wmp5-favs { display: flex; flex-direction: column; gap: 6px; }
+.wmp5-fav-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 12px; border-radius: 10px; background: ${palette.insetBg};
+}
+.wmp5-fav-cover { width: 32px; height: 32px; border-radius: 7px; object-fit: cover; flex: 0 0 auto; background: ${palette.statBg}; }
+.wmp5-fav-cover.ph { display: flex; align-items: center; justify-content: center; font-size: 12px; color: ${palette.textSub}; }
+.wmp5-fav-name { flex: 1; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wmp5-fav-singer { font-size: 10.5px; color: ${palette.textSub}; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wmp5-fav-empty { font-size: 12px; color: ${palette.textSub}; padding: 10px 12px; background: ${palette.insetBg}; border-radius: 10px; }
 .wmp5-artists-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
 .wmp5-artists { display: flex; flex-wrap: wrap; gap: 7px; }
 .wmp5-chip {
@@ -590,6 +629,7 @@ export function posterHTMLMobile(data, themeKey) {
     insightText = '',
     topSongs = [],
     topArtists = [],
+    favSongs = [],
     generatedAt = '',
   } = data || {};
 
@@ -624,6 +664,17 @@ export function posterHTMLMobile(data, themeKey) {
   const artistChips = topArtists.slice(0, 8).map((a) =>
     `<span class="wmp5-chip">${esc(a.name)} <span style="opacity:.7;font-weight:500;margin-left:2px">${a.playCount || 0}</span></span>`
   ).join('') || `<span class="wmp5-chip">暂无数据</span>`;
+
+  // 周期内收藏歌曲（最多 3 首紧凑行）
+  const favRows = (favSongs || []).slice(0, 3).map((s) => {
+    const cover = s.albumMid ? coverUrl(s.albumMid, 150) : '';
+    return `
+      <div class="wmp5-fav-row">
+        ${cover ? `<img class="wmp5-fav-cover" src="${cover}" onerror="this.style.visibility='hidden'" />` : `<div class="wmp5-fav-cover ph">⭐</div>`}
+        <span class="wmp5-fav-name">${esc(s.name)}</span>
+        <span class="wmp5-fav-singer">${esc(s.singer || '')}</span>
+      </div>`;
+  }).join('') || '<div class="wmp5-fav-empty">本周暂无收藏</div>';
 
   // 第 3 页（专辑）：每张封面 + 名称直接组合
   const albumCells = covers.map((c) => {
@@ -753,6 +804,10 @@ export function posterHTMLMobile(data, themeKey) {
         <div class="wpm-section-label">TOP 5 歌曲</div>
       </div>
       <div class="wmp5-songs">${songRows || '<div class="wmp5-song-row"><span class="wmp5-song-name">暂无播放记录</span></div>'}</div>
+      <div class="wmp5-favs-head">
+        <div class="wpm-section-label">本周收藏</div>
+      </div>
+      <div class="wmp5-favs">${favRows}</div>
       <div class="wmp5-artists-head">
         <div class="wpm-section-label">最爱歌手</div>
         <div class="wpm-section-label" style="text-transform:none;letter-spacing:0">共 ${topArtists.length} 位</div>

@@ -227,6 +227,13 @@ async function buildReport(uid, since, until, compareSince, compareUntil, label)
     GROUP BY album ORDER BY play_count DESC LIMIT 2
   `).all(uid, since, until);
 
+  // —— 周期内新收藏歌曲（收藏动作发生在周期内，最新在前） ——
+  const favSongs = db.prepare(`
+    SELECT name, singer, album, album_mid, duration, fav_at
+    FROM favorites WHERE user_id=? AND fav_at>=? AND fav_at<?
+    ORDER BY fav_at DESC LIMIT 5
+  `).all(uid, since, until);
+
   // —— 歌手多样性（同样拆分合唱/组合，统计不重复个人歌手数） ——
   const uniqueArtists = _allArtists.length || 0;
 
@@ -261,6 +268,7 @@ async function buildReport(uid, since, until, compareSince, compareUntil, label)
     topSongs,
     topArtists,
     topAlbums,
+    favSongs,
     skip: { total: skipRow?.total || 0, skipped: skipRow?.skipped || 0 },
     newSongs: newSongs?.cnt || 0,
     completion: { low: comp0, mid: comp20, high: comp80, noDur: compNone },

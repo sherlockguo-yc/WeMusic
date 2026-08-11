@@ -93,6 +93,21 @@ function buildReportHtml(data, periodType) {
   const insight = computeInsight(data.peakHour, topArtistName, periodWord);
   const trendHtml = buildTrendHtml(data.trend);
 
+  // 周期内收藏歌曲（横排卡片）
+  const wrFavPh = '<div class="wr-fav-cover ph" style="display:flex;align-items:center;justify-content:center;color:var(--text-dim)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>';
+  const favSongsHtml = (data.favSongs && data.favSongs.length)
+    ? `<div class="wr-fav-row">${data.favSongs.slice(0, 5).map((s) => {
+        const coverUrl = s.album_mid ? albumCover(s.album_mid, 150) : '';
+        return `<div class="wr-fav-item">
+          ${coverUrl ? `<img class="wr-fav-cover" src="${coverUrl}" loading="lazy" data-fb="${esc(wrFavPh)}" onerror="this.outerHTML=this.dataset.fb" />` : wrFavPh}
+          <div class="wr-fav-info">
+            <div class="wr-fav-name">${esc(s.name)}</div>
+            <div class="wr-fav-singer">${esc(s.singer || '')}</div>
+          </div>
+        </div>`;
+      }).join('')}</div>`
+    : '<div class="wr-fav-empty">暂无收藏</div>';
+
   const html = `
     <div class="weekly-report">
       <div class="wr-head">
@@ -182,6 +197,10 @@ function buildReportHtml(data, periodType) {
           <div class="wr-card-hd"><span class="wr-card-icon i-trend"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>${trendTitle}</div>
           <div class="wr-trend-chart">${trendHtml}</div>
         </div>
+        <div class="wr-card favs">
+          <div class="wr-card-hd"><span class="wr-card-icon i-fav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>${periodWord}收藏歌曲</div>
+          ${favSongsHtml}
+        </div>
       </div>
       <div class="wr-persona-desc" style="margin-top:10px;padding:8px 12px;border-radius:8px;background:var(--bg-soft);font-size:13px;color:var(--text-dim);text-align:center">${persona.icon} ${esc(persona.desc)}</div>
     </div>`;
@@ -201,6 +220,9 @@ function buildReportHtml(data, periodType) {
     topArtists: data.topArtists.slice(0, 6).map((a) => ({ name: a.singer, playCount: a.play_count || 0 })),
     topAlbums: (data.topAlbums || []).map((a) => ({
       name: a.album, singer: a.singer || '', albumMid: a.album_mid || '', playCount: a.play_count || 0,
+    })),
+    favSongs: (data.favSongs || []).map((s) => ({
+      name: s.name, singer: s.singer || '', albumMid: s.album_mid || '',
     })),
     generatedAt: new Date().toLocaleDateString('zh-CN'),
   };

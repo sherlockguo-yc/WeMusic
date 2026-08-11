@@ -239,6 +239,13 @@ describe('Stats', () => {
       .send({ mids: ['mid02'] });
     expect(check.body.liked['mid02']).toBeUndefined();
 
+    // 周报应包含本周期收藏的歌曲
+    const weekly = await request(app).get('/api/stats/weekly')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(weekly.status).toBe(200);
+    expect(Array.isArray(weekly.body.favSongs)).toBe(true);
+    expect(weekly.body.favSongs.some((f) => f.name === 's2')).toBe(true);
+
     // 取消收藏
     const unfav = await request(app).post('/api/stats/favorites/mid02')
       .set('Authorization', `Bearer ${userToken}`)
