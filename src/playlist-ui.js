@@ -82,7 +82,7 @@ export async function loadPlaylists() {
 }
 
 export function setActiveNav(id) {
-  ['navDiscover', 'navHistory', 'navStats', 'navLikes', 'navSavedAlbums', 'navOffline'].forEach((n) => {
+  ['navDiscover', 'navHistory', 'navStats', 'navLikes', 'navFavorites', 'navSavedAlbums', 'navOffline'].forEach((n) => {
     const el = $(n); if (el) el.classList.toggle('active', n === id);
   });
 }
@@ -228,14 +228,17 @@ export function renderSongList(container, songs, opts = {}) {
       ? `<span class="in-pl-mark" data-tip="已在 ${inPls.size} 个歌单中"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg></span>`
       : '<span class="in-pl-placeholder"></span>';
     const isLiked = s.song_mid ? (state.likedMids && state.likedMids.has(s.song_mid)) : false;
+    const isFaved = s.song_mid ? (state.favMids && state.favMids.has(s.song_mid)) : false;
     const songKey = `${s.name}__${s.singer || ''}`;
     const isDisliked = state.dislikedSongKeys && state.dislikedSongKeys.has(songKey);
     const heartSVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+    const starSVG = `<svg viewBox="0 0 24 24" width="15" height="15" fill="${isFaved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
     const brokenHeartSVG = isDisliked
       ? BROKEN_HEART_FILLED.replace('width="16" height="16"', 'width="15" height="15"')
       : BROKEN_HEART_OUTLINE.replace('width="16" height="16"', 'width="15" height="15"');
     const likeBtns = s.song_mid
       ? `<button class="np-act-btn song-like-btn${isLiked ? ' liked-active' : ''}" title="${isLiked ? '取消喜欢' : '喜欢'}" data-act="like">${heartSVG}</button>
+         <button class="np-act-btn song-fav-btn${isFaved ? ' faved-active' : ''}" title="${isFaved ? '取消收藏' : '收藏'}" data-act="fav">${starSVG}</button>
          <button class="np-act-btn${isDisliked ? ' disliked-active' : ''}" title="${isDisliked ? '取消不喜欢' : '不喜欢'}" data-act="dislike">${brokenHeartSVG}</button>`
       : '';
     // 封面（仅 showCover 模式）
@@ -327,6 +330,7 @@ export function renderSongList(container, songs, opts = {}) {
         if (act === 'add') addSongs([songs[i]]);
         else if (act === 'del') deleteSong(playlistId, songs[i].id, row);
         else if (act === 'like') import('./ui.js').then(({ toggleLike }) => toggleLike(songs[i], btn));
+        else if (act === 'fav') import('./ui.js').then(({ toggleFav }) => toggleFav(songs[i], btn));
         else if (act === 'dislike') import('./ui.js').then(({ toggleDislike }) => toggleDislike(songs[i], btn));
       };
     });

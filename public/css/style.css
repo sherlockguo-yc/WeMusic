@@ -9,6 +9,7 @@
   --accent: #2ab758;
   --accent-2: #00a1d6; /* bilibili 蓝 */
   --danger: #e0556a;
+  --fav: #f0b429; /* 收藏（星标）金色，与红心区分 */
   --radius: 12px;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -556,7 +557,7 @@ button.topbar-btn {
 .section-head h2 { font-size: 16px; }
 .song-list { display: flex; flex-direction: column; gap: 2px; }
 .song-row {
-  display: grid; grid-template-columns: 28px 1fr 1.2fr 0.8fr 20px 56px 112px;
+  display: grid; grid-template-columns: 28px 1fr 1.2fr 0.8fr 20px 56px 128px;
   align-items: center; gap: 12px; padding: 9px 12px; border-radius: 8px;
   cursor: pointer;
 }
@@ -822,7 +823,7 @@ button.topbar-btn {
 }
 /* 歌曲列表列头 */
 .song-row-head {
-  display: grid; grid-template-columns: 28px 1fr 1.2fr 0.8fr 20px 56px 112px;
+  display: grid; grid-template-columns: 28px 1fr 1.2fr 0.8fr 20px 56px 128px;
   align-items: center; gap: 12px;
   padding: 4px 12px; font-size: 11px; color: var(--text-dim);
   border-bottom: 1px solid var(--border); margin-bottom: 4px;
@@ -2260,6 +2261,10 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
 .song-like-btn { cursor: pointer; display: inline-flex; align-items: center; color: var(--text-dim); }
 .song-like-btn.liked-active, .like-btn.liked { color: #e05c5c; }
 #npLikeBtn.liked-active { color: #e05c5c; border-color: #e05c5c; }
+/* 收藏按钮（星标）- 激活态金色 */
+.song-fav-btn { cursor: pointer; display: inline-flex; align-items: center; color: var(--text-dim); }
+.song-fav-btn.faved-active { color: var(--fav); }
+#npFavBtn.faved-active { color: var(--fav); border-color: var(--fav); }
 /* 不喜欢按钮 - 激活态：心形图标填充为灰色（由 JS 切换 fill 实现） */
 #npDislikeBtn.disliked-active,
 .np-act-btn.disliked-active { color: var(--text-dim); }

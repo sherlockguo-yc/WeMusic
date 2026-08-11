@@ -402,6 +402,20 @@ router.get('/likes', (req, res) => {
   res.json({ likes: rows });
 });
 
+// 批量查询红心状态（body: { mids: [...] }）
+// 注意：必须定义在 /likes/:songMid 之前，否则 check 会被 :songMid 参数捕获
+router.post('/likes/check', (req, res) => {
+  const mids = (Array.isArray(req.body?.mids) ? req.body.mids : []).slice(0, 500);
+  if (!mids.length) return res.json({ liked: {} });
+  const placeholders = mids.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT song_mid FROM likes WHERE user_id=? AND song_mid IN (${placeholders})`
+  ).all(req.user.id, ...mids);
+  const liked = {};
+  for (const r of rows) liked[r.song_mid] = true;
+  res.json({ liked });
+});
+
 // 切换红心（点一下加，再点取消）
 router.post('/likes/:songMid', (req, res) => {
   const uid = req.user.id;
@@ -420,17 +434,46 @@ router.post('/likes/:songMid', (req, res) => {
   }
 });
 
-// 批量查询红心状态（body: { mids: [...] }）
-router.post('/likes/check', (req, res) => {
+// ============================================================
+// 收藏（与红心平行的独立标记，代表「特别喜欢」）
+// ============================================================
+
+// 查询用户所有收藏歌曲
+router.get('/favorites', (req, res) => {
+  const rows = db.prepare('SELECT * FROM favorites WHERE user_id=? ORDER BY fav_at DESC').all(req.user.id);
+  res.json({ favorites: rows });
+});
+
+// 批量查询收藏状态（body: { mids: [...] }）
+// 注意：必须定义在 /favorites/:songMid 之前，否则 check 会被 :songMid 参数捕获
+router.post('/favorites/check', (req, res) => {
   const mids = (Array.isArray(req.body?.mids) ? req.body.mids : []).slice(0, 500);
-  if (!mids.length) return res.json({ liked: {} });
+  if (!mids.length) return res.json({ faved: {} });
   const placeholders = mids.map(() => '?').join(',');
   const rows = db.prepare(
-    `SELECT song_mid FROM likes WHERE user_id=? AND song_mid IN (${placeholders})`
+    `SELECT song_mid FROM favorites WHERE user_id=? AND song_mid IN (${placeholders})`
   ).all(req.user.id, ...mids);
-  const liked = {};
-  for (const r of rows) liked[r.song_mid] = true;
-  res.json({ liked });
+  const faved = {};
+  for (const r of rows) faved[r.song_mid] = true;
+  res.json({ faved });
+});
+
+// 切换收藏（点一下加，再点取消）
+router.post('/favorites/:songMid', (req, res) => {
+  const uid = req.user.id;
+  const mid = req.params.songMid;
+  const existing = db.prepare('SELECT 1 FROM favorites WHERE user_id=? AND song_mid=?').get(uid, mid);
+  if (existing) {
+    db.prepare('DELETE FROM favorites WHERE user_id=? AND song_mid=?').run(uid, mid);
+    res.json({ faved: false });
+  } else {
+    const { name, singer, album, album_mid, duration } = req.body || {};
+    if (!name) return res.status(400).json({ error: '缺少歌曲名' });
+    db.prepare(`INSERT OR IGNORE INTO favorites (user_id, song_mid, name, singer, album, album_mid, duration, fav_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(uid, mid, name, singer||'', album||'', album_mid||'', duration||0, Date.now());
+    res.json({ faved: true });
+  }
 });
 
 // ============================================================
@@ -498,10 +541,13 @@ function computeSongScores(uid) {
     GROUP BY name, singer
   `).all(uid, since90);
 
-  // 2. 红心 + 加入歌单的歌曲（合并为一次查询，避免重复扫表）
+  // 2. 红心 + 收藏 + 加入歌单的歌曲（合并为一次查询，避免重复扫表）
   const likesRows = db.prepare(`SELECT song_mid, name, singer FROM likes WHERE user_id = ?`).all(uid);
   const likedMids = new Set(likesRows.map((r) => r.song_mid));
   const likedKeys = new Set(likesRows.map((r) => `${r.name}__${r.singer}`));
+  const favRows = db.prepare(`SELECT song_mid, name, singer FROM favorites WHERE user_id = ?`).all(uid);
+  const favMids = new Set(favRows.map((r) => r.song_mid));
+  const favKeys = new Set(favRows.map((r) => `${r.name}__${r.singer}`));
   // 3. 歌单收录歌曲 key（包含非红心但加到歌单的）
   const inPlaylistKeys = new Set(
     db.prepare(`
@@ -528,8 +574,9 @@ function computeSongScores(uid) {
     // 重复播放（每次 +0.5，上限 3）
     score += Math.min((row.play_count - 1) * 0.5, 3.0);
 
-    // 红心
-    if (likedMids.has(row.song_mid) || likedKeys.has(key)) score += 3.0;
+    // 红心 / 收藏（独立开关：收藏 +5 权重更高，不叠加）
+    if (favMids.has(row.song_mid) || favKeys.has(key)) score += 5.0;
+    else if (likedMids.has(row.song_mid) || likedKeys.has(key)) score += 3.0;
 
     // 加入歌单
     if (inPlaylistKeys.has(key)) score += 2.5;
@@ -541,10 +588,14 @@ function computeSongScores(uid) {
     if (score > 0) songScores.set(key, { score, ...row });
   }
 
-  // 补充：纯红心或纯歌单收藏（无播放记录，复用 likesRows）
+  // 补充：纯红心 / 纯收藏 / 纯歌单收录（无播放记录）
   for (const row of likesRows) {
     const key = `${row.name}__${row.singer}`;
     if (!songScores.has(key)) songScores.set(key, { score: 3.0, ...row, play_count: 0 });
+  }
+  for (const row of favRows) {
+    const key = `${row.name}__${row.singer}`;
+    if (!songScores.has(key)) songScores.set(key, { score: 5.0, ...row, play_count: 0 });
   }
   for (const row of db.prepare(`
     SELECT DISTINCT s.name, s.singer, s.album, s.album_mid, s.song_mid, s.duration

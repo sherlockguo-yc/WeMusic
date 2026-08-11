@@ -97,12 +97,26 @@ db.exec(`
     PRIMARY KEY (user_id, song_mid)
   );
 
+  /* 歌曲收藏（用户特别喜欢，独立于红心喜欢）*/
+  CREATE TABLE IF NOT EXISTS favorites (
+    user_id   INTEGER NOT NULL,
+    song_mid  TEXT    NOT NULL,
+    name      TEXT NOT NULL,
+    singer    TEXT,
+    album     TEXT,
+    album_mid TEXT,
+    duration  INTEGER DEFAULT 0,
+    fav_at    INTEGER NOT NULL,
+    PRIMARY KEY (user_id, song_mid)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_playlists_user  ON playlists(user_id);
   CREATE INDEX IF NOT EXISTS idx_songs_playlist  ON songs(playlist_id);
   CREATE INDEX IF NOT EXISTS idx_play_logs_user  ON play_logs(user_id, played_at);
   CREATE INDEX IF NOT EXISTS idx_play_logs_name   ON play_logs(user_id, name, singer);
   CREATE INDEX IF NOT EXISTS idx_play_logs_singer ON play_logs(user_id, singer);
   CREATE INDEX IF NOT EXISTS idx_likes_user      ON likes(user_id, liked_at);
+  CREATE INDEX IF NOT EXISTS idx_favorites_user  ON favorites(user_id, fav_at);
 
   /* 锁定的视频源 / 歌词源黑名单：用户可以为每首歌屏蔽不想要的候选 */
   CREATE TABLE IF NOT EXISTS blocked_sources (

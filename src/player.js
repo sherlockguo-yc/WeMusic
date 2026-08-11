@@ -365,7 +365,7 @@ function _switchCurrentSongUI(song) {
   document.title = `${song.name}${song.singer ? ' · ' + song.singer.split('/')[0] : ''} — WeMusic`;
   updateNpCover(song);
   updateMediaSession(song);
-  setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn, updateNpDislikeBtn }) => { updateNpLikeBtn(); updateNpDislikeBtn(); }), 0);
+  setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn, updateNpFavBtn, updateNpDislikeBtn }) => { updateNpLikeBtn(); updateNpFavBtn(); updateNpDislikeBtn(); }), 0);
   resetProgress(song.duration);
 }
 

@@ -220,6 +220,35 @@ describe('Stats', () => {
     expect(get.status).toBe(200);
   });
 
+  it('收藏切换（独立于红心）', async () => {
+    // 收藏 → 应返回 faved: true，且收藏列表含该歌
+    const fav = await request(app).post('/api/stats/favorites/mid02')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ name: 's2', singer: 'a2' });
+    expect(fav.status).toBe(200);
+    expect(fav.body.faved).toBe(true);
+
+    const get = await request(app).get('/api/stats/favorites')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(get.status).toBe(200);
+    expect(get.body.favorites.some((f) => f.song_mid === 'mid02')).toBe(true);
+
+    // 收藏不影响红心状态（独立开关）
+    const check = await request(app).post('/api/stats/likes/check')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ mids: ['mid02'] });
+    expect(check.body.liked['mid02']).toBeUndefined();
+
+    // 取消收藏
+    const unfav = await request(app).post('/api/stats/favorites/mid02')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ name: 's2', singer: 'a2' });
+    expect(unfav.body.faved).toBe(false);
+    const after = await request(app).get('/api/stats/favorites')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(after.body.favorites.some((f) => f.song_mid === 'mid02')).toBe(false);
+  });
+
   it('POST feedback → 200', async () => {
     const res = await request(app).post('/api/stats/feedback')
       .set('Authorization', `Bearer ${userToken}`)

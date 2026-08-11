@@ -389,6 +389,62 @@ export async function toggleLike(song, btn) {
 export const heartOutline = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
 export const heartFilled = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
 
+// ---- 收藏（星标，独立于喜欢）----
+export const starOutline = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+export const starFilled = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+
+export async function toggleFav(song, btn) {
+  if (!song.song_mid) return toast('该歌曲无 mid，无法收藏');
+  try {
+    const r = await api(`/stats/favorites/${encodeURIComponent(song.song_mid)}`, {
+      method: 'POST',
+      body: { name: song.name, singer: song.singer, album: song.album, album_mid: song.album_mid, duration: song.duration },
+    });
+    if (r.faved) {
+      state.favMids.add(song.song_mid);
+      if (btn) {
+        btn.classList.add('faved-active');
+        const svg = btn.querySelector('svg'); if (svg) svg.setAttribute('fill', 'currentColor');
+      }
+      toast('已收藏');
+    } else {
+      state.favMids.delete(song.song_mid);
+      if (btn) {
+        btn.classList.remove('faved-active');
+        const svg = btn.querySelector('svg'); if (svg) svg.setAttribute('fill', 'none');
+      }
+      toast('已取消收藏');
+    }
+    // 更新侧边栏计数
+    updateFavsCount();
+  } catch (e) { toast('操作失败：' + e.message); }
+}
+
+export function updateNpFavBtn() {
+  const btn = $('npFavBtn');
+  if (!btn || !state.current) return;
+  const faved = state.current.song_mid && state.favMids.has(state.current.song_mid);
+  btn.innerHTML = faved ? starFilled : starOutline;
+  btn.title = faved ? '取消收藏' : '收藏';
+  btn.classList.toggle('faved-active', !!faved);
+}
+
+export function updateFavsCount() {
+  const el = document.getElementById('navFavorites');
+  if (el) {
+    const n = state.favMids.size;
+    el.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 我收藏的${n ? `<span class="side-count">${n}</span>` : ''}`;
+  }
+}
+
+// 启动时从服务端加载已收藏歌曲
+export async function loadFavMids() {
+  try {
+    const { favorites } = await api('/stats/favorites');
+    state.favMids = new Set(favorites.map((f) => f.song_mid).filter(Boolean));
+  } catch { console.warn('加载收藏列表失败'); }
+}
+
 // ---- 不喜欢 ----
 export async function toggleDislike(song, btn) {
   const songKey = `${song.name}__${song.singer || ''}`;
@@ -498,6 +554,11 @@ export function initUI() {
     if (!state.current) return toast('当前没有播放的歌曲');
     await toggleLike(state.current, null);
     updateNpLikeBtn();
+  };
+  $('npFavBtn').onclick = async () => {
+    if (!state.current) return toast('当前没有播放的歌曲');
+    await toggleFav(state.current, null);
+    updateNpFavBtn();
   };
   $('npDislikeBtn').onclick = async () => {
     if (!state.current) return toast('当前没有播放的歌曲');
