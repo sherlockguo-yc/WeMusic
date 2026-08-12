@@ -16,6 +16,9 @@ LOG_BASE="/tmp"
 LEASE_SECONDS=1800
 DEPLOY_WORKER_PID=$$
 export DEPLOY_WORKER_PID
+# Webhook 服务无独立部署项目（不在 ~/.deploy-projects.conf 中），
+# 由 run_health_checks 单独做端口存活检查，进程挂掉时用 ~/webhook-start.sh 拉起。
+WEBHOOK_PORT=9001
 
 ensure_dirs() {
   mkdir -p "$JOB_DIR" "$RUN_DIR" "$STATE_DIR"
@@ -505,6 +508,15 @@ run_health_checks() {
       bash "$dir/restart.sh" 200>&- >> "$LOG_BASE/$project-deploy.log" 2>&1 || true
     fi
   done < "$CONF"
+
+  # Webhook 服务单独健康检查：9001 无响应时用 webhook-start.sh 拉起。
+  # 注意：webhook 不在 $CONF 中，不能走 log_event（log_event 依赖 conf 里的
+  # 部署目录字段，webhook 查不到 dir 会导致 mkdir 失败 + set -e 中断），
+  # 所以直接写独立日志文件。
+  if ! lsof -ti:"$WEBHOOK_PORT" >/dev/null 2>&1; then
+    echo "[$(date)] webhook 端口 $WEBHOOK_PORT 无响应，触发拉起" >> "$LOG_BASE/webhook-start.log"
+    bash "$HOME/webhook-start.sh" 200>&- >> "$LOG_BASE/webhook-start.log" 2>&1 || true
+  fi
 }
 
 MODE="cron"

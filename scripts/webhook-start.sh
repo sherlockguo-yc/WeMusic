@@ -11,7 +11,9 @@ PORT=9001
 # .env 中的 PORT 属于 WeMusic 主服务，不能覆盖 webhook 端口。
 PORT=9001
 
-PID=$(lsof -ti:"$PORT" 2>/dev/null)
+# 注意：lsof 找不到进程时返回 1，在 set -e 下必须用 || true 兜底，
+# 否则「9001 无人监听」（冷启动场景）会让脚本提前退出，永远起不来。
+PID=$(lsof -ti:"$PORT" 2>/dev/null || true)
 if [ -n "$PID" ]; then
   kill $PID 2>/dev/null || true
   sleep 1
@@ -23,11 +25,11 @@ cd "$DIR"
 nohup node server/webhook.js > "$LOG" 2>&1 &
 sleep 1
 
-NEW_PID=$(lsof -ti:"$PORT" 2>/dev/null)
+NEW_PID=$(lsof -ti:"$PORT" 2>/dev/null || true)
 if [ -n "$NEW_PID" ]; then
   echo "[$(date)] webhook 启动成功 PID $NEW_PID 端口 $PORT" >> "$LOG"
 else
   echo "[$(date)] webhook 启动失败" >> "$LOG"
-  tail -5 "$LOG"
+  tail -5 "$LOG" 2>/dev/null || true
   exit 1
 fi
