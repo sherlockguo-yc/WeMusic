@@ -533,6 +533,8 @@ export async function restoreSession() {
     $('durTime').textContent = fmtDur(state.current._biliDur || state.current.duration);
     setStatus(`上次播放 · 点 ▶ 恢复连播`);
     highlightPlaying();
+    // 恢复会话后同步刷新播放器按钮（喜欢/收藏/不喜欢），避免初始状态显示错误
+    setTimeout(() => import('./ui.js').then(({ updateNpLikeBtn, updateNpFavBtn, updateNpDislikeBtn }) => { updateNpLikeBtn(); updateNpFavBtn(); updateNpDislikeBtn(); }), 0);
   }
 }
 

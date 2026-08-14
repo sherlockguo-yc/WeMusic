@@ -442,6 +442,7 @@ export async function loadFavMids() {
   try {
     const { favorites } = await api('/stats/favorites');
     state.favMids = new Set(favorites.map((f) => f.song_mid).filter(Boolean));
+    updateNpFavBtn();
   } catch { console.warn('加载收藏列表失败'); }
 }
 
@@ -513,6 +514,7 @@ export async function loadDislikedSongs() {
   try {
     const { disliked } = await api('/stats/disliked-songs');
     state.dislikedSongKeys = new Set(disliked);
+    updateNpDislikeBtn();
   } catch { console.warn('加载不喜欢列表失败'); }
 }
 

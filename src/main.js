@@ -188,7 +188,7 @@ async function init() {
 async function loadLikes() {
   const { likes } = await api('/stats/likes');
   state.likedMids = new Set(likes.map((l) => l.song_mid).filter(Boolean));
-  import('./ui.js').then(({ updateLikesCount, updateAlbumCount }) => { updateLikesCount(); updateAlbumCount(); });
+  import('./ui.js').then(({ updateLikesCount, updateAlbumCount, updateNpLikeBtn }) => { updateLikesCount(); updateAlbumCount(); updateNpLikeBtn(); });
 }
 
 init().catch((e) => {
