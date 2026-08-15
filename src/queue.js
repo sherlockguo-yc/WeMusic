@@ -5,6 +5,15 @@ import { state } from './state.js';
 
 export let activeTab = 'queue';
 
+const QD_TAB_KEY = 'wemusic_qd_tab'; // 记忆用户上次停留的抽屉 tab
+
+// 打开抽屉时决定显示哪个 tab：用户主动选择过 → 记忆优先；否则智能默认（队列空 → 最近播放，有队列 → 播放队列）
+function pickInitialTab() {
+  const saved = localStorage.getItem(QD_TAB_KEY);
+  if (saved === 'queue' || saved === 'history') return saved;
+  return state.queue.length ? 'queue' : 'history';
+}
+
 // ---- 下一首播放 ----
 export function enqueueNext(song) {
   const key = `${song.name}__${song.singer || ''}`;
@@ -20,7 +29,7 @@ export function enqueueNext(song) {
     toast(`「${song.name}」已添加到播放队列`);
   }
   import('./player.js').then(({ saveSession }) => saveSession());
-  renderQueue();
+  renderActiveTab();
   pulseQueueBtn();
 }
 
@@ -104,7 +113,7 @@ export function removeFromQueue(i) {
     }
   }
   import('./player.js').then(({ saveSession }) => saveSession());
-  renderQueue();
+  renderActiveTab();
 }
 
 export function renderHistory() {
@@ -131,7 +140,11 @@ export function initQueue() {
     e.stopPropagation();
     const d = $('queueDrawer');
     const show = d.classList.toggle('show');
-    if (show) renderActiveTab();
+    if (show) {
+      activeTab = pickInitialTab();
+      setTab(activeTab);
+      renderActiveTab();
+    }
   };
   $('qdClose').onclick = () => $('queueDrawer').classList.remove('show');
   // 点击侧边栏外部自动关闭
@@ -139,8 +152,7 @@ export function initQueue() {
     const d = $('queueDrawer');
     if (!d.classList.contains('show')) return;
     const btn = $('queueBtn');
-    const nav = $('navHistory');
-    if (!d.contains(e.target) && !btn.contains(e.target) && !nav?.contains(e.target)) {
+    if (!d.contains(e.target) && !btn.contains(e.target)) {
       d.classList.remove('show');
     }
   });
@@ -159,17 +171,6 @@ export function initQueue() {
       renderHistory(); toast('已清空播放历史（当前会话）');
     }
   };
-  $('tabQueue').onclick = () => { activeTab = 'queue'; setTab('queue'); renderQueue(); };
-  $('tabHistory').onclick = () => { activeTab = 'history'; setTab('history'); renderHistory(); };
-
-  // 最近播放导航
-  const navHistory = $('navHistory');
-  if (navHistory) {
-    navHistory.onclick = () => {
-      activeTab = 'history';
-      $('queueDrawer').classList.add('show');
-      setTab('history');
-      renderHistory();
-    };
-  }
+  $('tabQueue').onclick = () => { activeTab = 'queue'; setTab('queue'); renderQueue(); localStorage.setItem(QD_TAB_KEY, 'queue'); };
+  $('tabHistory').onclick = () => { activeTab = 'history'; setTab('history'); renderHistory(); localStorage.setItem(QD_TAB_KEY, 'history'); };
 }
