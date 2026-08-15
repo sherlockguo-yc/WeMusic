@@ -502,10 +502,10 @@ let _lastHasLyrics = null, _lastCoverMid = null;
 function startSync() {
   if (_pipSyncId) clearInterval(_pipSyncId);
   _lastHasLyrics = null; _lastCoverMid = null;
-  _pipSyncId = setInterval(() => {
+  const tick = () => {
     if (!pipWindow || pipWindow.closed) { cleanup(); return; }
     _playerP.then(({ elapsed, timerPaused, autoTimer }) => {
-      if (!pipWindow || pipWindow.closed || !autoTimer) return;
+      if (!pipWindow || pipWindow.closed) return;
       const doc = pipWindow.document; if (!doc) return;
       const body = doc.getElementById('dtBody'); if (!body) return;
 
@@ -535,6 +535,8 @@ function startSync() {
         return;
       }
 
+      // 歌词行更新不依赖 autoTimer：即使未播放（如恢复会话后直接打开桌面歌词），
+      // 也应显示当前进度对应的歌词，否则 buildHTML 生成的空歌词行永远不被填充。
       let idx = 0;
       for (let i = 0; i < lyricsLines.length; i++) { if (lyricsLines[i].time <= elapsed) idx = i; else break; }
 
@@ -551,9 +553,12 @@ function startSync() {
         if (cur) cur.textContent = lyricsLines[idx]?.text || '';
         if (nxt) nxt.textContent = lyricsLines[idx + 1]?.text || '';
       }
-      if (pbtn) { pbtn.innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON; pbtn.classList.toggle('paused', timerPaused); }
+      // 播放/暂停按钮状态仅在真正播放（autoTimer 存在）时同步，未播放保持默认播放图标
+      if (pbtn && autoTimer) { pbtn.innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON; pbtn.classList.toggle('paused', timerPaused); }
     });
-  }, 500);
+  };
+  tick(); // 立即同步一次，避免打开窗口后 500ms 的歌词空白
+  _pipSyncId = setInterval(tick, 500);
 }
 
 function rebuildBody(doc, hasLrc) {
