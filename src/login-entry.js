@@ -77,7 +77,10 @@ async function submit() {
   submitBtn.disabled = true;
   try {
     const data = await api(`/auth/${mode}`, { method: 'POST', body: { username, password }, auth: false });
+    console.log(`[login] ${mode === 'login' ? '登录' : '注册'}成功 user=${data.user?.username} id=${data.user?.id}`);
     Auth.save(data.token, data.user);
+    // 诊断探针：验证 token 确实写入（隐私模式 setItem 可能静默失败）
+    console.log(`[login] token写入验证: 存在=${!!localStorage.getItem('wemusic_token')} 长度=${(localStorage.getItem('wemusic_token') || '').length}`);
     // 登录成功后恢复到之前保存的页面（如分享链接、搜索结果等）
     const redirect = sessionStorage.getItem('wemusic_redirect');
     if (redirect) {
@@ -92,6 +95,7 @@ async function submit() {
     }
     location.href = '/';
   } catch (e) {
+    console.warn(`[login] ${mode === 'login' ? '登录' : '注册'}失败 user=${username} 原因=${e.message}`);
     show(e.message, 'error');
     passwordEl.value = ''; if (confirmEl) confirmEl.value = '';
     updateStrength(''); passwordEl.focus();

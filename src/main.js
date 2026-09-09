@@ -142,6 +142,8 @@ updateNavArrows();
 
 // 应用初始化
 async function init() {
+  // 诊断日志：启动时的登录态快照（不打印 token 内容）
+  console.log(`[init] 启动 user=${Auth.user?.username || '(null)'} id=${Auth.user?.id ?? '-'} token存在=${!!Auth.token} href=${location.pathname}`);
   // loadPlaylists 与不依赖歌单数据的操作并行执行
   const plPromise = loadPlaylists();
   restoreSession();

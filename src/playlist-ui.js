@@ -75,6 +75,7 @@ export function songInPlaylists(song) {
 // ---- 歌单侧边栏 ----
 export async function loadPlaylists() {
   const { playlists } = await api('/playlists');
+  console.log(`[pl] 歌单加载成功: ${playlists.length} 个`);
   state.playlists = playlists;
   if (!state.targetPlaylistId && playlists[0]) state.targetPlaylistId = playlists[0].id;
   renderSidebar();

@@ -36,6 +36,7 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   let data = null;
   try { data = await res.json(); } catch { /* ignore */ }
   if (res.status === 401) {
+    console.warn(`[api] 401: ${method} ${path} token存在=${!!Auth.token} 响应=${data?.error || '(无body)'}`);
     Auth.clear();
     if (!location.pathname.endsWith('login.html')) {
       sessionStorage.setItem('wemusic_redirect', location.href);

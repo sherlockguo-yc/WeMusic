@@ -41,12 +41,14 @@ router.post('/register', (req, res) => {
     userId, '我喜欢的音乐', Date.now()
   );
   const token = signToken({ id: userId, username });
+  console.log(`[auth] 注册成功 user=${username} id=${userId} ua=${(req.headers['user-agent'] || '').slice(0, 60)}`);
   res.json({ token, user: { id: userId, username } });
 });
 
 // 登录
 router.post('/login', (req, res) => {
   const { username, password } = req.body || {};
+  console.log(`[auth] login 请求 user=${username || '(空)'} ua=${(req.headers['user-agent'] || '').slice(0, 60)}`);
   if (!username || !password) {
     return res.status(400).json({ error: '用户名和密码不能为空' });
   }
@@ -61,6 +63,7 @@ router.post('/login', (req, res) => {
     ? bcrypt.compareSync(String(password), user.password_hash)
     : (bcrypt.compareSync(String(password), dummyHash), false);
   if (!valid) {
+    console.warn(`[auth] 登录失败 user=${username} 原因=${user ? '密码错误' : '用户不存在'}`);
     return res.status(401).json({ error: '用户名或密码错误' });
   }
   // 检查是否被归档或封禁
@@ -73,6 +76,7 @@ router.post('/login', (req, res) => {
   // 记录登录时间
   db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(Date.now(), user.id);
   const token = signToken({ id: user.id, username: user.username });
+  console.log(`[auth] 登录成功 user=${user.username} id=${user.id}`);
   res.json({ token, user: { id: user.id, username: user.username } });
 });
 

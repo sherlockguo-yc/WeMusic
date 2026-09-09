@@ -147,6 +147,17 @@ app.get('/api/share/lyrics', async (req, res) => {
 // ============================================================
 // 静态前端
 // ============================================================
+// /api/* 访问日志：排查手机端问题（2026-09-09）。跳过 /logs/client 避免上报自身产生循环噪音。
+app.use('/api', (req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    if (req.path.startsWith('/logs/client')) return;
+    const uid = req.user?.id ?? '-';
+    const ua = (req.headers['user-agent'] || '').slice(0, 60);
+    console.log(`[api] ${req.method} ${req.path} -> ${res.statusCode} ${Date.now() - start}ms user=${uid} ua=${ua}`);
+  });
+  next();
+});
 app.get('/sw.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Cache-Control', 'no-store');
