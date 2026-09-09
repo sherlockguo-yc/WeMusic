@@ -60,6 +60,22 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
+// /api/* 访问日志：排查手机端问题（2026-09-09）。跳过 /logs/client 避免上报自身产生循环噪音。
+// 必须挂在所有 /api 路由之前，否则请求被路由消费后不会经过本中间件。
+// ============================================================
+app.use('/api', (req, res, next) => {
+  const start = Date.now();
+  const url = req.originalUrl; // 入口捕获：finish 回调时 req.path 已被嵌套路由 mount 改写
+  res.on('finish', () => {
+    if (url.startsWith('/api/logs/client')) return;
+    const uid = req.user?.id ?? '-';
+    const ua = (req.headers['user-agent'] || '').slice(0, 60);
+    console.log(`[api] ${req.method} ${url} -> ${res.statusCode} ${Date.now() - start}ms user=${uid} ua=${ua}`);
+  });
+  next();
+});
+
+// ============================================================
 // 数据迁移路由：需要在全局 json 解析之前挂载，因为导入操作
 // 的请求体可能很大（含大量播放记录），需要 50mb 的 body limit。
 // ============================================================
@@ -147,17 +163,6 @@ app.get('/api/share/lyrics', async (req, res) => {
 // ============================================================
 // 静态前端
 // ============================================================
-// /api/* 访问日志：排查手机端问题（2026-09-09）。跳过 /logs/client 避免上报自身产生循环噪音。
-app.use('/api', (req, res, next) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    if (req.path.startsWith('/logs/client')) return;
-    const uid = req.user?.id ?? '-';
-    const ua = (req.headers['user-agent'] || '').slice(0, 60);
-    console.log(`[api] ${req.method} ${req.path} -> ${res.statusCode} ${Date.now() - start}ms user=${uid} ua=${ua}`);
-  });
-  next();
-});
 app.get('/sw.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Cache-Control', 'no-store');
