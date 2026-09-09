@@ -130,10 +130,13 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-// Network First：优先走网络拿最新内容，网络失败再回退缓存
+// Network First：优先走网络拿最新内容，网络失败再回退缓存。
+// 注意 cache:'no-cache'：CF 的 Browser Cache TTL 会把 JS 的 max-age 改写成
+// 4 小时，若用默认缓存语义，"网络优先"实际拿到的是浏览器 HTTP 缓存里的
+// 旧资源，导致部署后最长 4 小时无法更新。强制每次与服务器 revalidate（304 很快）。
 async function networkFirst(request, cacheName) {
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: 'no-cache' });
     if (response.ok) {
       const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
