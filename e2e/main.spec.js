@@ -11,6 +11,11 @@ const TEST_PASS = 'E2ePass123!';
 
 // ===== 辅助：登录 =====
 async function ensureLoggedIn(page) {
+  // 先注册测试账号（Date.now() 动态用户名，正常首次即成功；失败则继续走登录）
+  await page.request.post('/api/auth/register', {
+    data: { username: TEST_USER, password: TEST_PASS },
+  }).catch(() => {});
+
   await page.goto('/');
   await page.waitForLoadState('networkidle');
 
@@ -21,7 +26,7 @@ async function ensureLoggedIn(page) {
     await page.waitForLoadState('networkidle');
     await page.fill('#username', TEST_USER);
     await page.fill('#password', TEST_PASS);
-    await page.click('button[type="submit"]');
+    await page.click('#submitBtn');
     // 等待跳转
     await page.waitForURL('**/', { timeout: 5000 }).catch(() => {});
   }
@@ -36,12 +41,12 @@ test.describe('登录页', () => {
     await page.goto('/login.html');
     await expect(page.locator('#username')).toBeVisible();
     await expect(page.locator('#password')).toBeVisible();
-    await expect(page.locator('button[type="submit"]')).toBeVisible();
+    await expect(page.locator('#submitBtn')).toBeVisible();
   });
 
   test('空字段提交不崩溃', async ({ page }) => {
     await page.goto('/login.html');
-    await page.click('button[type="submit"]');
+    await page.click('#submitBtn');
     await page.waitForTimeout(500);
     // 页面应仍然正常（未崩溃）
     await expect(page.locator('#username')).toBeVisible();
