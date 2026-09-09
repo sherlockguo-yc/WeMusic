@@ -1,12 +1,18 @@
 /**
  * WeMusic Service Worker
  * 策略：
- *   - 静态资源（HTML/CSS/JS/图标）：Cache First，版本号更新时自动失效
+ *   - HTML / 入口 JS / CSS / 图标：Network First，版本号更新时自动失效
+ *   - 构建产物 chunks（hash 命名，内容不可变）：Cache First
  *   - API 请求（/api/）：Network Only，不缓存
  *   - 音乐封面图（QQ 音乐 CDN）：Stale While Revalidate
+ *
+ * 预缓存：install 时读取 /dist/sw-precache.json（由 vite.config.js 的
+ * sw-precache-manifest 插件在构建时生成），全量缓存所有 JS 产物
+ * （含业务 chunks）。修复历史 bug：v8 只预缓存 app.js/login.js，网络
+ * 抖动时未缓存的 chunks 返回 503，ES module 链断裂导致整页死页。
  */
 
-const CACHE_VERSION = 'wemusic-v8';
+const CACHE_VERSION = 'wemusic-v9';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const IMG_CACHE    = `${CACHE_VERSION}-img`;
 
@@ -15,20 +21,36 @@ const PRECACHE_URLS = [
   '/index.html',
   '/login.html',
   '/css/style.css',
+  '/css/admin.css',
   '/dist/app.js',
   '/dist/login.js',
+  '/js/log-shim.js',
   '/manifest.json',
   '/icons/icon-192.svg',
   '/icons/icon-512.svg',
 ];
 
-// ---- 安装：逐文件缓存，避免单个失败导致全部失败 ----
+// ---- 安装：合并基础清单与构建产物清单，逐文件缓存，避免单个失败导致全部失败 ----
+async function buildPrecacheList() {
+  const urls = [...PRECACHE_URLS];
+  try {
+    const res = await fetch('/dist/sw-precache.json', { cache: 'no-store' });
+    if (res.ok) {
+      const { files } = await res.json();
+      if (Array.isArray(files)) urls.push(...files.filter((f) => typeof f === 'string'));
+    }
+  } catch { /* 清单不可用（dev 模式等）时退回基础清单 */ }
+  return urls;
+}
+
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) =>
-      Promise.allSettled(PRECACHE_URLS.map((url) =>
-        fetch(url).then((res) => { if (res.ok) cache.put(url, res); }).catch(() => {})
-      ))
+    buildPrecacheList().then((urls) =>
+      caches.open(STATIC_CACHE).then((cache) =>
+        Promise.allSettled(urls.map((url) =>
+          fetch(url).then((res) => { if (res.ok) cache.put(url, res); }).catch(() => {})
+        ))
+      )
     )
   );
   self.skipWaiting();
@@ -81,7 +103,14 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 静态资源：Network First（优先网络，确保拿到最新版本；离线时回退缓存）
+  // 构建产物 chunks（hash 命名，内容不可变）：Cache First。
+  // 命中即返回、零网络依赖；未命中走网络并缓存。
+  if (url.pathname.startsWith('/dist/chunks/')) {
+    e.respondWith(cacheFirst(e.request, STATIC_CACHE));
+    return;
+  }
+
+  // 其余静态资源（HTML / 入口 JS / CSS）：Network First（优先网络确保最新，离线回退缓存）
   e.respondWith(networkFirst(e.request, STATIC_CACHE));
 });
 
