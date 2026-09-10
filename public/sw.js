@@ -12,9 +12,15 @@
  * 抖动时未缓存的 chunks 返回 503，ES module 链断裂导致整页死页。
  */
 
-const CACHE_VERSION = 'wemusic-v9';
+const CACHE_VERSION = 'wemusic-v10';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const IMG_CACHE    = `${CACHE_VERSION}-img`;
+// API 读数据缓存：按账号分桶（bucket 名含 Authorization hash，不同登录态不串数据）
+const DATA_CACHE_PREFIX = `${CACHE_VERSION}-data`;
+
+// 可缓存的读接口白名单（GET 幂等读数据）：网络失败时回退上次成功的响应，
+// 解决弱网/CF 链路抖动时「页面正常但数据全空」的问题。
+const API_CACHEABLE_RE = /^\/api\/(playlists\b|stats\/|auth\/(session|me|preferences|custom-palettes)\b)/;
 
 const PRECACHE_URLS = [
   '/',
@@ -62,7 +68,7 @@ self.addEventListener('activate', (e) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => k.startsWith('wemusic-') && k !== STATIC_CACHE && k !== IMG_CACHE)
+          .filter((k) => k.startsWith('wemusic-') && k !== STATIC_CACHE && k !== IMG_CACHE && !k.startsWith(DATA_CACHE_PREFIX))
           .map((k) => caches.delete(k))
       )
     )
@@ -74,16 +80,22 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // API 请求：直接走网络，不缓存。加 catch 防止 fetch 失败时 respondWith 抛未捕获 rejection
+  // API 请求：
+  //  - GET 且命中读缓存白名单 → Network First，失败时回退该账号的上次成功缓存
+  //  - 其余（写操作/播放等实时接口）→ 网络直通
   if (url.pathname.startsWith('/api/')) {
-    e.respondWith(
-      fetch(e.request).catch(() =>
-        new Response(JSON.stringify({ error: '网络不可用' }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
-    );
+    if (e.request.method === 'GET' && API_CACHEABLE_RE.test(url.pathname)) {
+      e.respondWith(apiNetworkFirst(e.request));
+    } else {
+      e.respondWith(
+        fetch(e.request).catch(() =>
+          new Response(JSON.stringify({ error: '网络不可用' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        )
+      );
+    }
     return;
   }
 
@@ -113,6 +125,32 @@ self.addEventListener('fetch', (e) => {
   // 其余静态资源（HTML / 入口 JS / CSS）：Network First（优先网络确保最新，离线回退缓存）
   e.respondWith(networkFirst(e.request, STATIC_CACHE));
 });
+
+// ---- API 读缓存：Network First + 失败回退 ----
+// 按 Authorization 头哈希分桶（不同账号的数据缓存在不同 bucket，不串号）
+function _authBucket(authHeader) {
+  let h = 0;
+  const s = authHeader || 'anon';
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return `${DATA_CACHE_PREFIX}-${h >>> 0}`;
+}
+
+async function apiNetworkFirst(request) {
+  const bucket = _authBucket(request.headers.get('Authorization'));
+  const cache = await caches.open(bucket);
+  try {
+    const response = await fetch(request);
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    return new Response(JSON.stringify({ error: '网络不可用' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
 
 // Cache First：先找缓存，缓存没有再走网络并缓存结果
 async function cacheFirst(request, cacheName) {
