@@ -211,7 +211,9 @@ app.get(/^\/(?!api\/|dist\/|assets\/|sw\.js)/, (req, res) => {
 // ============================================================
 // 启动
 // ============================================================
-app.listen(config.port, '0.0.0.0', async () => {
+// '::' 双栈监听：同时接受 IPv4 与 IPv6 连接。
+// IPv6 直连是手机蜂窝网络访问本站的快速路径（绕开 Cloudflare 国际链路）。
+app.listen(config.port, '::', async () => {
   const { networkInterfaces } = await import('node:os');
   const nets = networkInterfaces();
   const lan = Object.values(nets).flat().find(
