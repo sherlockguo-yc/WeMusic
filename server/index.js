@@ -66,11 +66,14 @@ app.use((req, res, next) => {
 app.use('/api', (req, res, next) => {
   const start = Date.now();
   const url = req.originalUrl; // 入口捕获：finish 回调时 req.path 已被嵌套路由 mount 改写
+  // 路径标记：cf-ray 头存在 = 经 Cloudflare；否则为 IPv6 直连 / 局域网
+  const via = req.headers['cf-ray'] ? 'cf' : 'direct';
+  const srcIp = req.headers['cf-connecting-ip'] || req.socket.remoteAddress;
   res.on('finish', () => {
     if (url.startsWith('/api/logs/client')) return;
     const uid = req.user?.id ?? '-';
     const ua = (req.headers['user-agent'] || '').slice(0, 60);
-    console.log(`[api] ${req.method} ${url} -> ${res.statusCode} ${Date.now() - start}ms user=${uid} ua=${ua}`);
+    console.log(`[api] ${req.method} ${url} -> ${res.statusCode} ${Date.now() - start}ms user=${uid} via=${via} ip=${srcIp} ua=${ua}`);
   });
   next();
 });
