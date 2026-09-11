@@ -104,8 +104,19 @@ app.use('/api/logs', logsRouter);
 // 静态文件服务：上传的主题素材
 app.use('/data/uploads', express.static(path.join(__dirname, '../data/uploads')));
 
-// 健康检查：只返回 ok，不暴露版本/环境等信息
-app.get('/api/health', (req, res) => res.json({ ok: true }));
+// 健康检查：附带当前公网 IPv6（供前端断网 failover 时获取直连地址；地址随 SLAAC 变化，动态读取）
+app.get('/api/health', async (req, res) => {
+  let v6 = null;
+  try {
+    const { networkInterfaces } = await import('node:os');
+    const addrs = Object.values(networkInterfaces()).flat()
+      .filter((n) => n && n.family === 'IPv6' && n.scopeid === 0 && !n.internal)
+      .map((n) => n.address);
+    // 优先 /128 DHCPv6 稳定地址，否则取第一个全局地址
+    v6 = addrs.find((a) => a.endsWith('::2f6')) || addrs[0] || null;
+  } catch { /* ignore */ }
+  res.json({ ok: true, v6 });
+});
 
 // ============================================================
 // 分享元数据（无须登录，根据 song_mid / album_mid 返回歌名/歌手/封面）

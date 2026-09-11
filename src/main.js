@@ -14,6 +14,20 @@ import { initSettings, loadAvatar, loadPrefsFromServer, applyThemeSlots, activat
 import { initStats, openDiscover } from './stats.js';
 import * as offline from './offlineCache.js';
 
+// 故障转移迁移：从域名入口自动切到 IPv6 直连时，登录态经 URL hash 带过来。
+// 立即写入 localStorage 并清掉 hash（hash 不发送到服务器，但地址栏不宜久留）。
+(function () {
+  if (!location.hash.startsWith('#mig=')) return;
+  try {
+    const { token, user } = JSON.parse(decodeURIComponent(location.hash.slice(5)));
+    if (token) {
+      Auth.save(token, user ? JSON.parse(user) : null);
+      console.log('[failover] 已迁移登录态:', user ? JSON.parse(user).username : '(null)');
+    }
+  } catch (e) { console.warn('[failover] 迁移登录态失败', e.message); }
+  history.replaceState(null, '', location.pathname + location.search);
+})();
+
 // 登录拦截：保存当前 URL 到 sessionStorage，登录后恢复
 if (!Auth.token) {
   sessionStorage.setItem('wemusic_redirect', location.href);

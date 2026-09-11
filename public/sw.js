@@ -12,7 +12,7 @@
  * 抖动时未缓存的 chunks 返回 503，ES module 链断裂导致整页死页。
  */
 
-const CACHE_VERSION = 'wemusic-v10';
+const CACHE_VERSION = 'wemusic-v11';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const IMG_CACHE    = `${CACHE_VERSION}-img`;
 // API 读数据缓存：按账号分桶（bucket 名含 Authorization hash，不同登录态不串数据）
@@ -31,6 +31,7 @@ const PRECACHE_URLS = [
   '/dist/app.js',
   '/dist/login.js',
   '/js/log-shim.js',
+  '/js/net-failover.js',
   '/manifest.json',
   '/icons/icon-192.svg',
   '/icons/icon-512.svg',
