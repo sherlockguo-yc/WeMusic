@@ -104,8 +104,10 @@ app.use('/api/logs', logsRouter);
 // 静态文件服务：上传的主题素材
 app.use('/data/uploads', express.static(path.join(__dirname, '../data/uploads')));
 
-// 健康检查：附带当前公网 IPv6（供前端断网 failover 时获取直连地址；地址随 SLAAC 变化，动态读取）
-app.get('/api/health', async (req, res) => {
+// 网络探测端点（failover 用）：必须用 /api/ping 而非 /api/health——
+// CF Tunnel ingress 的 /health→9001(webhook) 规则会拦截公网 /api/health，
+// 导致探测永远拿到 404，健康网络也被误判断网。
+app.get('/api/ping', async (req, res) => {
   let v6 = null;
   try {
     const { networkInterfaces } = await import('node:os');
@@ -117,6 +119,9 @@ app.get('/api/health', async (req, res) => {
   } catch { /* ignore */ }
   res.json({ ok: true, v6 });
 });
+
+// 健康检查：保留给本地 cron 健康检查（不经过 CF，无路由冲突）
+app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // ============================================================
 // 分享元数据（无须登录，根据 song_mid / album_mid 返回歌名/歌手/封面）

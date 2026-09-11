@@ -42,7 +42,7 @@
   }
 
   function directUrl(v6) {
-    return 'http://[' + v6 + ']:' + DIRECT_PORT + '/api/health';
+    return 'http://[' + v6 + ']:' + DIRECT_PORT + '/api/ping';
   }
 
   // 迁移登录态：token/user 编码进 URL hash（hash 不发送到服务器）
@@ -75,7 +75,7 @@
   }
 
   async function tick() {
-    var res = await probe('/api/health', PROBE_TIMEOUT_MS);
+    var res = await probe('/api/ping', PROBE_TIMEOUT_MS);
     if (res) {
       consecutiveFails = 0;
       if (res.v6) lastKnownV6 = res.v6; // 每次成功的探测刷新最新 v6 地址
