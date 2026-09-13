@@ -12,7 +12,7 @@
  * 抖动时未缓存的 chunks 返回 503，ES module 链断裂导致整页死页。
  */
 
-const CACHE_VERSION = 'wemusic-v12';
+const CACHE_VERSION = 'wemusic-v13';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const IMG_CACHE    = `${CACHE_VERSION}-img`;
 // API 读数据缓存：按账号分桶（bucket 名含 Authorization hash，不同登录态不串数据）
@@ -63,16 +63,31 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
-// ---- 激活：清理旧版缓存 ----
+// ---- 激活：清理旧版缓存 + 自愈补全缺失的预缓存项 ----
+// 背景：弱网环境下 install 的预缓存可能部分失败（allSettled 容错静默跳过），
+// 缺失的 chunk 会让 app.js module 链断裂导致死页，且 SW 不再次安装就永不自愈。
+// 因此每次激活时校验清单，缺什么补什么。
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
         keys
           .filter((k) => k.startsWith('wemusic-') && k !== STATIC_CACHE && k !== IMG_CACHE && !k.startsWith(DATA_CACHE_PREFIX))
           .map((k) => caches.delete(k))
-      )
-    )
+      );
+      try {
+        const urls = await buildPrecacheList();
+        const cache = await caches.open(STATIC_CACHE);
+        await Promise.all(urls.map(async (url) => {
+          if (await cache.match(url)) return;
+          try {
+            const res = await fetch(url);
+            if (res.ok) await cache.put(url, res);
+          } catch { /* 单个补全失败不阻塞激活 */ }
+        }));
+      } catch { /* 清单不可用时跳过自愈 */ }
+    })()
   );
   self.clients.claim();
 });
