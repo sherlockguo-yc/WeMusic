@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WeMusic 重置</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #111; color: #eee; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .box { text-align: center; max-width: 320px; padding: 24px; }
+    .ok { color: #2ab758; font-size: 18px; margin: 16px 0; }
+    .log { font-size: 12px; color: #888; text-align: left; margin-top: 20px; line-height: 1.8; }
+    a { color: #1db954; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>WeMusic 缓存重置</h2>
+    <div class="ok" id="status">正在清理…</div>
+    <div class="log" id="log"></div>
+  </div>
+  <script>
+    // 一键重置：注销所有 Service Worker、删除全部 Cache Storage、清空 localStorage/sessionStorage。
+    // 用于手机端 SW 缓存状态损坏（死页）的彻底恢复。完成后自动跳回首页。
+    (async () => {
+      const log = (m) => { document.getElementById('log').innerHTML += m + '<br>'; };
+      try {
+        // 1. 注销所有 Service Worker
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const r of regs) { await r.unregister(); log('✓ 注销 SW: ' + r.scope); }
+          if (regs.length === 0) log('· 无 SW 注册');
+        }
+        // 2. 删除所有 Cache Storage
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          for (const k of keys) { await caches.delete(k); log('✓ 删除缓存: ' + k); }
+          if (keys.length === 0) log('· 无缓存');
+        }
+        // 3. 清空存储（含登录态，需重新登录）
+        localStorage.clear();
+        sessionStorage.clear();
+        log('✓ 清空 localStorage/sessionStorage');
+        document.getElementById('status').textContent = '清理完成，3 秒后跳转首页…';
+        setTimeout(() => location.replace('/?t=' + Date.now()), 3000);
+      } catch (e) {
+        document.getElementById('status').textContent = '清理出错：' + e.message;
+        log('✗ ' + (e.stack || e.message));
+      }
+    })();
+  </script>
+</body>
+</html>

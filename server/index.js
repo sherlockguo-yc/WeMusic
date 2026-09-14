@@ -194,6 +194,17 @@ app.get('/admin', (req, res) => {
   res.sendFile('index.html', { root: PUBLIC_DIR });
 });
 
+// 静态资源访问日志（诊断手机端 app.js/chunks 加载情况，2026-09-14）
+app.use((req, res, next) => {
+  if (!/^\/(dist\/|js\/|css\/|index\.html|reset\.html)/.test(req.path)) return next();
+  const start = Date.now();
+  const via = req.headers['cf-ray'] ? 'cf' : 'direct';
+  res.on('finish', () => {
+    const ua = (req.headers['user-agent'] || '').slice(0, 45);
+    console.log(`[static] ${req.method} ${req.path} -> ${res.statusCode} ${Date.now() - start}ms via=${via} ua=${ua}`);
+  });
+  next();
+});
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
     // HTML / JS / CSS 禁止缓存，确保刷新后拿到最新前端
