@@ -12,7 +12,10 @@
  * 抖动时未缓存的 chunks 返回 503，ES module 链断裂导致整页死页。
  */
 
-const CACHE_VERSION = 'wemusic-v13';
+const CACHE_VERSION = 'wemusic-v14';
+// 预缓存 fetch 超时：半死网络下 fetch 会永久挂起（不 resolve 不 reject），
+// 导致 install 的 allSettled 永不完成、SW 永远卡在 installing、死页焊死。
+const PRECACHE_FETCH_TIMEOUT_MS = 10000;
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const IMG_CACHE    = `${CACHE_VERSION}-img`;
 // API 读数据缓存：按账号分桶（bucket 名含 Authorization hash，不同登录态不串数据）
@@ -50,12 +53,21 @@ async function buildPrecacheList() {
   return urls;
 }
 
+// 带超时的 fetch：超时即 reject（由调用方容错），防止挂起拖死 install/activate
+function fetchWithTimeout(url, timeoutMs) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
 self.addEventListener('install', (e) => {
   e.waitUntil(
     buildPrecacheList().then((urls) =>
       caches.open(STATIC_CACHE).then((cache) =>
         Promise.allSettled(urls.map((url) =>
-          fetch(url).then((res) => { if (res.ok) cache.put(url, res); }).catch(() => {})
+          fetchWithTimeout(url, PRECACHE_FETCH_TIMEOUT_MS)
+            .then((res) => { if (res.ok) cache.put(url, res); })
+            .catch(() => {})
         ))
       )
     )
@@ -82,7 +94,7 @@ self.addEventListener('activate', (e) => {
         await Promise.all(urls.map(async (url) => {
           if (await cache.match(url)) return;
           try {
-            const res = await fetch(url);
+            const res = await fetchWithTimeout(url, PRECACHE_FETCH_TIMEOUT_MS);
             if (res.ok) await cache.put(url, res);
           } catch { /* 单个补全失败不阻塞激活 */ }
         }));

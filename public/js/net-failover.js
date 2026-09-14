@@ -75,7 +75,8 @@
   }
 
   async function tick() {
-    var res = await probe('/api/ping', PROBE_TIMEOUT_MS);
+    // ?sw= 版本标记：服务端日志可见手机的 failover 脚本版本，用于诊断 SW 更新状态
+    var res = await probe('/api/ping?sw=v14', PROBE_TIMEOUT_MS);
     if (res) {
       consecutiveFails = 0;
       if (res.v6) lastKnownV6 = res.v6; // 每次成功的探测刷新最新 v6 地址
