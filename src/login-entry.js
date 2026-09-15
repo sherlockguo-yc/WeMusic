@@ -81,6 +81,9 @@ async function submit() {
     Auth.save(data.token, data.user);
     // 诊断探针：验证 token 确实写入（隐私模式 setItem 可能静默失败）
     console.log(`[login] token写入验证: 存在=${!!localStorage.getItem('wemusic_token')} 长度=${(localStorage.getItem('wemusic_token') || '').length}`);
+    // 华为浏览器内核存在跨页面 localStorage 读取异常（jshost GETJSURL），
+    // 登录跳转时把登录态经 URL hash 带给主页（main.js 的 mig 逻辑恢复），与 failover 迁移同机制。
+    const mig = '#mig=' + encodeURIComponent(JSON.stringify({ token: data.token, user: JSON.stringify(data.user) }));
     // 登录成功后恢复到之前保存的页面（如分享链接、搜索结果等）
     const redirect = sessionStorage.getItem('wemusic_redirect');
     if (redirect) {
@@ -88,12 +91,12 @@ async function submit() {
       try {
         const url = new URL(redirect, location.origin);
         if (url.origin === location.origin) {
-          location.href = url.pathname + url.search + url.hash;
+          location.href = url.pathname + url.search + mig;
           return;
         }
       } catch { /* fall through to default redirect */ }
     }
-    location.href = '/';
+    location.href = '/' + mig;
   } catch (e) {
     console.warn(`[login] ${mode === 'login' ? '登录' : '注册'}失败 user=${username} 原因=${e.message}`);
     show(e.message, 'error');
