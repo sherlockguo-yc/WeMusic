@@ -130,6 +130,7 @@ async function restoreView(view, data) {
   else if (view === 'likes')   import('./stats.js').then(({ openLikesPage }) => openLikesPage()).catch((e) => { console.error('[nav] likes restore fail:', e); _popstateView = null; });
   else if (view === 'favorites') import('./favorites.js').then(({ openFavoritesPage }) => openFavoritesPage()).catch((e) => { console.error('[nav] favorites restore fail:', e); _popstateView = null; });
   else if (view === 'offline') import('./offline-page.js').then(({ openOfflinePage }) => openOfflinePage()).catch((e) => { console.error('[nav] offline restore fail:', e); _popstateView = null; });
+  else if (view === 'my') import('./my-page.js').then(({ openMyPage }) => openMyPage()).catch((e) => { console.error('[nav] my restore fail:', e); _popstateView = null; });
   else if (view === 'playlist' && data?.id) import('./playlist-ui.js').then(({ openPlaylist }) => openPlaylist(data.id)).catch((e) => { console.error('[nav] playlist restore fail:', e); _popstateView = null; });
 }
 

@@ -14,4 +14,9 @@ export function initStats() {
     if (el) el.addEventListener('click', openSavedAlbums);
   });
   import('./offline-page.js').then(({ openOfflinePage }) => { $('navOffline').onclick = openOfflinePage; });
+  // 「我的」入口：仅移动端底部 Tab 显示（桌面端由 CSS 隐藏）
+  import('./my-page.js').then(({ openMyPage }) => {
+    const my = $('navMy');
+    if (my) my.onclick = openMyPage;
+  });
 }

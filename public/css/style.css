@@ -483,6 +483,9 @@ button.topbar-btn {
 }
 .topbar-btn:hover { color: var(--text); }
 
+/* 「我的」为移动端专属汇总入口（底部 Tab），桌面端侧栏已有完整入口故隐藏 */
+#navMy { display: none; }
+
 .sidebar {
   grid-area: sidebar;
   background: var(--theme-sidebar-bg, #0b0c10);
@@ -3051,11 +3054,19 @@ body.share-view .main { overflow: hidden; }
    移动端适配（手机 / 竖屏平板）
    ============================================= */
 @media (max-width: 720px) {
+  /* ---- 移动端设计 token（统一触控尺寸/高度/间距，后续只需调变量） ---- */
+  :root {
+    --mini-h: 56px;   /* 底部 mini 播放条高度 */
+    --tab-h: 56px;    /* 底部 Tab Bar 高度 */
+    --touch: 44px;    /* 最小触控目标（iOS/Android 可访问性标准） */
+    --gutter: 12px;   /* 移动端左右安全边距 */
+  }
 
-  /* ---- 整体布局：侧边栏收到底部 Tab Bar，主内容占满屏幕 ---- */
+  /* ---- 整体布局：移动三层架构（顶栏 / 内容 / mini 播放条 / 底部 Tab） ----
+     播放条与 Tab 固定高度，剩余空间全给主内容 —— 屏幕利用率最大化 */
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto auto;
+    grid-template-rows: auto 1fr var(--mini-h) var(--tab-h);
     grid-template-areas:
       'topbar'
       'main'
@@ -3120,39 +3131,19 @@ body.share-view .main { overflow: hidden; }
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .side-nav-item .nav-icon { width: 18px; height: 18px; }
+  .side-nav-item {
+    height: 100%;
+    padding: 6px 4px;
+    font-size: 11px;
+  }
+  .side-nav-item .nav-icon { width: 20px; height: 20px; }
   .side-nav-item .side-count { font-size: 10px; }
+  /* Tab 精简：底部留 4 个核心入口（发现/数据/喜欢/我的），其余收进「我的」页 */
+  #navFavorites, #navSavedAlbums, #navOffline { display: none; }
+  #navMy { display: flex; } /* 仅移动端显示的汇总入口 */
 
-  /* 歌单列表区：横向滚动缩略展示 */
-  .side-section {
-    padding: 6px 10px 4px;
-    font-size: 12px;
-  }
-  #playlistList {
-    display: flex;
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 6px;
-    padding: 4px 10px 8px;
-    scrollbar-width: none;
-  }
-  #playlistList::-webkit-scrollbar { display: none; }
-  .playlist-item {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    padding: 6px 10px;
-    border-radius: 8px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    max-width: 110px;
-  }
-  .playlist-item .del { display: none; } /* 移动端长按或进歌单删，顶部不显示 ✕ */
-  .playlist-item .pl-name {
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+  /* 歌单列表区：移动端移入「我的」页，底部不再占用空间 */
+  .side-section, #playlistList { display: none; }
 
   /* ---- 主内容区 ---- */
   .main { padding: 14px 12px 16px; }
@@ -3168,6 +3159,8 @@ body.share-view .main { overflow: hidden; }
     padding: 10px 8px;
   }
   .song-row .idx { grid-row: 1 / 3; }   /* 序号跨两行 */
+  /* 移动端隐藏桌面 7 列表头：列表行已自带歌名/歌手/时长，表头只会错位 */
+  .song-row-head { display: none; }
   .song-row .dur { grid-row: 1 / 3; }   /* 时长跨两行 */
   .song-row .ops { grid-row: 1 / 3; }   /* 操作按钮跨两行 */
   .song-row .name { grid-column: 2; grid-row: 1; font-size: 13px; }
@@ -3191,8 +3184,15 @@ body.share-view .main { overflow: hidden; }
     grid-row: 2;
   }
   .song-row .dur { font-size: 12px; }
-  .song-row .ops { gap: 4px; }
-  .icon-btn { width: 34px; height: 34px; font-size: 14px; }
+  .song-row .ops { gap: 2px; }
+  /* 歌曲行操作精简：只留 ♥（喜欢）与 ⋯（更多），收藏/不喜欢收进更多菜单 */
+  .song-row .ops .song-fav-btn,
+  .song-row .ops .np-act-btn[data-act="dislike"] { display: none; }
+  .song-row .ops .icon-btn,
+  .song-row .ops .np-act-btn {
+    width: var(--touch); height: var(--touch); font-size: 15px;
+  }
+  .icon-btn { width: var(--touch); height: var(--touch); font-size: 15px; }
 
   /* 工具条：纵向排列 */
   .list-tools { gap: 6px; }
@@ -3201,45 +3201,44 @@ body.share-view .main { overflow: hidden; }
   /* 专辑格 */
   .album-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
 
-  /* ---- 底栏播放器：两行布局 ---- */
+  /* ---- 底栏播放器 → mini 播放条（56px）----
+     移动端只保留：小封面 + 歌名歌手 + 播放/暂停 + 队列；
+     进度条、上下首、喜欢等全部移入全屏播放页（点条身进入） */
   .player {
-    display: flex; flex-wrap: wrap;
+    display: flex; align-items: center;
     grid-template-columns: none; grid-template-areas: none;
-    gap: 8px;
-    padding: 8px 12px calc(8px + var(--safe-bottom));
-    min-height: auto;
-    align-items: center;
+    gap: 10px;
+    height: var(--mini-h);
+    min-height: var(--mini-h);
+    padding: 0 var(--gutter);
+    overflow: hidden;
+    cursor: pointer; /* 整条可点 → 打开全屏播放页 */
   }
-  /* display: contents 把 .player-left 的子元素（cover/np/controls）升到 .player 直接 flex 层级，
-     复用原有的 order/flex-basis 控制移动端多行布局 */
+  /* display: contents 把 .player-left 的子元素升到 .player 直接 flex 层级 */
   .player-left { display: contents; }
-  .np-cover-wrap { width: 50px; height: 50px; flex: 0 0 auto; }
-  .np-cover-wrap .cover-progress-ring { width: 50px; height: 50px; }
-  .player .np-cover { width: 44px; height: 44px; }
+  .np-cover-wrap { width: 40px; height: 40px; flex: 0 0 auto; }
+  .np-cover-wrap .cover-progress-ring { width: 40px; height: 40px; }
+  .player .np-cover { width: 40px; height: 40px; }
+  .player .np-cover-txt { display: none; } /* mini 条不显示"词"字 */
   .player .np { flex: 1; min-width: 0; max-width: none; }
-  .player .np .t { font-size: calc(var(--font-size) * 0.93); }
-  .player .np .s { font-size: calc(var(--font-size) * 0.8); }
-  .controls { order: 3; flex: 0 0 auto; width: 100%; justify-content: center; gap: 6px; }
-  .player .controls .icon-btn { width: 36px; height: 36px; font-size: 14px; }
-  .player .controls .icon-btn.play { width: 44px; height: 44px; font-size: 18px; }
-  /* 移动端进度条：取消 desktop 的居中列，回归正常流 */
-  .player .progress-center { width: 100%; max-width: none; }
-  /* 进度条独占一行 */
-  .progress-wrap {
-    order: 10;
-    flex-basis: 100%;
-    gap: 6px;
-  }
-  .player .player-status { display: none; } /* 移动端隐藏视频标题 */
+  .player .np .np-title-line { font-size: calc(var(--font-size) * 0.93); }
+  /* 播放条内的 ♥☆🚫⋯ 移入全屏页，此处隐藏 */
+  .player .np-actions { display: none; }
+  /* controls：只保留播放/暂停，其余移入全屏页 */
+  .controls { display: flex; flex: 0 0 auto; gap: 0; order: unset; width: auto; }
+  .controls #modeBtn, .controls #prevBtn, .controls #nextBtn, .controls .volume-wrap { display: none; }
+  .controls #playPauseBtn { width: var(--touch); height: var(--touch); font-size: 18px; }
+  /* 进度条 / 状态 / 桌面歌词按钮：移入全屏页 */
+  .player .progress-center, .player .player-status, #dtLyricsBtn { display: none; }
   .volume-wrap { display: none; }
 
-  /* 移动端隐藏次要按钮（看视频、换源、队列），只留核心：歌词 + 上下首 + 播放/暂停 */
+  /* 移动端隐藏次要按钮（看视频、换源），保留队列入口 */
   #videoBtn, #switchSrcBtn { display: none; }
   #queueBtn {
     font-size: 0;
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
+    width: var(--touch);
+    min-width: var(--touch);
+    height: var(--touch);
     padding: 0;
     display: inline-flex;
     align-items: center;
@@ -3292,6 +3291,33 @@ body.share-view .main { overflow: hidden; }
   /* 移动端专辑详情封面+简介堆叠 */
   .album-detail-header { flex-direction: column; align-items: center; }
   .album-detail-info { text-align: center; }
+
+  /* ---- 「我的」页（移动端汇总入口）---- */
+  .my-section { margin-bottom: 18px; }
+  .my-section-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; color: var(--text-dim); margin-bottom: 8px;
+  }
+  .my-playlists { display: flex; flex-direction: column; gap: 8px; }
+  .my-pl-item {
+    display: flex; align-items: center; justify-content: space-between;
+    min-height: var(--touch); padding: 10px 12px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .my-pl-item:active { background: var(--bg-soft); }
+  .my-pl-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .my-pl-count { color: var(--text-dim); font-size: 12px; flex-shrink: 0; margin-left: 10px; }
+  .my-entries {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .my-entry {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; min-height: 76px; padding: 10px 4px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); cursor: pointer; font-size: 12px;
+  }
+  .my-entry:active { background: var(--bg-soft); }
 }
 
 /* ---- 全局字号缩放（关键 UI 元素） ---- */
