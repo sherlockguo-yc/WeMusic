@@ -1524,6 +1524,17 @@ export function bindSeekBar(bar, curTimeEl) {
 }
 
 export function initPlayer() {
+  // 移动端：点击 mini 播放条条身（非按钮区域）进入全屏播放页。
+  // 移动端的播放条只显示封面+歌名+播放键，进度条与上下首都移入全屏页。
+  const playerEl = document.querySelector('.player');
+  if (playerEl) {
+    playerEl.addEventListener('click', (e) => {
+      if (window.matchMedia('(min-width: 721px)').matches) return; // 仅移动端
+      if (e.target.closest('button, input')) return;               // 点按钮不触发
+      import('./lyrics.js').then(({ openLyricsPanel }) => openLyricsPanel());
+    });
+  }
+
   // seekBar 支持拖拽跳转：mode === 'bg' 时可用（bgAudio 是 WeMusic 自己的元素，可精确 seek）；
   // mode === 'iframe'（展开视频）时禁用，因为 B 站官方未公开支持 postMessage 精确 seek。
   _updateSeekInteractivity();
