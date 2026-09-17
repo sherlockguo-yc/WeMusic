@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
   <!-- 全量日志持久化 shim：必须最先加载（经典脚本，早于下方所有 module 脚本同步执行） -->
-  <script src="/js/log-shim.js"></script>
+  <script src="/js/log-shim.js?v=202609171542"></script>
   <!-- 网络故障转移：域名链路持续不可用时自动切换 IPv6 直连 -->
-  <script src="/js/net-failover.js"></script>
+  <script src="/js/net-failover.js?v=202609171542"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>WeMusic · 登录</title>
@@ -118,7 +118,7 @@
   </div>
 
   <script>localStorage.removeItem("wemusic_token");localStorage.removeItem("wemusic_user")</script>
-  <script type="module" src="/dist/login.js"></script>
+  <script type="module" src="/dist/login.js?v=202609171542"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});

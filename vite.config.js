@@ -19,6 +19,17 @@ export default defineConfig({
           .sort();
         const out = resolve(__dirname, 'public/dist/sw-precache.json');
         fs.writeFileSync(out, JSON.stringify({ files }, null, 2) + '\n');
+
+        // 静态资源版本戳：把 HTML 里的 ?v=__BUILD__ / ?v=<旧值> 统一替换为本次构建时间戳。
+        // 目的：CF 会把源站的 no-cache 改写成 max-age=14400（Browser Cache TTL），
+        // 浏览器 4 小时内不回源，导致部署后手机仍用旧 CSS/JS。URL 变化即可强制取新。
+        const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 12); // YYYYMMDDHHmm
+        for (const name of ['index.html', 'login.html']) {
+          const p = resolve(__dirname, 'public', name);
+          const html = fs.readFileSync(p, 'utf8');
+          const next = html.replace(/\?v=(?:__BUILD__|\d+)/g, `?v=${stamp}`);
+          if (next !== html) fs.writeFileSync(p, next);
+        }
       },
     },
   ],

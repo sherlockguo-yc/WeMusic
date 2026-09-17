@@ -12,7 +12,10 @@
  * 抖动时未缓存的 chunks 返回 503，ES module 链断裂导致整页死页。
  */
 
-const CACHE_VERSION = 'wemusic-v14';
+const CACHE_VERSION = 'wemusic-v15';
+// 页面引用带 ?v=<构建戳> 的静态资源（绕过 CF 的 4 小时浏览器缓存），
+// 而预缓存按无参数 URL 存储；match 时忽略查询串才能命中已有缓存。
+const IGNORE_SEARCH = { ignoreSearch: true };
 // 预缓存 fetch 超时：半死网络下 fetch 会永久挂起（不 resolve 不 reject），
 // 导致 install 的 allSettled 永不完成、SW 永远卡在 installing、死页焊死。
 const PRECACHE_FETCH_TIMEOUT_MS = 10000;
@@ -171,7 +174,7 @@ async function apiNetworkFirst(request) {
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch {
-    const cached = await cache.match(request);
+    const cached = await cache.match(request, IGNORE_SEARCH);
     if (cached) return cached;
     return new Response(JSON.stringify({ error: '网络不可用' }), {
       status: 503,
@@ -182,7 +185,8 @@ async function apiNetworkFirst(request) {
 
 // Cache First：先找缓存，缓存没有再走网络并缓存结果
 async function cacheFirst(request, cacheName) {
-  const cached = await caches.match(request);
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request, IGNORE_SEARCH);
   if (cached) return cached;
   try {
     const response = await fetch(request);
@@ -209,7 +213,8 @@ async function networkFirst(request, cacheName) {
     }
     return response;
   } catch {
-    const cached = await caches.match(request);
+    const cache = await caches.open(cacheName);
+    const cached = await cache.match(request, IGNORE_SEARCH);
     return cached || new Response('网络不可用', { status: 503, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
   }
 }
