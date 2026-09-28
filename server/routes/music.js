@@ -12,6 +12,7 @@ import {
   deduplicateByAlbum,
 } from '../services/qqmusic.js';
 import { extractNeteasePlaylistId, parseNeteasePlaylist } from '../services/netease.js';
+import { extractApplePlaylistId, parseApplePlaylist } from '../services/apple.js';
 
 const router = express.Router();
 router.use(authRequired);
@@ -116,10 +117,23 @@ router.post('/album-backfill', async (req, res) => {
   }
 });
 
-// 解析歌单链接（自动识别 QQ 音乐 / 网易云音乐）
+// 解析歌单链接（自动识别 Apple Music / QQ 音乐 / 网易云音乐）
 router.post('/parse-playlist', async (req, res) => {
   const { url } = req.body || {};
   if (!url) return res.status(400).json({ error: '请提供歌单链接' });
+
+  // Apple Music（必须最先判断：extractNeteasePlaylistId / extractDisstid 的兜底正则
+  // /(\d{6,})/ 会误吞 Apple pl ID 内的连续数字，实测 A-List 等真实歌单会被吞成错误 ID）
+  const appleId = extractApplePlaylistId(url);
+  if (appleId) {
+    try {
+      const result = await parseApplePlaylist(appleId);
+      res.json({ source: 'apple', playlistId: appleId, ...result });
+    } catch (e) {
+      res.status(502).json({ error: e.message });
+    }
+    return;
+  }
 
   // 网易云音乐
   const neId = extractNeteasePlaylistId(url);

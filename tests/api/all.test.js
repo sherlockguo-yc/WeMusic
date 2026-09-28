@@ -2,7 +2,7 @@
  * API 集成测试
  * 仅 mock config.js，让 db.js 自动创建内存数据库。
  */
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
@@ -283,6 +283,61 @@ describe('参数校验', () => {
   it('play search 缺关键词 → 400', async () => {
     const res = await request(app).get('/api/play/search')
       .set('Authorization', `Bearer ${userToken}`);
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('歌单解析 parse-playlist（Apple Music 分支）', () => {
+  // 该 pl ID 内的连续数字（7712481）会被 QQ/网易云提取函数的兜底正则误吞，
+  // 用它验证「Apple 分支必须最先判断」的分支顺序回归
+  const APPLE_LINK = 'https://music.apple.com/cn/playlist/a-list/pl.beb783da7712481fbeed35be144bd48c';
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('缺少 url → 400', async () => {
+    await ensureUser();
+    const res = await request(app).post('/api/music/parse-playlist')
+      .set('Authorization', `Bearer ${userToken}`).send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('Apple 链接 → 走 Apple 分支并返回标准化歌曲', async () => {
+    await ensureUser();
+    const html = `<script id="serialized-server-data">${JSON.stringify({
+      data: [{ data: { sections: [
+        { itemKind: 'containerDetailHeaderLockup', items: [{ title: '测试 Apple 歌单' }] },
+        { itemKind: 'trackLockup', items: [{
+          contentDescriptor: { kind: 'song', identifiers: { storeAdamID: '123456' } },
+          title: '测试歌', artistName: '测试歌手', album: '', duration: 200000,
+        }] },
+      ] } }],
+    })}</script>`;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(html, { status: 200 })));
+    const res = await request(app).post('/api/music/parse-playlist')
+      .set('Authorization', `Bearer ${userToken}`).send({ url: APPLE_LINK });
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('apple');
+    expect(res.body.playlistId).toBe('pl.beb783da7712481fbeed35be144bd48c');
+    expect(res.body.name).toBe('测试 Apple 歌单');
+    expect(res.body.songs).toHaveLength(1);
+    expect(res.body.songs[0]).toMatchObject({
+      song_mid: 'am_123456', name: '测试歌', singer: '测试歌手', duration: 200, source: 'apple',
+    });
+  });
+
+  it('Apple 歌单不存在（404）→ 502 且提示明确', async () => {
+    await ensureUser();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })));
+    const res = await request(app).post('/api/music/parse-playlist')
+      .set('Authorization', `Bearer ${userToken}`).send({ url: APPLE_LINK });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain('不存在');
+  });
+
+  it('无法识别的链接 → 400', async () => {
+    await ensureUser();
+    const res = await request(app).post('/api/music/parse-playlist')
+      .set('Authorization', `Bearer ${userToken}`).send({ url: 'https://example.com/nothing' });
     expect(res.status).toBe(400);
   });
 });

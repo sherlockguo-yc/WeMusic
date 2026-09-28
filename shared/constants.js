@@ -15,6 +15,7 @@
 export const Platform = {
   QQ_MUSIC: 'qqmusic',
   NETEASE: 'netease',
+  APPLE_MUSIC: 'apple',
   KUGOU: 'kugou',
   BILIBILI: 'bilibili',
   LOCAL: 'local',
@@ -40,6 +41,7 @@ export const LyricsSource = {
 export const PLATFORM_META = {
   [Platform.QQ_MUSIC]: { label: 'QQ音乐', sourceType: Platform.QQ_MUSIC, shortName: LyricsSource.QQ },
   [Platform.NETEASE]:   { label: '网易云音乐', sourceType: Platform.NETEASE, shortName: LyricsSource.NE },
+  [Platform.APPLE_MUSIC]: { label: 'Apple Music', sourceType: Platform.APPLE_MUSIC, shortName: 'am' },
   [Platform.KUGOU]:     { label: '酷狗音乐', sourceType: Platform.KUGOU, shortName: 'kg' },
   [Platform.BILIBILI]:  { label: 'Bilibili', sourceType: Platform.BILIBILI, shortName: 'bili' },
 };

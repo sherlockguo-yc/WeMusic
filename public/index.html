@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
   <!-- 全量日志持久化 shim：必须最先加载（经典脚本，早于下方所有 module 脚本同步执行） -->
-  <script src="/js/log-shim.js?v=202609171542"></script>
+  <script src="/js/log-shim.js?v=202609280921"></script>
   <!-- 网络故障转移：域名链路持续不可用时自动切换 IPv6 直连 -->
-  <script src="/js/net-failover.js?v=202609171542"></script>
+  <script src="/js/net-failover.js?v=202609280921"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>WeMusic · 个人音乐</title>
@@ -19,8 +19,8 @@
   <meta http-equiv="Permissions-Policy" content="autoplay=*, fullscreen=*" />
   <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
   <link rel="icon" href="/icons/icon-192.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/css/style.css?v=202609171542" />
-  <link rel="stylesheet" href="/css/admin.css?v=202609171542" />
+  <link rel="stylesheet" href="/css/style.css?v=202609280921" />
+  <link rel="stylesheet" href="/css/admin.css?v=202609280921" />
   <!-- 艺术字体 -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -309,6 +309,14 @@
           <input id="importNeUrl" type="text" class="prompt-input" style="margin:0;flex:1"
             placeholder="https://music.163.com/playlist?id=xxxx" />
           <button class="btn green sm" id="importNeBtn">解析</button>
+        </div>
+      </div>
+      <div class="settings-section" style="margin-top:14px">
+        <div class="settings-label">从 Apple Music 链接解析</div>
+        <div style="display:flex;gap:8px">
+          <input id="importAppleUrl" type="text" class="prompt-input" style="margin:0;flex:1"
+            placeholder="https://music.apple.com/cn/playlist/xxxx" />
+          <button class="btn green sm" id="importAppleBtn">解析</button>
         </div>
       </div>
       <div class="settings-section" style="margin-top:14px">
@@ -808,7 +816,7 @@
 
   <div class="toast" id="toast"></div>
 
-  <script type="module" src="/dist/app.js?v=202609171542"></script>
+  <script type="module" src="/dist/app.js?v=202609280921"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});

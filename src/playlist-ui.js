@@ -522,6 +522,9 @@ export function initPlaylistUI() {
   $('importNeBtn').onclick = () => parseAndShowPlaylist($('importNeUrl').value.trim(), 'importNeUrl');
   $('importNeUrl') && $('importNeUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('importNeBtn').click(); });
 
+  $('importAppleBtn').onclick = () => parseAndShowPlaylist($('importAppleUrl').value.trim(), 'importAppleUrl');
+  $('importAppleUrl') && $('importAppleUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('importAppleBtn').click(); });
+
   $('importJsonBtn').onclick = () => $('importFile').click();
   $('importFile').onchange = async (e) => {
     const file = e.target.files && e.target.files[0];
