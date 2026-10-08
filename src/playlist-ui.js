@@ -437,15 +437,55 @@ export async function deleteSong(playlistId, songId, row) {
 }
 
 // ---- 歌单详情 ----
+
+// 当前打开着的歌单 id（异步回填封面完成后用于判断用户是否仍停留在此页）
+let _openedPlaylistId = null;
+
+/** album_mid 是否缺失或无效（空 = Apple 导入；纯数字 = 网易云的专辑 ID，拼 QQ 封面 URL 404） */
+function albumMidMissing(mid) {
+  return !mid || /^\d+$/.test(String(mid));
+}
+
+/**
+ * 存量封面补齐：歌单里若有缺有效 album_mid 的歌曲 → 请求服务端反查 QQ album_mid（服务端 10 分钟防重）。
+ * 完成后更新头部四宫格封面，并把新 album_mid 同步进正在播放的 queue（播放器封面即时生效）。
+ */
+function maybeFillAlbumCovers(id, songs) {
+  if (!songs.some((s) => albumMidMissing(s.album_mid))) return;
+  api(`/playlists/${id}/fill-album-mids`, { method: 'POST' }).then(async (r) => {
+    if (!r || !r.filled) return;
+    if (_openedPlaylistId !== id || state.view !== 'playlist') return;   // 用户已离开该歌单
+    const data = await api(`/playlists/${id}/songs`);
+    const mids = [...new Set(data.songs.map((s) => s.album_mid).filter((m) => !albumMidMissing(m)))].slice(0, 4);
+    const wrap = document.querySelector('.pl-cover-wrap');
+    if (wrap) wrap.innerHTML = playlistCoverHtml(mids);
+    // 正在播放该歌单 → 同步 queue 里歌曲的 album_mid，并刷新播放器封面
+    if (state.currentContext === id && state.queue.length) {
+      const byId = new Map(data.songs.map((s) => [s.id, s]));
+      let curChanged = false;
+      for (const q of state.queue) {
+        const fresh = byId.get(q.id);
+        if (fresh && fresh.album_mid && fresh.album_mid !== q.album_mid) {
+          q.album_mid = fresh.album_mid;
+          if (q === state.current) curChanged = true;
+        }
+      }
+      if (curChanged) import('./player.js').then(({ updateNpCover }) => updateNpCover(state.current)).catch(() => {});
+    }
+  }).catch(() => {});
+}
+
 export async function openPlaylist(id) {
   state.view = 'playlist';
+  _openedPlaylistId = id;
   import('./main.js').then(({ navPush }) => navPush('playlist', { id }));
   const main = $('main');
   main.innerHTML = `<div class="loading">加载歌单...</div>`;
   try {
     const data = await api(`/playlists/${id}/songs`);
     const totalSec = data.songs.reduce((acc, s) => acc + (Number(s.duration) || 0), 0);
-    const coverMids = [...new Set(data.songs.map((s) => s.album_mid).filter(Boolean))].slice(0, 4);
+    // 只取有效 QQ mid 拼封面（纯数字是网易云等外源 ID，拼出的 URL 必然 404 → 直接走占位图）
+    const coverMids = [...new Set(data.songs.map((s) => s.album_mid).filter((m) => !albumMidMissing(m)))].slice(0, 4);
     const isEmpty = data.songs.length === 0;
     main.innerHTML = `
       <div class="pl-header">
@@ -474,6 +514,8 @@ export async function openPlaylist(id) {
     const container = $('plSongs');
     renderSongList(container, data.songs, { showDelete: true, playlistId: id, context: 'playlist' });
     bindListTools(main, data.songs, container, 'playlist', id);
+    // 存量封面补齐：Apple / 网易云导入歌曲缺有效 album_mid → 后台反查（服务端防重，完成后原地刷新）
+    maybeFillAlbumCovers(id, data.songs);
   } catch (e) { main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
 

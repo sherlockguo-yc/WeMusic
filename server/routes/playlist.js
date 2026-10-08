@@ -1,6 +1,7 @@
 import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
+import { fillAlbumMids } from '../services/qqmusic.js';
 
 const router = express.Router();
 router.use(authRequired);
@@ -55,7 +56,10 @@ router.get('/', (req, res) => {
     `SELECT DISTINCT album_mid FROM songs WHERE playlist_id = ? AND album_mid IS NOT NULL AND album_mid != ''
      ORDER BY sort_order ASC, added_at ASC LIMIT 4`
   );
-  for (const p of rows) p.cover_mids = coverStmt.all(p.id).map((r) => r.album_mid);
+  // 只返回有效 QQ mid（纯数字是网易云等外源 ID，前端拼出的封面 URL 必然 404 → 视为无封面）
+  for (const p of rows) {
+    p.cover_mids = coverStmt.all(p.id).map((r) => r.album_mid).filter((m) => !/^\d+$/.test(m));
+  }
   res.json({ playlists: rows });
 });
 
@@ -113,6 +117,30 @@ router.post('/:id/songs', (req, res) => {
   const valid = list.filter(s => s && s.name);
   const added = insertSongsBulk(req.playlist.id, valid);
   res.json({ added, skipped: list.length - added });
+});
+
+// ---- 补齐缺失封面：反查 QQ album_mid 写回（Apple / 网易云导入的存量歌曲） ----
+// 背景：封面 URL 只认 QQ 专辑 mid，Apple 导入为空、网易云导入是数字 ID（拼出 URL 404）。
+const FILL_COOLDOWN_MS = 10 * 60 * 1000;
+const _fillAttemptAt = new Map();   // playlistId → 上次尝试时间戳
+
+router.post('/:id/fill-album-mids', async (req, res) => {
+  const pid = req.playlist.id;
+  // 防重：同一歌单 10 分钟内只尝试一次（QQ 音乐里没有的歌每次都会查空，避免反复请求）
+  if (Date.now() - (_fillAttemptAt.get(pid) || 0) < FILL_COOLDOWN_MS) {
+    return res.json({ total: 0, filled: 0, skipped: 'cooldown' });
+  }
+  const rows = db.prepare('SELECT id, name, singer, album_mid FROM songs WHERE playlist_id = ?').all(pid);
+  const before = new Map(rows.map((r) => [r.id, r.album_mid]));
+  const filled = await fillAlbumMids(rows, { deadlineMs: 20000, logTag: `fill#${pid}` });
+  if (filled > 0) {
+    const upd = db.prepare('UPDATE songs SET album_mid = ? WHERE id = ?');
+    db.transaction(() => {
+      for (const r of rows) if (before.get(r.id) !== r.album_mid) upd.run(r.album_mid, r.id);
+    })();
+  }
+  _fillAttemptAt.set(pid, Date.now());
+  res.json({ total: rows.length, filled });
 });
 
 // ---- 拖拽排序 ----

@@ -6,6 +6,7 @@
  */
 
 import { Platform } from '../../shared/constants.js';
+import { fillAlbumMids } from './qqmusic.js';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const HEADERS = { 'User-Agent': UA, Referer: 'https://music.163.com/' };
@@ -70,9 +71,13 @@ export async function parseNeteasePlaylist(playlistId) {
   }
   const result = json.result || {};
   const tracks = result.tracks || [];
+  const songs = tracks.map(normalizeNeteaseSong);
+  // 补 album_mid（封面依赖它）：网易云的 album_mid 是网易云自己的数字专辑 ID，
+  // 拼 QQ 封面 URL 必然 404 → 用「歌名+歌手」反查 QQ 音乐替换；失败/未命中保留原值，不阻断导入。
+  await fillAlbumMids(songs, { logTag: 'netease' });
   return {
     name: result.name || `歌单 ${playlistId}`,
     total: result.trackCount || tracks.length,
-    songs: tracks.map(normalizeNeteaseSong),
+    songs,
   };
 }

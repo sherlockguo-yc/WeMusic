@@ -341,3 +341,45 @@ describe('歌单解析 parse-playlist（Apple Music 分支）', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('歌单封面补齐 fill-album-mids', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('缺有效 album_mid 的歌被反查并写回 DB；重复调用被防重拦截', async () => {
+    await ensureUser();
+    // 建歌单 + 加 2 首歌：album_mid 空（Apple 场景）/ 纯数字（网易云场景）
+    const pl = await request(app).post('/api/playlists')
+      .set('Authorization', `Bearer ${userToken}`).send({ name: '封面补齐测试' });
+    const pid = pl.body.id;
+    await request(app).post(`/api/playlists/${pid}/songs`)
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ songs: [
+        { name: '测试歌', singer: '测试歌手', album_mid: '', source: 'apple' },
+        { name: '数字歌', singer: '测试歌手', album_mid: '178396523', source: 'netease' },
+      ] });
+    // mock QQ 搜索接口：返回含两首歌的候选列表（歌名精确匹配各自取值）
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      code: 0,
+      data: { song: { list: [
+        { songname: '测试歌', singer: [{ name: '测试歌手' }], albummid: 'MOCK_MID_001', albumname: 'A', songmid: 'm1', songid: 1, interval: 200 },
+        { songname: '数字歌', singer: [{ name: '测试歌手' }], albummid: 'MOCK_MID_002', albumname: 'B', songmid: 'm2', songid: 2, interval: 200 },
+      ] } },
+    }), { status: 200 })));
+
+    const res = await request(app).post(`/api/playlists/${pid}/fill-album-mids`)
+      .set('Authorization', `Bearer ${userToken}`).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.filled).toBe(2);
+
+    // DB 已被写回有效 mid
+    const rows = db.prepare('SELECT name, album_mid FROM songs WHERE playlist_id = ? ORDER BY id').all(pid);
+    expect(rows[0]).toMatchObject({ name: '测试歌', album_mid: 'MOCK_MID_001' });
+    expect(rows[1]).toMatchObject({ name: '数字歌', album_mid: 'MOCK_MID_002' });
+
+    // 同一歌单短时间内重复调用 → 防重（cooldown）
+    const res2 = await request(app).post(`/api/playlists/${pid}/fill-album-mids`)
+      .set('Authorization', `Bearer ${userToken}`).send({});
+    expect(res2.status).toBe(200);
+    expect(res2.body.skipped).toBe('cooldown');
+  });
+});

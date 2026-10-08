@@ -7,6 +7,7 @@
  */
 
 import { Platform } from '../../shared/constants.js';
+import { fillAlbumMids } from './qqmusic.js';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const HEADERS = { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'zh-CN,zh;q=0.9' };
@@ -195,6 +196,10 @@ export async function parseApplePlaylist(playlistId) {
   } else {
     console.warn(`[apple] 已降级为 JSON-LD 解析（无歌手/专辑）：${playlistId}`);
   }
+
+  // 补 album_mid（封面依赖它）：Apple 无 QQ 专辑 mid，用「歌名+歌手」反查 QQ 音乐。
+  // 实测 33 首歌单命中 32/33、并发 4 路约 2.8s；失败/未命中保持空，不阻断导入。
+  await fillAlbumMids(result.songs, { logTag: 'apple' });
 
   return { name: result.name || `歌单 ${playlistId}`, total: result.songs.length, songs: result.songs };
 }

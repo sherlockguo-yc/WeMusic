@@ -1,8 +1,8 @@
 # Apple Music 歌单导入
 
-> 状态：已实现（2026-09-28）
+> 状态：已实现（2026-09-28）；封面补齐见「变更记录」（2026-10-08）
 > 日期：2026-09-28
-> 关联决策：独立输入框（与 QQ/网易云并列）+ 封面用默认占位图 + 只支持歌单链接（不支持专辑）
+> 关联决策：独立输入框（与 QQ/网易云并列）+ 只支持歌单链接（不支持专辑）；封面初版用默认占位图，2026-10-08 改为「导入时反查 QQ album_mid」
 > 实现现状见：docs/功能规格/歌单导入.md
 
 ---
@@ -24,6 +24,8 @@
      无则回退遍历全部 sections 过滤 contentDescriptor.kind === 'song'
    → 数量校验：解析数 ≠ JSON-LD numTracks 时打日志（不阻断，仅诊断）
    → normalize 为 songs 数组
+   → fillAlbumMids()：逐首用「歌名+歌手」反查 QQ 音乐补 album_mid（并发 4，整体 20s 上限，
+     失败/未命中保持空；封面依赖它，2026-10-08 新增）
 → 返回 { source: 'apple', playlistId, name, total, songs }
 → 前端复用 parseAndShowPlaylist() 预览 → 「全部添加到歌单」→ POST /api/playlists/:id/songs
 ```
@@ -38,7 +40,8 @@
 | `album` | `tertiaryLinks` 中 destination.kind === 'album' 的 `title`（缺失时空串） |
 | `duration` | `duration`（毫秒）÷ 1000 **向下取整**（与 Apple 页面 ISO 时长口径一致：270677ms → 270s 即 4:30） |
 | `source` | `'apple'`（新增 `Platform.APPLE_MUSIC`） |
-| `album_mid` / `singer_mid` | 空（封面走默认占位图，已确认） |
+| `album_mid` | 导入时用「歌名 + 歌手」反查 QQ 音乐补上（2026-10-08；原为空） |
+| `singer_mid` | 空 |
 
 歌单名提取优先级（实测 section[0] 与 JSON-LD 一致）：`sections[0].items[0].title` → JSON-LD `name` → `<title>`（需 trim 前后 U+200E 等不可见字符，并去掉「 - 歌单 - Apple Music」后缀）。
 
@@ -131,3 +134,10 @@
 4. 100 首大歌单（如「A-List：国语流行」）完整解析出 100 首，无截断。
 5. 粘贴非 Apple 链接或损坏链接 → 明确错误提示，页面不白屏。
 6. 回归：QQ 音乐、网易云、JSON 导入功能不受影响。
+
+## 8. 变更记录
+
+| 日期 | 变更 |
+|---|---|
+| 2026-09-28 | 初版实现：SSR/JSON-LD 解析、字段映射、分支顺序、降级与报错兜底 |
+| 2026-10-08 | **封面补齐**：导入时用「歌名+歌手」反查 QQ 音乐补 `album_mid`（实测 33 首命中 32/33，约 +3s）；存量歌单打开时自动回填（`POST /api/playlists/:id/fill-album-mids`，10 分钟防重），完成后原地刷新四宫格封面并同步播放器；网易云导入同机制修复（其数字专辑 ID 拼 QQ 封面 URL 404）；顺带修复离线页 `album-backfill`（原实现依赖 smartbox 接口，实测该接口不返回 albummid，长期静默失效） |

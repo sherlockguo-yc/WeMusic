@@ -10,6 +10,7 @@ import {
   extractDisstid,
   parsePlaylist,
   deduplicateByAlbum,
+  fillAlbumMids,
 } from '../services/qqmusic.js';
 import { extractNeteasePlaylistId, parseNeteasePlaylist } from '../services/netease.js';
 import { extractApplePlaylistId, parseApplePlaylist } from '../services/apple.js';
@@ -92,26 +93,20 @@ router.get('/song-background', async (req, res) => {
 });
 
 // 批量反查 album_mid（离线页存量回填）
+// 注：原实现走 smartbox 联想接口，但实测该接口返回的歌曲项不含 albummid 字段，
+// 导致回填长期静默返回空；现复用 QQ 搜索接口（fillAlbumMids，歌名精确匹配 + 歌手优先）。
 router.post('/album-backfill', async (req, res) => {
   const { items } = req.body || {};
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: '请提供 items 数组' });
   try {
-    const results = await Promise.all(items.map(async (it) => {
-      const { sourceId, name, singer } = it;
-      if (!sourceId || !name) return { sourceId, album_mid: '' };
-      try {
-        // 用歌名+歌手搜 smartbox，取第一首匹配的 album_mid
-        const kw = singer ? `${name} ${singer.split('/')[0]}` : name;
-        const url = 'https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?format=json&key=' + encodeURIComponent(kw);
-        const json = await (await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' } })).json();
-        const songs = json?.data?.song?.itemlist || [];
-        const matched = songs.find(s => s.name?.toLowerCase() === name.toLowerCase()) || songs[0];
-        return { sourceId, album_mid: matched?.albummid || '' };
-      } catch {
-        return { sourceId, album_mid: '' };
-      }
+    const wrapped = items.map((it) => ({
+      sourceId: (it && it.sourceId) || '',
+      name: (it && it.name) || '',
+      singer: (it && it.singer) || '',
+      album_mid: '',
     }));
-    res.json({ results });
+    await fillAlbumMids(wrapped, { deadlineMs: 20000, logTag: 'backfill' });
+    res.json({ results: wrapped.map((w) => ({ sourceId: w.sourceId, album_mid: w.album_mid || '' })) });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
