@@ -23,15 +23,17 @@ jobs:
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Package
-        env:
-          PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: |
           mkdir -p pkg
           cp -r server/ shared/ public/ package.json package-lock.json pkg/
           cp scripts/restart-n150.sh pkg/restart.sh
-          cd pkg && npm ci --omit=dev && cd ..
-          # 移除大体积二进制：ffmpeg/ffprobe 用 N150 系统版（apt），puppeteer 用系统 Chromium
-          rm -rf pkg/node_modules/@ffmpeg-installer pkg/node_modules/@ffprobe-installer
+          # 运行时依赖不打进包（2026-10-15）：由 restart.sh 在 N150 上现场安装到
+          # ~/wemusic-deps（部署目录之外，绕开 rsync --delete），再用软链接接回
+          # $DIR/node_modules。包从 17.5MB 降到 1MB 量级：R2 已经让下载不再是瓶颈，
+          # 剩下的是 rsync 要 stat 的文件数、R2 存储增长，以及 CI 与 N150 的 Node ABI
+          # 耦合（原生模块现在在哪运行就在哪装）。
+          # puppeteer / @ffmpeg-installer 的 postinstall 会从境外拉 Chromium 和 ffmpeg
+          # 二进制，那边的跳过开关写在 restart.sh 里（装依赖发生在那里）。
           echo "${{ steps.ver.outputs.sha }}" > pkg/.version
           tar -czf wemusic.tar.gz -C pkg .
           ls -lh wemusic.tar.gz

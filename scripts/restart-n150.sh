@@ -4,6 +4,18 @@ PORT=5174
 LOG=/tmp/wemusic.log
 DIR="$HOME/wemusic"
 EVENTS="$DIR/data/deploy-events.jsonl"
+DEPS_DIR="$HOME/wemusic-deps"
+LOCK_FILE=/tmp/wemusic-restart.lock
+
+# 同一时刻只允许一个 restart.sh 执行：cron 健康检查与 webhook 部署会并发触发，
+# 而依赖安装可能持续数分钟，并发跑会互相踩坏 node_modules。
+#
+# 锁必须在拉起常驻服务时显式关闭（9>&-）：常驻进程若继承 fd 9 就会永久持有锁，
+# 之后每一次部署都卡死在 flock 上（2026-10-13 在别的项目上踩过这个坑）。
+# 本脚本有三个后台启动点（systemd-run / 裸 node / webhook），每一个都要 9>&-。
+exec 9>"$LOCK_FILE"
+flock 9
+echo "[$(date)] 已获得部署锁 $LOCK_FILE"
 
 log_event() {
   local stage="$1" status="$2" message="$3"
@@ -11,6 +23,70 @@ log_event() {
   mkdir -p "$DIR/data"
   echo "{\"stage\":\"$stage\",\"status\":\"$status\",\"message\":\"$message\",\"ts\":$ts}" >> "$EVENTS"
 }
+
+# ── 准备运行时依赖 ────────────────────────────────────────────────
+# 依赖装在部署目录之外：deploy-agent 用 rsync -a --delete 同步 $DIR，
+# 包里没有的东西都会被清掉（node_modules 也不例外），所以不能放在 $DIR 下。
+# 只有 package-lock.json 变化时才重装；未变化时实测 0.3 秒跳过。
+DEPS_MARKER="$DEPS_DIR/.lock-hash"
+
+if [ -x /usr/local/bin/npm ]; then
+  NPM=/usr/local/bin/npm
+else
+  NPM="$(command -v npm || echo npm)"
+fi
+
+ensure_deps() {
+  local want
+  want=$(sha1sum "$DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1)
+  if [ -z "$want" ]; then
+    echo "[$(date)] ✗ 缺少 package-lock.json，无法安装依赖"
+    log_event "deps" "error" "缺少 package-lock.json，未重启"
+    return 1
+  fi
+
+  mkdir -p "$DEPS_DIR"
+  if [ "$(cat "$DEPS_MARKER" 2>/dev/null)" = "$want" ] && [ -d "$DEPS_DIR/node_modules" ]; then
+    echo "[$(date)] 依赖未变更，跳过安装"
+  else
+    cp "$DIR/package.json" "$DIR/package-lock.json" "$DEPS_DIR/"
+    echo "[$(date)] 安装依赖到 $DEPS_DIR（npmmirror + 本地缓存优先）…"
+    log_event "deps" "started" "安装依赖到 $DEPS_DIR"
+    # 两个坑（2026-10-15 实测）：
+    #   · puppeteer 与 @ffmpeg-installer 都是 dependencies，默认会跑 postinstall
+    #     从境外下载 Chromium（约 150MB）和 ffmpeg 二进制，在 N150 上必然超时。
+    #     Chromium 由下面的检查逻辑按需安装、ffmpeg 用系统版，所以整体跳过脚本。
+    #   · 跳过脚本会让 better-sqlite3 拿不到原生二进制，必须单独 rebuild 补回来
+    #     （实测：install 3 秒 + rebuild 2.9 秒，且能正常读写 SQLite）。
+    if ! (cd "$DEPS_DIR" && PUPPETEER_SKIP_DOWNLOAD=true "$NPM" install --omit=dev \
+        --ignore-scripts --prefer-offline --no-audit --no-fund \
+        --registry=https://registry.npmmirror.com); then
+      echo "[$(date)] ✗ 依赖安装失败"
+      log_event "deps" "error" "依赖安装失败，未重启"
+      return 1
+    fi
+    if ! (cd "$DEPS_DIR" && "$NPM" rebuild better-sqlite3); then
+      echo "[$(date)] ✗ better-sqlite3 rebuild 失败"
+      log_event "deps" "error" "better-sqlite3 rebuild 失败，未重启"
+      return 1
+    fi
+    printf '%s' "$want" > "$DEPS_MARKER"
+  fi
+
+  # rsync --delete 每轮都会清掉部署目录里的 node_modules，用软链接接回去
+  if [ -e "$DIR/node_modules" ] && [ ! -L "$DIR/node_modules" ]; then
+    rm -rf "$DIR/node_modules"
+  fi
+  ln -sfn "$DEPS_DIR/node_modules" "$DIR/node_modules"
+  echo "[$(date)] 依赖就绪：$DIR/node_modules -> $DEPS_DIR/node_modules"
+  return 0
+}
+
+# 装在停进程之前：安装期间旧版本仍在提供服务，cron 健康检查不会插进来重启
+if ! ensure_deps; then
+  echo "[$(date)] ✗ 依赖准备失败，保持旧版本继续运行（不重启）"
+  exit 1
+fi
 
 # 杀旧进程
 PID=$(lsof -ti:$PORT 2>/dev/null)
@@ -52,9 +128,9 @@ if command -v systemd-run >/dev/null 2>&1; then
   # 清理上次遗留的同名 scope（正常退出会自动回收，异常情况下保险起见先清一次）
   systemctl --user stop wemusic-app.scope >/dev/null 2>&1
   systemctl --user reset-failed wemusic-app.scope >/dev/null 2>&1
-  nohup systemd-run --user --scope --collect --unit="wemusic-app" -- node server/index.js > "$LOG" 2>&1 &
+  nohup systemd-run --user --scope --collect --unit="wemusic-app" -- node server/index.js > "$LOG" 2>&1 9>&- &
 else
-  nohup node server/index.js > "$LOG" 2>&1 &
+  nohup node server/index.js > "$LOG" 2>&1 9>&- &
 fi
 sleep 2
 NEWPID=$(lsof -ti:$PORT 2>/dev/null)
@@ -70,6 +146,6 @@ fi
 # 如果 webhook 服务在运行，同步重启（更新 webhook.js 代码）
 WEBHOOK_PID=$(lsof -ti:9001 2>/dev/null)
 if [ -n "$WEBHOOK_PID" ]; then
-  bash "$HOME/webhook-start.sh" > /dev/null 2>&1 &
+  bash "$HOME/webhook-start.sh" > /dev/null 2>&1 9>&- &
   echo "[$(date)] webhook 同步重启"
 fi
