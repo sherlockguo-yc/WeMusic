@@ -764,6 +764,9 @@ export async function playCurrent() {
   }
 
   const seq = ++playSeq;
+  // 新曲目重置失败恢复状态（换源计数 + 网络重试标记）
+  _triedBvids = new Set();
+  _netRetried = false;
   _switchCurrentSongUI(song);
 
   if (!song.bvid) {
@@ -774,6 +777,10 @@ export async function playCurrent() {
         song.bvid = cached.bvid;
         song._biliTitle = cached.bili_title;
         song._biliDur = cached.bili_dur || song.duration;
+        // 恢复候选池：缓存的 bvid 可能已失效（下架/私密），没有候选项就无法换源、只能被迫切歌
+        if (Array.isArray(cached.candidates) && cached.candidates.length) {
+          song._candidates = cached.candidates;
+        }
       }
     } catch { console.warn('bvid 缓存读取失败') }
     // 缓存里 bili_title 可能为空 → 回查 candidates 补全
@@ -884,6 +891,11 @@ let _usedFallback = false;
 let _cacheUrl = null;
 let _cacheUse = null;
 let _weakFallback = false;   // 当前曲目是否已经从「直连 CDN」降级到「服务端代理」
+// 失败恢复状态：当前曲目播放失败时先换源、再重试一次，最后才切歌。
+// 直接切歌的代价是用户丢掉想听的那首歌，而首曲失败多半只是「这一个稿件坏了」或链路单次抖动。
+let _triedBvids = new Set(); // 本曲已尝试过的 bvid（防止换源死循环）
+let _netRetried = false;     // 本曲是否已因网络失败重试过一次
+const MAX_SOURCE_TRIES = 3;  // 单曲最多尝试的源数量（含初始源）
 let _healthCheckId = null;   // play() 成功后 5s 健康检查 setTimeout ID
 let _stalledTimer = null;    // stalled 事件 3s 兜底切歌 setTimeout ID
 let _resolveFailCount = 0;   // 连续 resolve 失败计数，≥5 首后停止自动跳过
@@ -1006,6 +1018,58 @@ function _applyNormVol() {
   }
 }
 
+// ---- 失败恢复：换源 > 重试 > 切歌 ----
+
+// 当前歌曲匹配到的 B 站稿件不可播放（下架/私密/付费）时，从候选池换一个源继续播同一首歌。
+// 候选来自 resolve 的 clean 结果（已过滤屏蔽、按分数排序），多数歌曲有几十个可用源。
+async function _tryNextSource(seekSec = 0) {
+  const song = state.current;
+  if (!song) return false;
+  const cands = Array.isArray(song._candidates) ? song._candidates : [];
+  if (!cands.length) return false;
+  if (song.bvid) _triedBvids.add(song.bvid);
+  if (_triedBvids.size >= MAX_SOURCE_TRIES) {
+    console.warn(`[player] 换源已达上限 ${MAX_SOURCE_TRIES} 个，放弃本曲`);
+    return false;
+  }
+  const next = cands.find((c) => c.bvid && !_triedBvids.has(c.bvid));
+  if (!next) {
+    console.warn('[player] 候选池已无可换的源');
+    return false;
+  }
+  console.warn(`[player] 换源 ${song.bvid?.slice(0, 12)} → ${next.bvid.slice(0, 12)} (${(next.title || '').slice(0, 40)})`);
+  song.bvid = next.bvid;
+  song._biliTitle = next.title || song._biliTitle;
+  song._biliDur = next.duration || song._biliDur;
+  _triedBvids.add(next.bvid);
+  // PUT 是 UPSERT：顺带覆盖 bvid_cache 里那条失效映射，下次播放不会又取回坏 bvid
+  cacheBvid(song, cands);
+  _notifyReason('source-switch', '当前资源不可用，已切换备用源');
+  // 带着当前进度换源：用户已经听到一半，不应从头再放
+  await _loadAndPlayBgTrack(next.bvid, seekSec);
+  return true;
+}
+
+// 播放失败的收尾决策：换源 → 网络重试一次 → 切歌
+async function _recoverOrAdvance() {
+  if (mode !== 'bg' || timerPaused) return;
+  if (await _tryNextSource(elapsed)) return;
+  if (!_netRetried) {
+    _netRetried = true;
+    _usedFallback = false;
+    _weakFallback = false;
+    console.warn('[bgAudio] 无可换源，1.5s 后重试当前源');
+    setTimeout(() => {
+      if (mode === 'bg' && !timerPaused && state.current?.bvid) {
+        _loadAndPlayBgTrack(state.current.bvid, 0).catch(() => {});
+      }
+    }, 1500);
+    return;
+  }
+  _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
+  autoAdvance();
+}
+
 // 解析可播放地址：
 //  - 离线（!onLine）→ 直接命中缓存（离线播放）
 //  - 在线 → 优先直连 CDN
@@ -1030,7 +1094,16 @@ async function _getPlayableUrl(bvid) {
   try {
     const r = await api(`/play/direct-url?bvid=${encodeURIComponent(bvid)}`);
     if (r && r.url) return { url: r.url, isDirect: true, fromCache: false };
-  } catch { /* 直连地址解析失败，跳过 */ }
+  } catch (e) {
+    // 稿件本身不可播（下架/私密/付费）：代理线路同样拿不到流，重试必然再失败一次。
+    // 直接上抛，由调用方换源——这才是正确的恢复动作。
+    if (e.code === 'VIDEO_UNAVAILABLE') {
+      const err = new Error(e.message || '当前资源不可播放');
+      err.code = 'VIDEO_UNAVAILABLE';
+      throw err;
+    }
+    /* 其余（超时/风控/5xx）→ 继续走缓存与服务端代理降级 */
+  }
 
   // 直连失败：如果本地有缓存则直接用缓存，不走服务端代理
   try {
@@ -1043,7 +1116,11 @@ async function _getPlayableUrl(bvid) {
     }
   } catch { /* IndexedDB 读取失败，忽略 */ }
 
-  // 无本地缓存：回退服务端代理
+  // 无本地缓存：回退服务端代理。
+  // 必须置 _usedFallback：这条路径已经把线路从「直连 CDN」切到了「服务端代理」，
+  // 否则 <audio> error 时会走进「直连失败 → 降级为代理」分支，把同一个代理地址再设一遍，
+  // 弹出「已切换到备用播放线路」的假提示，白等一轮加载才切歌。
+  _usedFallback = true;
   return { url: `/api/play/stream?bvid=${encodeURIComponent(bvid)}&token=${encodeURIComponent(Auth.token)}`, isDirect: false, fromCache: false };
 }
 
@@ -1166,7 +1243,22 @@ async function _startCrossfade(newBvid) {
   // 获取下一首的播放链接
   _usedFallback = false;
   console.log(`[crossfade] seq=${seq} → fetching playable URL for ${newBvid?.slice(0,12)}`);
-  const info = await _getPlayableUrl(newBvid);
+  let info;
+  try {
+    info = await _getPlayableUrl(newBvid);
+  } catch (e) {
+    // 淡入淡出无法继续（源不可播）：取消本次 crossfade，交给常规播放路径处理（含换源/重试）
+    console.warn(`[crossfade] seq=${seq} URL fetch failed: ${e.message} → abort`);
+    if (_crossfading) {
+      _crossfading = false;
+      _crossfadeBvid = null;
+      _applyNormVol();
+      _nextAudio.pause();
+      _nextAudio.src = '';
+    }
+    if (mode === 'bg' && state.current?.bvid) _loadAndPlayBgTrack(state.current.bvid, 0).catch(() => {});
+    return;
+  }
   console.log(`[crossfade] seq=${seq} URL fetch done, info=${!!info}, curSeq=${_crossfadeSeq}, crossfading=${_crossfading}`);
   if (seq !== _crossfadeSeq || !_crossfading) { console.log('[crossfade] aborted: seq mismatch or no longer crossfading'); return; }
   if (!info) { console.log('[crossfade] no playable URL → abort'); _crossfading = false; return; }
@@ -1214,7 +1306,25 @@ async function _startCrossfade(newBvid) {
 async function _loadAndPlayBgTrack(bvid, seekSec = 0) {
   const seq = playSeq;
   _usedFallback = false;
-  const info = await _getPlayableUrl(bvid);
+  let info;
+  try {
+    info = await _getPlayableUrl(bvid);
+  } catch (e) {
+    if (seq !== playSeq || mode !== 'bg') return; // 期间歌曲已切换，或用户已展开视频
+    // 稿件下架/私密/付费：代理线路同样拿不到流，直接换源才是有效动作
+    console.warn(`[player] 源不可播（${e.message}），尝试换源`);
+    if (await _tryNextSource()) return;
+    _resolveFailCount++;
+    if (_resolveFailCount >= 5 || state.playMode === 'single' || state.queue.length <= 1) {
+      stopPlayback();
+      toast('⚠ 连续多首资源不可用，已停止播放');
+      _resolveFailCount = 0;
+      return;
+    }
+    _notifyReason('source-skip', '当前资源不可用，已切换下一首');
+    autoAdvance();
+    return;
+  }
   if (seq !== playSeq || mode !== 'bg') return; // 期间歌曲已切换，或用户已展开视频
   if (!info) { setStatus('离线状态且无缓存，无法播放'); toast('离线状态且无缓存，无法播放'); return; }
   bgAudio.src = info.url;
@@ -1230,7 +1340,14 @@ async function _loadAndPlayBgTrack(bvid, seekSec = 0) {
 async function _loadBgTrack(bvid) {
   const seq = playSeq;
   _usedFallback = false;
-  const info = await _getPlayableUrl(bvid);
+  let info;
+  try {
+    info = await _getPlayableUrl(bvid);
+  } catch (e) {
+    // 静默预载失败不打扰用户：真正播放时 _loadAndPlayBgTrack 会走换源逻辑
+    console.warn(`[player] 预载源不可播（${e.message}），跳过`);
+    return;
+  }
   if (seq !== playSeq) return;
   if (!info) return; // 离线且无缓存，静默预载跳过
   bgAudio.src = info.url;
@@ -1318,6 +1435,8 @@ bgAudio.addEventListener('ended', () => {
 bgAudio.addEventListener('error', () => {
   const err = bgAudio.error;
   console.warn(`[bgAudio] ERROR code=${err?.code} message="${err?.message}" src=${bgAudio.src?.slice(0, 60)}`);
+  // 展开视频（iframe）或静默预载阶段 bgAudio 不是当前发声源，失败不应触发降级提示与切歌
+  if (mode !== 'bg') return;
   if (!_usedFallback && state.current?.bvid) {
     _usedFallback = true;
     console.warn('[bgAudio] 直连 CDN 失败，降级为服务端代理');
@@ -1340,21 +1459,17 @@ bgAudio.addEventListener('error', () => {
         bgAudio.src = url;
         bgAudio.load();
         if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
-      } else if (mode === 'bg' && !timerPaused) {
-        console.warn('[bgAudio] ERROR (fallback+缓存均用尽) — auto advance');
-        _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
-        autoAdvance();
+      } else {
+        console.warn('[bgAudio] ERROR (fallback+缓存均用尽) — 尝试换源/重试');
+        _recoverOrAdvance().catch(() => autoAdvance());
       }
     }).catch(() => {
-      if (mode === 'bg' && !timerPaused) { _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首'); autoAdvance(); }
+      _recoverOrAdvance().catch(() => autoAdvance());
     });
     return;
   }
-  if (mode === 'bg' && !timerPaused) {
-    console.warn('[bgAudio] ERROR during playback (fallback 已用尽) — auto advance');
-    _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
-    autoAdvance();
-  }
+  console.warn('[bgAudio] ERROR during playback (fallback 已用尽) — 尝试换源/重试');
+  _recoverOrAdvance().catch(() => autoAdvance());
 });
 
 // stalled：卡住 3 秒仍未恢复则判定失败切歌；流中断时 <audio> 常不触发 ended，需主动兜底

@@ -1,8 +1,8 @@
 /**
  * Bilibili 服务纯函数单元测试 — 直接 import 源码
  */
-import { describe, it, expect } from 'vitest';
-import { durationToSeconds, stripHtml } from '../../server/services/bilibili.js';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { durationToSeconds, stripHtml, getVideoPages, checkVideoPlayable } from '../../server/services/bilibili.js';
 
 // getMixinKey 未被导出（内部用），复制其逻辑测试
 const MIXIN_KEY_ENC_TAB = [
@@ -41,4 +41,77 @@ describe('getMixinKey — WBI 签名 mixin key', () => {
     expect(getMixinKey(input)).toBe(getMixinKey(input));
   });
   it('空字符串返回空', () => expect(getMixinKey('')).toBe(''));
+});
+
+// view 接口错误码分类：这段逻辑决定前端「换源」还是「重试」，回归代价很高。
+// 背景见 2026-10-22 线上问题：坏稿件被静默转成空数组，最终只剩「未获取到视频 cid」，
+// 前端误判为网络问题，强制切歌。
+describe('getVideoPages — view 接口错误码分类', () => {
+  const stubFetchJson = (payload) => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ json: async () => payload })));
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('code=0 且有 pages → 返回 pages', async () => {
+    stubFetchJson({ code: 0, data: { pages: [{ cid: 111 }] } });
+    const pages = await getVideoPages('BVcode0xxx');
+    expect(pages).toHaveLength(1);
+    expect(pages[0].cid).toBe(111);
+  });
+
+  it('62002 稿件不可见 → 永久不可播，不可被当成空数组吞掉', async () => {
+    stubFetchJson({ code: 62002, message: '稿件不可见' });
+    await expect(getVideoPages('BVcode62002')).rejects.toMatchObject({
+      name: 'VideoUnavailableError',
+      permanent: true,
+      biliCode: 62002,
+    });
+  });
+
+  it('-404 稿件不存在 → 永久不可播', async () => {
+    stubFetchJson({ code: -404, message: '啥都木有' });
+    await expect(getVideoPages('BVcode404')).rejects.toMatchObject({
+      name: 'VideoUnavailableError',
+      permanent: true,
+    });
+  });
+
+  it('62012 需特殊权限（付费/充电）→ 永久不可播', async () => {
+    stubFetchJson({ code: 62012, message: '62012' });
+    await expect(getVideoPages('BVcode62012')).rejects.toMatchObject({
+      name: 'VideoUnavailableError',
+      permanent: true,
+    });
+  });
+
+  it('其他错误码（如风控 -412）→ 普通错误，不能误判为永久不可播', async () => {
+    stubFetchJson({ code: -412, message: '请求被拦截' });
+    let caught = null;
+    try { await getVideoPages('BVcode412xx'); } catch (e) { caught = e; }
+    expect(caught).toBeTruthy();
+    expect(caught.name).not.toBe('VideoUnavailableError');
+    expect(caught.permanent).toBeUndefined();
+  });
+});
+
+describe('checkVideoPlayable — 预校验不误杀可用源', () => {
+  const stubFetchJson = (payload) => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ json: async () => payload })));
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('可播放稿件 → true', async () => {
+    stubFetchJson({ code: 0, data: { pages: [{ cid: 222 }] } });
+    expect(await checkVideoPlayable('BVok000001')).toBe(true);
+  });
+
+  it('永久不可播 → false', async () => {
+    stubFetchJson({ code: 62002, message: '稿件不可见' });
+    expect(await checkVideoPlayable('BVbad00001')).toBe(false);
+  });
+
+  it('临时失败（风控）→ 视为可播放，避免误杀', async () => {
+    stubFetchJson({ code: -412, message: '请求被拦截' });
+    expect(await checkVideoPlayable('BVtemp0001')).toBe(true);
+  });
 });

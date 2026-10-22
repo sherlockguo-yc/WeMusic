@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { execFile } from 'node:child_process';
 import { authRequired } from '../middleware/auth.js';
-import { searchVideos, getAudioStream, fetchAudio, getVideoPages, getVideoTitle, getVideoInfo, stripHtml, evictAudioStream } from '../services/bilibili.js';
+import { searchVideos, getAudioStream, fetchAudio, getVideoPages, getVideoTitle, getVideoInfo, stripHtml, evictAudioStream, checkVideoPlayable } from '../services/bilibili.js';
 import { config } from '../config.js';
 import db from '../db.js';
 import { getCrowdCompletions, crowdBonus } from '../services/crowd.js';
@@ -591,7 +591,26 @@ router.post('/resolve', authRequired, async (req, res) => {
       return res.status(404).json({ error: '所有候选视频均已被屏蔽，如需解除请刷新页面后重新搜索' });
     }
     const nameImpliesLive = songNameSuggestsLive(name);
-    const best = nameImpliesLive ? clean[0] : (clean.find((v) => !v.live) || clean[0]);
+    // 候选优先顺序：非现场优先（与原逻辑 `clean.find(!live) || clean[0]` 等价），用于挑 best。
+    // clean 本身保持分数顺序返回给前端，避免影响换源弹窗的展示顺序。
+    const ordered = nameImpliesLive
+      ? clean
+      : [...clean.filter((v) => !v.live), ...clean.filter((v) => v.live)];
+
+    // 预校验前 3 个候选的可播放性。
+    // 背景：B 站大量「Hi-Res / 4K重制 / 无损音质」类搬运视频已下架或充电专属，评分最高却拿不到 cid，
+    // 不校验的话用户点播放必然失败一次并被迫切歌（2026-10-22 线上日志：7.9% 的取流请求 502，全部是这类稿件）。
+    const CHECK_TOP_N = 3;
+    const head = ordered.slice(0, CHECK_TOP_N);
+    let best = null;
+    if (head.length) {
+      const flags = await Promise.all(head.map((v) => checkVideoPlayable(v.bvid)));
+      const hit = flags.indexOf(true);
+      if (hit >= 0) best = head[hit];
+      debug.playableChecked = head.map((v, i) => ({ bvid: v.bvid, playable: flags[i] }));
+      if (hit < 0) console.log(`[resolve:playable] top ${head.length} 均不可播，退化到后续候选`);
+    }
+    if (!best) best = ordered[CHECK_TOP_N] || ordered[0];
 
     // — 写入内存缓存 —
     resolveCacheSet(cacheKey, best, clean.slice(0, 25));
@@ -796,6 +815,8 @@ router.get('/stream', async (req, res) => {
     pipeAudio(upstream, res, stream.mime, reqId);
   } catch (e) {
     console.warn(`[r:${reqId}] ✗ ERROR bvid=${bvid.slice(0,12)}: ${e.message} (${Date.now() - tTotal}ms)`);
+    // 永久不可播 → 410，让前端日志能区分「稿件坏了」与「网络/风控失败」
+    if (e.permanent) return res.status(410).send(e.message);
     res.status(502).send(e.message);
   }
 });
@@ -842,7 +863,12 @@ router.get('/direct-url', authRequired, async (req, res) => {
     res.json({ url: stream.url, backup: stream.backup || [], cid: resolvedCid, mime: stream.mime, expiresAt });
   } catch (e) {
     console.warn(`[r:${reqId}] ✗ direct-url ERROR bvid=${bvid.slice(0,12)}: ${e.message} (${Date.now() - t0}ms)`);
-    res.status(502).json({ error: e.message });
+    // 永久不可播 → 410 + VIDEO_UNAVAILABLE：前端据此换源，而不是换线路重试。
+    // 这类失败（下架/私密/付费）代理线路同样拿不到流，重试必然再失败一次。
+    if (e.permanent) {
+      return res.status(410).json({ error: e.message, code: 'VIDEO_UNAVAILABLE' });
+    }
+    res.status(502).json({ error: e.message, code: 'FETCH_FAILED' });
   }
 });
 

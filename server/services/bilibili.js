@@ -228,6 +228,26 @@ export async function searchVideos(keyword, page = 1, pageSize = 20) {
 const _pagesCache = new Map(); // bvid -> { pages, at }
 const PAGES_CACHE_TTL = ONE_DAY;
 
+// view 接口的「稿件本身不可播」类错误码：这类失败重试和换线路都不会成功，只能换源。
+// 62002 稿件不可见（下架/私密/被屏蔽）；62004 审核中；62012 需特殊权限（充电专属/付费）；-404 稿件不存在。
+// 实测来源：2026-10-22 日志中反复 502 的 bvid（BV1pCDMBXECn=62002、BV1P541137Pg=62012、BV1gijt6gEz5=-404）。
+const UNAVAILABLE_CODES = new Set([-404, 62002, 62004, 62012]);
+
+// 已确认不可播的 bvid 短期记忆：避免每次 resolve 都重复探测同一个死稿件。
+// TTL 1 小时——下架视频有极小概率恢复，探测也不能误判后永久生效。
+const _unavailable = new Map(); // bvid -> 探测时间
+const UNAVAILABLE_TTL = 60 * 60 * 1000;
+
+/** 稿件本身不可播放（下架/私密/付费/删除）。永久性失败，换线路无意义，只能换源。 */
+export class VideoUnavailableError extends Error {
+  constructor(biliCode, message) {
+    super(message);
+    this.name = 'VideoUnavailableError';
+    this.biliCode = biliCode;
+    this.permanent = true;
+  }
+}
+
 /** 获取视频分 P 信息（用于取 cid） */
 export async function getVideoPages(bvid) {
   const cached = _pagesCache.get(bvid);
@@ -237,9 +257,39 @@ export async function getVideoPages(bvid) {
     { headers: { 'User-Agent': UA, Referer: 'https://www.bilibili.com/' } }
   );
   const json = await res.json();
+  // 必须检查 code：旧实现直接取 json.data.pages，把「稿件不可见」静默变成空数组，
+  // 最终只剩一句「未获取到视频 cid」，既误导用户（以为是网络问题）也无法让前端区分该换源还是该重试。
+  const code = json?.code;
+  if (code !== 0) {
+    const msg = json?.message || String(code);
+    if (UNAVAILABLE_CODES.has(code)) {
+      throw new VideoUnavailableError(code, `稿件不可播放（${code}: ${msg}）`);
+    }
+    throw new Error(`B 站 view 接口异常（${code}: ${msg}）`);
+  }
   const pages = json?.data?.pages || [];
   if (pages.length) _pagesCache.set(bvid, { pages, at: Date.now() });
   return pages;
+}
+
+/**
+ * 探测某个 bvid 是否可播放（resolve 阶段预校验用）。
+ * - 永久不可播 → false，并记入 1 小时短期记忆
+ * - 临时失败（网络抖动/风控限流）→ true，宁可放过也不误杀可用源
+ */
+export async function checkVideoPlayable(bvid) {
+  const at = _unavailable.get(bvid);
+  if (at) {
+    if (Date.now() - at < UNAVAILABLE_TTL) return false;
+    _unavailable.delete(bvid);
+  }
+  try {
+    await getVideoPages(bvid);
+    return true;
+  } catch (e) {
+    if (e.permanent) { _unavailable.set(bvid, Date.now()); return false; }
+    return true;
+  }
 }
 
 /** 获取视频标题 */

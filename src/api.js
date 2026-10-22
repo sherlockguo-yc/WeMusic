@@ -66,7 +66,11 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
       throw new Error((data && data.error) || '登录已过期，请重新登录');
     }
     if (!res.ok) {
-      throw new Error((data && data.error) || `请求失败 (${res.status})`);
+      const err = new Error((data && data.error) || `请求失败 (${res.status})`);
+      // 透出状态码与服务端业务码：调用方需要区分「稿件永久不可播（换源）」与「网络/风控失败（重试）」
+      err.status = res.status;
+      if (data && data.code) err.code = data.code;
+      throw err;
     }
     return data;
   }
