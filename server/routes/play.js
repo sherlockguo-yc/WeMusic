@@ -148,6 +148,18 @@ async function runAnalysis(bvid, cid, streamUrl) {
   }
 }
 
+/**
+ * 稿件被确认永久不可播（下架/私密/付费/删除）时，删掉 bvid_cache 里指向它的映射。
+ * 不记录任何黑名单，只是「忘掉这条错误记忆」：下次播放该歌曲会缓存未命中 → 重新 resolve →
+ * 预校验选出可播放的源，一次成功。否则旧映射会让前端反复取回同一个死稿件。
+ */
+function evictBvidCacheFor(bvid) {
+  try {
+    const r = db.prepare('DELETE FROM bvid_cache WHERE bvid = ?').run(bvid);
+    if (r.changes) console.log(`[cache] 清除失效 bvid 映射 ${bvid}（${r.changes} 条）`);
+  } catch { /* 缓存清理失败不影响主流程 */ }
+}
+
 // 查询某首歌 + 类型被拉黑的源 ID 集合
 function getBlockedSet(userId, songKey, type) {
   const rows = db.prepare(`
@@ -823,7 +835,7 @@ router.get('/stream', async (req, res) => {
   } catch (e) {
     console.warn(`[r:${reqId}] ✗ ERROR bvid=${bvid.slice(0,12)}: ${e.message} (${Date.now() - tTotal}ms)`);
     // 永久不可播 → 410，让前端日志能区分「稿件坏了」与「网络/风控失败」
-    if (e.permanent) return res.status(410).send(e.message);
+    if (e.permanent) { evictBvidCacheFor(bvid); return res.status(410).send(e.message); }
     res.status(502).send(e.message);
   }
 });
@@ -873,6 +885,7 @@ router.get('/direct-url', authRequired, async (req, res) => {
     // 永久不可播 → 410 + VIDEO_UNAVAILABLE：前端据此换源，而不是换线路重试。
     // 这类失败（下架/私密/付费）代理线路同样拿不到流，重试必然再失败一次。
     if (e.permanent) {
+      evictBvidCacheFor(bvid);
       return res.status(410).json({ error: e.message, code: 'VIDEO_UNAVAILABLE' });
     }
     res.status(502).json({ error: e.message, code: 'FETCH_FAILED' });
