@@ -896,6 +896,8 @@ let _weakFallback = false;   // 当前曲目是否已经从「直连 CDN」降�
 let _triedBvids = new Set(); // 本曲已尝试过的 bvid（防止换源死循环）
 let _netRetried = false;     // 本曲是否已因网络失败重试过一次
 const MAX_SOURCE_TRIES = 3;  // 单曲最多尝试的源数量（含初始源）
+// 当前曲目走了哪条非直连线路（'' / '代理线路' / '本地缓存' / '备用源'），只在状态栏标注，不弹 toast
+let _lineHint = '';
 let _healthCheckId = null;   // play() 成功后 5s 健康检查 setTimeout ID
 let _stalledTimer = null;    // stalled 事件 3s 兜底切歌 setTimeout ID
 let _resolveFailCount = 0;   // 连续 resolve 失败计数，≥5 首后停止自动跳过
@@ -1040,16 +1042,19 @@ async function _tryNextSource(seekSec = 0) {
     console.warn('[player] 候选池已无可换的源');
     return false;
   }
-  console.warn(`[player] 换源 ${song.bvid?.slice(0, 12)} → ${next.bvid.slice(0, 12)} (${(next.title || '').slice(0, 40)})`);
+  // 普通日志级别：换源属于正常容错，不该在控制台表现为一条黄色警告
+  console.log(`[player] 换源 ${song.bvid?.slice(0, 12)} → ${next.bvid.slice(0, 12)} (${(next.title || '').slice(0, 40)})`);
   song.bvid = next.bvid;
   song._biliTitle = next.title || song._biliTitle;
   song._biliDur = next.duration || song._biliDur;
   _triedBvids.add(next.bvid);
   // PUT 是 UPSERT：顺带覆盖 bvid_cache 里那条失效映射，下次播放不会又取回坏 bvid
   cacheBvid(song, cands);
-  _notifyReason('source-switch', '当前资源不可用，已切换备用源');
   // 带着当前进度换源：用户已经听到一半，不应从头再放
   await _loadAndPlayBgTrack(next.bvid, seekSec);
+  // 换源成功 → 只在状态栏标注，不弹 toast（正常容错，不是用户需要处理的错误）
+  _lineHint = '备用源';
+  _setPlayStatus();
   return true;
 }
 
@@ -1124,6 +1129,7 @@ async function _getPlayableUrl(bvid) {
   // 否则 <audio> error 时会走进「直连失败 → 降级为代理」分支，把同一个代理地址再设一遍，
   // 弹出「已切换到备用播放线路」的假提示，白等一轮加载才切歌。
   _usedFallback = true;
+  _lineHint = '代理线路';
   return { url: `/api/play/stream?bvid=${encodeURIComponent(bvid)}&token=${encodeURIComponent(Auth.token)}`, isDirect: false, fromCache: false };
 }
 
@@ -1134,14 +1140,16 @@ function _makeObjUrl(blob) {
   return _cacheUrl;
 }
 
-// 设置播放栏状态区：缓存命中显示「离线播放 + 原因」，否则显示 Bilibili 标
+// 设置播放栏状态区：缓存命中显示「离线播放 + 原因」，否则显示 Bilibili 标；
+// 走了降级/换源时以中性小标签标注当前线路——这类情况属于正常容错，不再用 toast 打扰用户。
 function _setPlayStatus() {
   const song = state.current;
   const title = song?._biliTitle || (song?.name && song?.singer ? `${song.name} - ${song.singer}` : 'Bilibili 播放');
+  const lineTag = _lineHint ? ` <span class="offline-reason">${esc(_lineHint)}</span>` : '';
   if (_cacheUse && _cacheUse.fromCache) {
     $('playStatus').innerHTML = `<span class="status-inner"><span class="badge offline-badge">${OFFLINE_ICON} 离线播放</span> <span class="offline-reason">${esc(_cacheUse.reason)}</span> ${esc(title)}</span>`;
   } else {
-    $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span> ${esc(title)}</span>`;
+    $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span>${lineTag} ${esc(title)}</span>`;
   }
   const inner = $('playStatus').querySelector('.status-inner');
   if (inner) checkMarquee(inner);
@@ -1309,13 +1317,15 @@ async function _startCrossfade(newBvid) {
 async function _loadAndPlayBgTrack(bvid, seekSec = 0) {
   const seq = playSeq;
   _usedFallback = false;
+  _lineHint = ''; // 换歌后线路标注重新计算，避免沿用上一首的「代理线路/备用源」
   let info;
   try {
     info = await _getPlayableUrl(bvid);
   } catch (e) {
     if (seq !== playSeq || mode !== 'bg') return; // 期间歌曲已切换，或用户已展开视频
-    // 稿件下架/私密/付费：代理线路同样拿不到流，直接换源才是有效动作
-    console.warn(`[player] 源不可播（${e.message}），尝试换源`);
+    // 稿件下架/私密/付费：代理线路同样拿不到流，直接换源才是有效动作。
+    // 用普通日志级别——这是可自动恢复的常态，不是需要用户关注的错误。
+    console.log(`[player] 源不可播（${e.message}），尝试换源`);
     if (await _tryNextSource()) return;
     _resolveFailCount++;
     if (_resolveFailCount >= 5 || state.playMode === 'single' || state.queue.length <= 1) {
@@ -1442,8 +1452,10 @@ bgAudio.addEventListener('error', () => {
   if (mode !== 'bg') return;
   if (!_usedFallback && state.current?.bvid) {
     _usedFallback = true;
-    console.warn('[bgAudio] 直连 CDN 失败，降级为服务端代理');
-    _notifyReason('fallback', '已切换到备用播放线路');
+    console.log('[bgAudio] 直连 CDN 失败，降级为服务端代理');
+    // 直连→代理是正常容错，不是用户需要处理的问题：只在状态栏标注线路，不弹 toast
+    _lineHint = '代理线路';
+    _setPlayStatus();
     bgAudio.src = `/api/play/stream?bvid=${encodeURIComponent(state.current.bvid)}&token=${encodeURIComponent(Auth.token)}`;
     bgAudio.load();
     if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
@@ -1458,7 +1470,6 @@ bgAudio.addEventListener('error', () => {
         offline.touch(state.current.bvid);
         _cacheUse = { fromCache: true, reason: '网络不佳' };
         _setPlayStatus();
-        _notifyReason('fallback', '已切换到备用播放线路');
         bgAudio.src = url;
         bgAudio.load();
         if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
