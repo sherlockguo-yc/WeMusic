@@ -1,9 +1,9 @@
 // ---------------- 播放核心 ----------------
-import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, PLAY_ICON, PAUSE_ICON, LOADING_ICON, OFFLINE_ICON } from './utils.js';
+import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, debounce, PLAY_ICON, PAUSE_ICON, LOADING_ICON, OFFLINE_ICON } from './utils.js';
 import * as offline from './offlineCache.js';
 import { api, Auth } from './api.js';
 import { state } from './state.js';
-import { clearSleep, sleepAfterSong } from './settings.js';
+import { clearSleep, sleepAfterSong, syncPrefsToServer } from './settings.js';
 
 // Lucide SVG 图标从 utils.js 导入（避免被 manualChunks 拆分时产生 TDZ 错误）
 
@@ -900,6 +900,9 @@ let _healthCheckId = null;   // play() 成功后 5s 健康检查 setTimeout ID
 let _stalledTimer = null;    // stalled 事件 3s 兜底切歌 setTimeout ID
 let _resolveFailCount = 0;   // 连续 resolve 失败计数，≥5 首后停止自动跳过
 let _volume = 0.8;           // 用户手动设置的音量（0~1），持久化，前后台/是否展开视频都用同一个值
+// 调音量后回传服务端偏好（debounce，避免拖动滑块时高频请求）。
+// 服务端 vol 只作为「新设备首次登录」的初始值，本机已有记录时不会被它覆盖。
+const _syncVolToServer = debounce(syncPrefsToServer, 400);
 
 // ---- 淡入淡出（crossfade）----
 let _nextAudio = null;        // 第二个 <audio>，淡入淡出时播放下一首
@@ -1707,6 +1710,7 @@ export function initPlayer() {
   volBar.oninput = () => {
     _volume = volBar.value / 100;
     localStorage.setItem('wemusic_vol', _volume);
+    _syncVolToServer(); // 回传服务端，供新设备首次登录时继承
     _applyVol();
     _setIframeVolume(_volume); // 同步 iframe 音量（展开视频时生效）
   };
@@ -1720,10 +1724,21 @@ export function initPlayer() {
       if (_volume > 0) { _prevVol = _volume; _volume = 0; }
       else { _volume = _prevVol || 0.8; }
       localStorage.setItem('wemusic_vol', _volume);
+      _syncVolToServer();
       _applyVol();
       _setIframeVolume(_volume);
     }
   };
+  // 服务端偏好只在「本机从未记录过音量」时生效（settings.js 写入 localStorage 后广播），
+  // 此时 player 已按默认值完成初始化，需要重读并应用，避免 UI 与实际音量不一致。
+  window.addEventListener('volume_prefs_restored', (e) => {
+    const v = Number(e.detail?.vol);
+    if (!Number.isFinite(v)) return;
+    _volume = Math.min(1, Math.max(0, v));
+    _prevVol = _volume || 0.8;
+    _applyVol();
+    _setIframeVolume(_volume);
+  });
   // 点击其他地方关闭音量条
   document.addEventListener('click', (e) => {
     if (!volWrap.contains(e.target)) volWrap.classList.remove('open');

@@ -117,8 +117,9 @@ export async function loadPrefsFromServer() {
     const { data } = await api('/auth/preferences');
     const serverEmpty = !data || Object.keys(data).length === 0;
     if (serverEmpty) {
-      // 服务端没数据：清理本地所有偏好键（防止之前的脏数据），用默认重置
-      ['wemusic_theme', 'wemusic_font', 'wemusic_font_size', 'wemusic_palette', 'wemusic_vol']
+      // 服务端没数据：清理本地偏好键（防止之前的脏数据），用默认重置。
+      // 音量不在此列：它是设备本地设置，不该因为服务端偏好为空而被重置为默认值。
+      ['wemusic_theme', 'wemusic_font', 'wemusic_font_size', 'wemusic_palette']
         .forEach(k => localStorage.removeItem(k));
       // 重新应用默认值（applyTheme 等会回退到默认）
       applyTheme('light');
@@ -135,7 +136,15 @@ export async function loadPrefsFromServer() {
     // 先加载自定义色板列表，再应用色板（因为可能是自定义颜色）
     await loadCustomPalettes();
     if (data.palette) { localStorage.setItem('wemusic_palette', data.palette); applyPalette(data.palette); }
-    if (data.vol) { localStorage.setItem('wemusic_vol', data.vol); }
+    // 音量是设备本地设置：各设备扬声器/耳机差异大，合适的音量并不通用。
+    // 因此只在本机从未记录过音量时（新设备、清缓存后首次登录）继承服务端值，
+    // 不能无条件覆盖——服务端 vol 可能长期停留在历史值（如初始 0.8），
+    // 每次刷新都把用户刚调好的音量顶掉。
+    if (data.vol != null && localStorage.getItem('wemusic_vol') == null) {
+      localStorage.setItem('wemusic_vol', String(data.vol));
+      // player.js 已按默认值初始化完毕，广播让播放器重读并应用
+      window.dispatchEvent(new CustomEvent('volume_prefs_restored', { detail: { vol: data.vol } }));
+    }
   } catch { console.warn('偏好同步失败') }
 }
 // 延迟同步（200ms 防抖）
