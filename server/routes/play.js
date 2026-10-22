@@ -604,11 +604,18 @@ router.post('/resolve', authRequired, async (req, res) => {
     const head = ordered.slice(0, CHECK_TOP_N);
     let best = null;
     if (head.length) {
-      const flags = await Promise.all(head.map((v) => checkVideoPlayable(v.bvid)));
-      const hit = flags.indexOf(true);
-      if (hit >= 0) best = head[hit];
-      debug.playableChecked = head.map((v, i) => ({ bvid: v.bvid, playable: flags[i] }));
-      if (hit < 0) console.log(`[resolve:playable] top ${head.length} 均不可播，退化到后续候选`);
+      const states = await Promise.all(head.map((v) => checkVideoPlayable(v.bvid)));
+      debug.playableChecked = head.map((v, i) => ({ bvid: v.bvid, state: states[i] }));
+      console.log(`[resolve:playable] "${name}" top${head.length}=[${states.join(',')}]`);
+      const hit = states.indexOf('ok');
+      if (hit >= 0) {
+        best = head[hit];
+      } else if (states.every((s) => s === 'unknown')) {
+        // 三个全部探测失败：基本可确定是整体风控限流，此时跳过候选会误杀全部可用源，
+        // 退回原顺序，把「能不能播」交给前端的换源兜底。
+        console.log('[resolve:playable] 探测全部失败（疑似风控），放弃预校验');
+        best = ordered[0];
+      }
     }
     if (!best) best = ordered[CHECK_TOP_N] || ordered[0];
 

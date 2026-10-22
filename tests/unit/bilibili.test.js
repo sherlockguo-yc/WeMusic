@@ -94,24 +94,34 @@ describe('getVideoPages — view 接口错误码分类', () => {
   });
 });
 
-describe('checkVideoPlayable — 预校验不误杀可用源', () => {
+describe('checkVideoPlayable — 三态探测', () => {
   const stubFetchJson = (payload) => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ json: async () => payload })));
   };
   afterEach(() => vi.unstubAllGlobals());
 
-  it('可播放稿件 → true', async () => {
+  it('可播放稿件 → ok', async () => {
     stubFetchJson({ code: 0, data: { pages: [{ cid: 222 }] } });
-    expect(await checkVideoPlayable('BVok000001')).toBe(true);
+    expect(await checkVideoPlayable('BVok000001')).toBe('ok');
   });
 
-  it('永久不可播 → false', async () => {
+  it('永久不可播 → unavailable', async () => {
     stubFetchJson({ code: 62002, message: '稿件不可见' });
-    expect(await checkVideoPlayable('BVbad00001')).toBe(false);
+    expect(await checkVideoPlayable('BVbad00001')).toBe('unavailable');
   });
 
-  it('临时失败（风控）→ 视为可播放，避免误杀', async () => {
+  // 关键回归：临时失败绝不能当成可播放，否则坏源会被选成 best 写进 bvid_cache
+  it('临时失败（风控限流）→ unknown，而非 ok', async () => {
     stubFetchJson({ code: -412, message: '请求被拦截' });
-    expect(await checkVideoPlayable('BVtemp0001')).toBe(true);
+    expect(await checkVideoPlayable('BVtemp0001')).toBe('unknown');
+  });
+
+  it('临时失败会重试：第二次成功则返回 ok', async () => {
+    let call = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      call++;
+      return { json: async () => (call === 1 ? { code: -412 } : { code: 0, data: { pages: [{ cid: 9 }] } }) };
+    }));
+    expect(await checkVideoPlayable('BVretry001')).toBe('ok');
   });
 });

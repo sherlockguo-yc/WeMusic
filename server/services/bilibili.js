@@ -273,23 +273,34 @@ export async function getVideoPages(bvid) {
 }
 
 /**
- * 探测某个 bvid 是否可播放（resolve 阶段预校验用）。
- * - 永久不可播 → false，并记入 1 小时短期记忆
- * - 临时失败（网络抖动/风控限流）→ true，宁可放过也不误杀可用源
+ * 探测某个 bvid 的可播放性（resolve 阶段预校验用）。返回三态：
+ * - 'ok'          可播放
+ * - 'unavailable' 永久不可播（下架/私密/付费/删除），记入 1 小时短期记忆
+ * - 'unknown'     探测本身失败（网络抖动/风控限流），无法判断
+ *
+ * 不能把 'unknown' 当成可播放：resolve 紧跟在 4 条搜索请求之后，view 接口极易被限流，
+ * 一旦宽松放行，坏源会被选成 best 写入 bvid_cache，用户点播放必然失败（2026-10-22 实测踩到）。
  */
-export async function checkVideoPlayable(bvid) {
+export async function checkVideoPlayable(bvid, retry = 1) {
   const at = _unavailable.get(bvid);
   if (at) {
-    if (Date.now() - at < UNAVAILABLE_TTL) return false;
+    if (Date.now() - at < UNAVAILABLE_TTL) return 'unavailable';
     _unavailable.delete(bvid);
   }
-  try {
-    await getVideoPages(bvid);
-    return true;
-  } catch (e) {
-    if (e.permanent) { _unavailable.set(bvid, Date.now()); return false; }
-    return true;
+  for (let i = 0; i <= retry; i++) {
+    try {
+      await getVideoPages(bvid);
+      return 'ok';
+    } catch (e) {
+      if (e.permanent) {
+        _unavailable.set(bvid, Date.now());
+        return 'unavailable';
+      }
+      // 临时失败：刷新鉴权后重试一次，仍失败则如实报告"无法判断"
+      if (i < retry) { resetAuth(); await sleep(250); }
+    }
   }
+  return 'unknown';
 }
 
 /** 获取视频标题 */
