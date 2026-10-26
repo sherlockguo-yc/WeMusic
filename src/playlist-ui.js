@@ -82,10 +82,30 @@ export async function loadPlaylists() {
   dirtyIndex();
 }
 
+// 清除歌单侧的选中态。直接改 DOM 而不是 renderSidebar()：
+// 重建列表会让拖拽排序状态和已绑定的事件全部丢失。
+function clearPlaylistActive() {
+  const box = $('playlistList');
+  if (!box) return;
+  box.querySelectorAll('.playlist-item.active').forEach((el) => el.classList.remove('active'));
+}
+
+// 把选中态同步到指定歌单（只改 class，不重建 DOM）
+function syncPlaylistActive(id) {
+  const box = $('playlistList');
+  if (!box) return;
+  box.querySelectorAll('.playlist-item').forEach((el) => {
+    el.classList.toggle('active', Number(el.dataset.id) === Number(id));
+  });
+}
+
 export function setActiveNav(id) {
   ['navDiscover', 'navStats', 'navLikes', 'navFavorites', 'navSavedAlbums', 'navOffline', 'navMy'].forEach((n) => {
     const el = $(n); if (el) el.classList.toggle('active', n === id);
   });
+  // 导航项与歌单是两组互斥的选中态：切到「我喜欢的」等视图时，歌单不能再保持高亮。
+  // 切换视图不会重渲染侧边栏，所以必须在这里主动清理，否则旧 class 会一直留在 DOM 上。
+  if (state.view !== 'playlist') clearPlaylistActive();
 }
 
 export function renderHome() {
@@ -97,7 +117,7 @@ export function renderHome() {
 export function renderSidebar() {
   const box = $('playlistList');
   box.innerHTML = state.playlists.map((p) => `
-    <div class="playlist-item ${p.id === state.targetPlaylistId ? 'active' : ''}" data-id="${p.id}" draggable="true">
+    <div class="playlist-item ${state.view === 'playlist' && p.id === state.targetPlaylistId ? 'active' : ''}" data-id="${p.id}" draggable="true">
       <span class="pl-name">${esc(p.name)}</span>
       <span class="pl-ops"><span class="count">${p.count}</span> <span class="edit" data-edit="${p.id}" title="编辑歌单"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span> <span class="del" data-del="${p.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></span>
     </div>`).join('');
@@ -128,7 +148,8 @@ export function renderSidebar() {
 
   box.querySelectorAll('.playlist-item').forEach((el) => {
     const id = Number(el.dataset.id);
-    el.onclick = () => { state.targetPlaylistId = id; renderSidebar(); openPlaylist(id); };
+    // openPlaylist 内部会设置 targetPlaylistId 并同步选中态，这里不再重复 renderSidebar
+    el.onclick = () => { openPlaylist(id); };
     // 右键菜单替代 hover 编辑/删除，避免误触
     el.oncontextmenu = (e) => {
       e.preventDefault();
@@ -477,7 +498,11 @@ function maybeFillAlbumCovers(id, songs) {
 
 export async function openPlaylist(id) {
   state.view = 'playlist';
+  state.targetPlaylistId = id;
   _openedPlaylistId = id;
+  // 只切 class、不重建列表：刷新恢复 / 历史前进后退都会走到这里，
+  // 而 renderSidebar 在此刻重建会丢掉拖拽排序状态与已绑定的事件。
+  syncPlaylistActive(id);
   import('./main.js').then(({ navPush }) => navPush('playlist', { id }));
   const main = $('main');
   main.innerHTML = `<div class="loading">加载歌单...</div>`;
@@ -581,7 +606,7 @@ export function initPlaylistUI() {
       const r = await uiPromptDual('导入为新歌单', '歌单名称', defName, '歌单简介（可选）', '');
       if (!r || !r.val1) return;
       const res = await api('/playlists/import', { method: 'POST', body: { name: r.val1, desc: r.val2 || '', songs } });
-      await loadPlaylists(); state.targetPlaylistId = res.id; renderSidebar(); openPlaylist(res.id);
+      await loadPlaylists(); openPlaylist(res.id);
       toast(`已导入 ${res.added} 首到「${res.name}」`);
     } catch { toast('导入失败：文件格式不正确'); }
   };

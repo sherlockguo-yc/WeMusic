@@ -3,8 +3,11 @@ import { $, esc, toast, albumCover, CACHE_ICON, PIN_ICON, X_ICON, PLAY_ICON } fr
 import * as offline from './offlineCache.js';
 import { setActiveNav } from './playlist-ui.js';
 import { api } from './api.js';
+import { state } from './state.js';
 
 export async function openOfflinePage() {
+  // 必须显式切 view：setActiveNav 依据 view 判断是否要清理歌单高亮，缺了这行会保留上一个歌单的选中态
+  state.view = 'offline';
   import('./main.js').then(({ navPush }) => navPush('offline'));
   setActiveNav('navOffline');
   const main = $('main');
