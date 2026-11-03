@@ -164,7 +164,9 @@ function _updateMediaSessionPosition() {
 //                     只能用「每秒 +1」的计时器估算（与展开前的历史实现一致）。
 let _lastTickCurrentTime = 0;
 let _stallTicks = 0;
-const STALL_TICK_THRESHOLD = 5; // 连续 5 次（约 5 秒）currentTime 无变化 → 判定播放流已死
+// 音频经 Cloudflare 隧道传输时首字节实测可达 5s+，5s 阈值会把「还在缓冲」误判成死流。
+// 只在已真正出过声、且有可解码数据后才计数，阈值放宽到 8 秒。
+const STALL_TICK_THRESHOLD = 8;
 let _hasStartedPlaying = false; // 当前曲目是否已经成功开始播放过一次（区分"加载中"与"意外暂停"）
 let _seekDragging = false; // 用户正在拖动进度条：暂停 tick 对进度条/时间文字的覆盖，避免和拖拽打架
 
@@ -204,13 +206,16 @@ function _tick() {
         console.warn('[bgAudio] 意外暂停，尝试恢复播放');
         bgAudio.play().catch(() => {});
       }
-    } else if (!_crossfading && Math.abs(bgAudio.currentTime - _lastTickCurrentTime) < 0.3) {
+    } else if (!_crossfading && _hasStartedPlaying && bgAudio.readyState >= 2
+               && Math.abs(bgAudio.currentTime - _lastTickCurrentTime) < 0.3) {
+      // 加载/降级/首缓冲阶段 currentTime 本来就是 0、readyState 也是 0，
+      // 旧逻辑会在 5 秒后把「慢链路」误判成「死流」直接跳歌，造成连环切歌。
       _stallTicks++;
       if (_stallTicks >= STALL_TICK_THRESHOLD) {
-        console.warn(`[bgAudio] currentTime 停滞 ${STALL_TICK_THRESHOLD}s+，自动切歌`);
+        console.warn(`[bgAudio] currentTime 停滞 ${STALL_TICK_THRESHOLD}s+，尝试恢复`);
         _stallTicks = 0;
-        _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
-        autoAdvance();
+        _notifyReason('network-skip', '⚠ 网络卡顿，正在尝试恢复');
+        _recoverOrAdvance().catch(() => autoAdvance());
         return;
       }
     } else if (!_crossfading) {
@@ -746,6 +751,9 @@ export async function playCurrent() {
   // 清理上个曲目的遗留定时器，避免对新曲目产生副作用
   if (_stalledTimer) { clearTimeout(_stalledTimer); _stalledTimer = null; }
   if (_healthCheckId) { clearTimeout(_healthCheckId); _healthCheckId = null; }
+  if (_cacheTimer) { clearTimeout(_cacheTimer); _cacheTimer = null; }
+  if (_directProbeTimer) { clearTimeout(_directProbeTimer); _directProbeTimer = null; }
+  if (_canplayTimer) { clearTimeout(_canplayTimer); _canplayTimer = null; }
   if (_cacheUrl) { URL.revokeObjectURL(_cacheUrl); _cacheUrl = null; }
   _cacheUse = null;
   _stallTicks = 0;
@@ -899,8 +907,11 @@ const MAX_SOURCE_TRIES = 3;  // 单曲最多尝试的源数量（含初始源）
 // 当前曲目走了哪条非直连线路（'' / '代理线路' / '本地缓存' / '备用源'），只在状态栏标注，不弹 toast
 let _lineHint = '';
 let _healthCheckId = null;   // play() 成功后 5s 健康检查 setTimeout ID
-let _stalledTimer = null;    // stalled 事件 3s 兜底切歌 setTimeout ID
+let _stalledTimer = null;    // 播放中停滞兜底 setTimeout ID
 let _resolveFailCount = 0;   // 连续 resolve 失败计数，≥5 首后停止自动跳过
+let _cacheTimer = null;      // 被动缓存延迟落盘：避开首播缓冲，防止与音频流抢隧道带宽
+let _directProbeTimer = null;// 直连探活：2s 内拿不到可播放数据就切服务端代理
+let _canplayTimer = null;    // canplay 超时兜底：慢链路下不能无限等下去
 let _volume = 0.8;           // 用户手动设置的音量（0~1），持久化，前后台/是否展开视频都用同一个值
 // 调音量后回传服务端偏好（debounce，避免拖动滑块时高频请求）。
 // 服务端 vol 只作为「新设备首次登录」的初始值，本机已有记录时不会被它覆盖。
@@ -1059,30 +1070,38 @@ async function _tryNextSource(seekSec = 0) {
 }
 
 // 播放失败的收尾决策：换源 → 网络重试一次 → 切歌
+// _recovering：canplay 超时 / stalled 超时 / error 可能在同一轮卡顿里同时触发，
+// 不加防抖会把「重试一次」变成「连跳好几首」。
+let _recovering = false;
 async function _recoverOrAdvance() {
-  if (mode !== 'bg' || timerPaused) return;
-  if (await _tryNextSource(elapsed)) return;
-  if (!_netRetried) {
-    _netRetried = true;
-    _usedFallback = false;
-    _weakFallback = false;
-    console.warn('[bgAudio] 无可换源，1.5s 后重试当前源');
-    setTimeout(() => {
-      if (mode === 'bg' && !timerPaused && state.current?.bvid) {
-        _loadAndPlayBgTrack(state.current.bvid, 0).catch(() => {});
-      }
-    }, 1500);
-    return;
+  if (mode !== 'bg' || timerPaused || _recovering) return;
+  _recovering = true;
+  try {
+    if (await _tryNextSource(elapsed)) return;
+    if (!_netRetried) {
+      _netRetried = true;
+      _usedFallback = false;
+      _weakFallback = false;
+      console.warn('[bgAudio] 无可换源，1.5s 后重试当前源');
+      setTimeout(() => {
+        if (mode === 'bg' && !timerPaused && state.current?.bvid) {
+          _loadAndPlayBgTrack(state.current.bvid, 0).catch(() => {});
+        }
+      }, 1500);
+      return;
+    }
+    _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
+    autoAdvance();
+  } finally {
+    _recovering = false;
   }
-  _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
-  autoAdvance();
 }
 
 // 解析可播放地址：
-//  - 离线（!onLine）→ 直接命中缓存（离线播放）
-//  - 在线 → 优先直连 CDN
-//  - 直连失败 → 有本地缓存则直接用缓存（跳过服务端代理，避免弱网下两轮等待）
-//  - 无本地缓存 → 回退服务端代理（bgAudio error 事件仍有弱网降级兜底）
+//  - 本地 IndexedDB 有缓存 → 直接 blob 播放，完全不经过网络（弱网/隧道丢包时最可靠）
+//  - 离线（!onLine）→ 只能命中缓存
+//  - 在线且无缓存 → 优先直连 CDN（mcdn 节点可直连，upos-sz-* 会 403，由 2s 探活快速降级）
+//  - 直连 API 失败 → 回退服务端代理（bgAudio error 事件仍有弱网降级兜底）
 async function _getPlayableUrl(bvid) {
   if (!navigator.onLine) {
     try {
@@ -1099,6 +1118,18 @@ async function _getPlayableUrl(bvid) {
   }
   _cacheUse = null;
   _weakFallback = false;
+  // 听过的歌优先用本地缓存：blob 播放不产生任何网络请求，是隧道丢包/弱网时
+  // 唯一能彻底免疫卡顿的线路。IndexedDB 读取只需几毫秒，远快于直链解析 + 首字节。
+  try {
+    const c = await offline.get(bvid);
+    if (c && c.audio) {
+      const url = _makeObjUrl(c.audio);
+      offline.touch(bvid);
+      _cacheUse = { fromCache: true, reason: '免流量' };
+      return { url, isDirect: false, fromCache: true };
+    }
+  } catch { /* IndexedDB 不可用/读取失败 → 继续走网络，不阻断播放 */ }
+
   try {
     const r = await api(`/play/direct-url?bvid=${encodeURIComponent(bvid)}`);
     if (r && r.url) return { url: r.url, isDirect: true, fromCache: false };
@@ -1147,7 +1178,10 @@ function _setPlayStatus() {
   const title = song?._biliTitle || (song?.name && song?.singer ? `${song.name} - ${song.singer}` : 'Bilibili 播放');
   const lineTag = _lineHint ? ` <span class="offline-reason">${esc(_lineHint)}</span>` : '';
   if (_cacheUse && _cacheUse.fromCache) {
-    $('playStatus').innerHTML = `<span class="status-inner"><span class="badge offline-badge">${OFFLINE_ICON} 离线播放</span> <span class="offline-reason">${esc(_cacheUse.reason)}</span> ${esc(title)}</span>`;
+    // 在线命中本地缓存时不该显示「离线播放」，否则用户会以为断网了
+    const badgeText = _cacheUse.reason === '离线' ? '离线播放'
+      : _cacheUse.reason === '网络不佳' ? '缓存播放' : '本地缓存';
+    $('playStatus').innerHTML = `<span class="status-inner"><span class="badge offline-badge">${OFFLINE_ICON} ${badgeText}</span> <span class="offline-reason">${esc(_cacheUse.reason)}</span> ${esc(title)}</span>`;
   } else {
     $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span>${lineTag} ${esc(title)}</span>`;
   }
@@ -1162,6 +1196,17 @@ function _cacheCurrent(bvid) {
   offline.fetchAndStore(bvid, Auth.token, { pinned: false, videoSource: { bvid }, song })
     .then(() => { window.dispatchEvent(new CustomEvent('offline_cache_changed')); })
     .catch(e => console.warn('[offline] 后台缓存失败', bvid, e.message));
+}
+
+// 被动缓存延迟落盘：_cacheCurrent 会把整首音频（5~12MB）再拉一遍。若与首播同时
+// 进行，等于在同一条 Cloudflare 隧道上压两份流量，弱网时互相抢带宽、把首字节
+// 拖到数秒。等首播缓冲建立后再落盘，播放体验优先；切歌时 playCurrent 会清掉定时器。
+function _scheduleCache(bvid) {
+  if (_cacheTimer) clearTimeout(_cacheTimer);
+  _cacheTimer = setTimeout(() => {
+    _cacheTimer = null;
+    if (mode === 'bg' && state.current?.bvid === bvid) _cacheCurrent(bvid);
+  }, 15000);
 }
 
 // ---- 淡入淡出（crossfade）核心逻辑 ----
@@ -1344,7 +1389,10 @@ async function _loadAndPlayBgTrack(bvid, seekSec = 0) {
   bgAudio.load();
   _fetchGain(bvid);
   _setPlayStatus();
-  if (!info.fromCache) _cacheCurrent(bvid); // 走网络才后台落盘（被动）
+  if (!info.fromCache) {
+    _scheduleCache(bvid);                    // 延迟落盘，不与首播抢带宽
+    if (info.isDirect) _armDirectProbe(bvid); // 直连探活：拿不到数据立刻切代理
+  }
   _playBgAudioWithRetry(seekSec);
 }
 
@@ -1426,8 +1474,23 @@ function _playBgAudioWithRetry(seekSec) {
   } else if (bgAudio.readyState >= 2) { // HAVE_CURRENT_DATA 或更高
     doPlay();
   } else {
-    const onCan = () => { bgAudio.removeEventListener('canplay', onCan); doPlay(); };
+    const onCan = () => {
+      bgAudio.removeEventListener('canplay', onCan);
+      if (_canplayTimer) { clearTimeout(_canplayTimer); _canplayTimer = null; }
+      doPlay();
+    };
     bgAudio.addEventListener('canplay', onCan);
+    // 隧道丢包时首字节可达 5s+，canplay 可能迟迟不来。8 秒仍无数据就走恢复流程，
+    // 否则 <audio> 会永远停在 readyState=0（日志里大量 STALLED readyState=0 即此状态）。
+    if (_canplayTimer) clearTimeout(_canplayTimer);
+    _canplayTimer = setTimeout(() => {
+      _canplayTimer = null;
+      bgAudio.removeEventListener('canplay', onCan);
+      if (mode === 'bg' && !timerPaused && !_hasStartedPlaying) {
+        console.warn('[bgAudio] canplay 超时，尝试恢复');
+        _recoverOrAdvance().catch(() => autoAdvance());
+      }
+    }, 8000);
   }
 }
 
@@ -1444,6 +1507,34 @@ bgAudio.addEventListener('ended', () => {
   }
 });
 
+// 切到服务端代理线路。B 站 upos-sz-* 节点对浏览器直连一律 403（实测），
+// 但 mcdn 节点能直连成功，所以不能删掉直连，只能让它失败得更快。
+function _switchToProxy(bvid, reason) {
+  if (_usedFallback || mode !== 'bg' || !bvid) return;
+  _usedFallback = true;
+  if (_directProbeTimer) { clearTimeout(_directProbeTimer); _directProbeTimer = null; }
+  console.log(`[bgAudio] ${reason}，降级为服务端代理`);
+  // 直连→代理属于正常容错：只在状态栏标注线路，不弹 toast
+  _lineHint = '代理线路';
+  _setPlayStatus();
+  bgAudio.src = `/api/play/stream?bvid=${encodeURIComponent(bvid)}&token=${encodeURIComponent(Auth.token)}`;
+  bgAudio.load();
+  if (!timerPaused) _playBgAudioWithRetry(elapsed);
+}
+
+// 直连探活：浏览器拿不到 upos-sz-* 数据时，有些节点既不返回 403 也不给数据，
+// <audio> 会一直停在 readyState=0 且不触发 error。2 秒内没就绪就主动切代理，
+// 不必等 3s stalled 兜底——旧逻辑在那里直接跳歌，是连环切歌的主要来源。
+function _armDirectProbe(bvid) {
+  if (_directProbeTimer) clearTimeout(_directProbeTimer);
+  _directProbeTimer = setTimeout(() => {
+    _directProbeTimer = null;
+    if (mode !== 'bg' || state.current?.bvid !== bvid) return;
+    if (_usedFallback || _hasStartedPlaying || bgAudio.readyState >= 2) return;
+    _switchToProxy(bvid, '直连 CDN 2s 未就绪');
+  }, 2000);
+}
+
 // error 事件：先尝试从「直连」降级为「服务端代理」，仍失败才判定播放失败自动切歌
 bgAudio.addEventListener('error', () => {
   const err = bgAudio.error;
@@ -1451,14 +1542,7 @@ bgAudio.addEventListener('error', () => {
   // 展开视频（iframe）或静默预载阶段 bgAudio 不是当前发声源，失败不应触发降级提示与切歌
   if (mode !== 'bg') return;
   if (!_usedFallback && state.current?.bvid) {
-    _usedFallback = true;
-    console.log('[bgAudio] 直连 CDN 失败，降级为服务端代理');
-    // 直连→代理是正常容错，不是用户需要处理的问题：只在状态栏标注线路，不弹 toast
-    _lineHint = '代理线路';
-    _setPlayStatus();
-    bgAudio.src = `/api/play/stream?bvid=${encodeURIComponent(state.current.bvid)}&token=${encodeURIComponent(Auth.token)}`;
-    bgAudio.load();
-    if (mode === 'bg' && !timerPaused) _playBgAudioWithRetry(elapsed);
+    _switchToProxy(state.current.bvid, '直连 CDN 失败');
     return;
   }
   // 代理也失败 → 尝试缓存（弱网降级到离线缓存）
@@ -1486,24 +1570,28 @@ bgAudio.addEventListener('error', () => {
   _recoverOrAdvance().catch(() => autoAdvance());
 });
 
-// stalled：卡住 3 秒仍未恢复则判定失败切歌；流中断时 <audio> 常不触发 ended，需主动兜底
+// stalled：只在「已经出过声」后才可能判死。加载/降级/首缓冲阶段经 CF 隧道
+// 实测首字节 1.6~5.4s，3 秒就切歌会把慢链路变成连环跳歌。
+const STALL_SKIP_MS = 8000;
 bgAudio.addEventListener('stalled', () => {
   if (mode !== 'bg' || timerPaused) return;
   const ct = bgAudio.currentTime?.toFixed(1) || '?';
-  console.warn(`[bgAudio] STALLED currentTime=${ct}s readyState=${bgAudio.readyState}`);
-  if (!_stalledTimer) {
-    _stalledTimer = setTimeout(() => {
-      _stalledTimer = null;
-      if (mode === 'bg' && !timerPaused) {
-        console.warn('[bgAudio] STALLED 3s+ — auto advance');
-        _notifyReason('network-skip', '⚠ 网络卡顿，已自动切换下一首');
-        autoAdvance();
-      }
-    }, 3000);
-  }
+  console.warn(`[bgAudio] STALLED currentTime=${ct}s readyState=${bgAudio.readyState} started=${_hasStartedPlaying}`);
+  // 还没出声：交给直连探活 / canplay 超时兜底，绝不在这里切歌
+  if (!_hasStartedPlaying || _stalledTimer) return;
+  _stalledTimer = setTimeout(() => {
+    _stalledTimer = null;
+    if (mode === 'bg' && !timerPaused && _hasStartedPlaying && bgAudio.readyState < 2) {
+      console.warn(`[bgAudio] STALLED ${STALL_SKIP_MS / 1000}s+ — 尝试恢复`);
+      _notifyReason('network-skip', '⚠ 网络卡顿，正在尝试恢复');
+      _recoverOrAdvance().catch(() => autoAdvance());
+    }
+  }, STALL_SKIP_MS);
 });
 bgAudio.addEventListener('playing', () => {
   if (_stalledTimer) { clearTimeout(_stalledTimer); _stalledTimer = null; }
+  if (_directProbeTimer) { clearTimeout(_directProbeTimer); _directProbeTimer = null; }
+  if (_canplayTimer) { clearTimeout(_canplayTimer); _canplayTimer = null; }
 });
 
 // 通过 postMessage 控制 B 站 iframe 音量（官方支持的消息协议）
