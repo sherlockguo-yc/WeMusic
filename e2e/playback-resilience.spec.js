@@ -32,17 +32,15 @@ function makeWav(seconds) {
 const WAV = makeWav(60);
 
 /**
- * 通过应用自带的快捷键入口起播：队列 [占位, 目标, 目标, 后续]，当前为占位曲 → 按 → 即 playNext → 播放目标。
- *
- * 目标曲放两份：当前线上首页会把 app.js 执行两遍（带 ?v= 与不带 ?v= 被视为两个模块），
- * 键盘监听因此注册两次，一次按键会触发两次 playNext（索引 1 → 2）。放两份同一首，
- * 无论监听是一次还是两次，最终播放的都是目标曲；末尾的「后续」曲用于检测播放容错是否误跳歌。
+ * 通过应用自带的快捷键入口起播：队列 [占位, 目标, 后续]，当前为占位曲 → 按 → 即 playNext → 播放目标。
+ * 目标之后留一首「后续」曲，用于检测播放容错是否误跳歌：全程 queueIndex 必须停在 1。
+ * （一次按键必须只触发一次 playNext，由 e2e/entry-once.spec.js 单独保证。）
  */
 async function playViaQueue(page, bvid) {
   await page.evaluate((target) => {
     const mk = (b) => ({ name: `测试歌曲${b}`, singer: '测试歌手', bvid: b, duration: 60, _biliTitle: `测试稿件${b}`, _biliDur: 60 });
     const st = window.__state;
-    st.queue = [mk('BVDUMMY0000'), mk(target), mk(target), mk('BVNEXT00002')];
+    st.queue = [mk('BVDUMMY0000'), mk(target), mk('BVNEXT00002')];
     st.queueIndex = 0;
     st.current = st.queue[0];
     st.playMode = 'loop';
@@ -93,7 +91,7 @@ test.describe('播放容错（真实 player + 真实 audio）', () => {
     await expect.poll(async () => (await audioState(page)).ct, { timeout: 20_000, intervals: [500] }).toBeGreaterThan(1);
     const s = await audioState(page);
     expect(s.bvid).toBe('BVHANG00001');
-    expect(s.qi).toBeLessThanOrEqual(2); // 仍停在目标曲（索引 1 或 2），没有被误跳到后续曲（索引 3）
+    expect(s.qi).toBe(1); // 仍停在目标曲，没有被误跳到后续曲（索引 2）
     expect(s.src).toContain('/api/play/stream');
     expect(directCalls).toBeGreaterThanOrEqual(1);
     expect(proxyCalls).toBeGreaterThanOrEqual(1);
@@ -111,7 +109,7 @@ test.describe('播放容错（真实 player + 真实 audio）', () => {
     await expect.poll(async () => (await audioState(page)).ct, { timeout: 15_000, intervals: [250] }).toBeGreaterThan(1);
     const s = await audioState(page);
     expect(s.bvid).toBe('BV403000001');
-    expect(s.qi).toBeLessThanOrEqual(2); // 仍停在目标曲（索引 1 或 2），没有被误跳到后续曲（索引 3）
+    expect(s.qi).toBe(1); // 仍停在目标曲，没有被误跳到后续曲（索引 2）
     expect(s.src).toContain('/api/play/stream');
   });
 
@@ -134,7 +132,7 @@ test.describe('播放容错（真实 player + 真实 audio）', () => {
     await expect.poll(async () => (await audioState(page)).ct, { timeout: 30_000, intervals: [500] }).toBeGreaterThan(1);
     const s = await audioState(page);
     expect(s.bvid).toBe('BVSLOW00001');
-    expect(s.qi).toBeLessThanOrEqual(2); // 没有被误跳到后续曲（索引 3）
+    expect(s.qi).toBe(1); // 没有被误跳到后续曲（索引 2）
     expect(streamCalls).toBeGreaterThanOrEqual(2); // 第一次迟迟不来，看门狗触发后同源重试了一次
   });
 

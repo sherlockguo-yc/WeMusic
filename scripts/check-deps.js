@@ -22,6 +22,16 @@ for (const [file, info] of Object.entries(graph.modules)) {
   }
 }
 
+// 规则：页面引用模块入口 /dist/app.js 时禁止带查询参数。
+// 业务 chunk 动态 import('./main.js') 会解析成不带参数的 /dist/app.js，与 /dist/app.js?v=… 是两个不同的模块 URL，
+// 入口会被执行两遍（全局监听器重复注册：一次按键 playNext 触发两次）。详见 vite.config.js 同名插件注释。
+for (const html of ['public/index.html', 'public/login.html']) {
+  let text;
+  try { text = readFileSync(resolve(process.cwd(), html), 'utf8'); } catch { continue; }
+  const m = text.match(/\/dist\/app\.js\?[^"']*/);
+  if (m) errors.push(`禁止: ${html} 引用了带参数的模块入口 ${m[0]}（会导致入口被执行两遍）`);
+}
+
 if (errors.length) {
   console.log('❌ 架构约束违反:');
   errors.forEach(e => console.log('  - ' + e));

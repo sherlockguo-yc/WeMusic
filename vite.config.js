@@ -27,7 +27,14 @@ export default defineConfig({
         for (const name of ['index.html', 'login.html']) {
           const p = resolve(__dirname, 'public', name);
           const html = fs.readFileSync(p, 'utf8');
-          const next = html.replace(/\?v=(?:__BUILD__|\d+)/g, `?v=${stamp}`);
+          let next = html.replace(/\?v=(?:__BUILD__|\d+)/g, `?v=${stamp}`);
+          // 例外：模块入口 /dist/app.js 绝不能带查询参数。
+          // 业务 chunk 里有 import('./main.js')（取 navPush），构建后是 import("../app.js")，
+          // 解析成不带参数的 /dist/app.js；而页面若引用 /dist/app.js?v=…，浏览器按完整 URL 区分模块，
+          // 入口会被当成两个模块各执行一遍：全局监听器重复注册（一次按键 playNext 触发两次 = 跳两首）、
+          // 首页接口重复请求。2026-11-04 实测复现。cache bust 对入口并不需要：
+          // 服务端返回 no-cache,must-revalidate，Cloudflare 已遵循源站头（线上实测），chunk 本身带内容 hash。
+          next = next.replace(/(\/dist\/app\.js)\?v=[^"']*/g, '$1');
           if (next !== html) fs.writeFileSync(p, next);
         }
       },
