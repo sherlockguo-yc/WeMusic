@@ -87,6 +87,21 @@ function enqueueAnalysis(bvid, cid, streamUrl) {
   _gainQueue = _gainQueue.then(() => runAnalysis(bvid, cid, streamUrl));
 }
 
+/**
+ * 音量归一化：DB 中无此 bvid+cid 的记录（或上次分析失败）→ 先登记为 pending 再后台入队分析。
+ * pending 状态本身就是去重：同一首歌分析期间重复调用不会重复入队。
+ * @returns {boolean} 是否真的入队
+ */
+function ensureGainAnalysis(bvid, cid, streamUrl) {
+  const row = db.prepare('SELECT status FROM gain_cache WHERE bvid = ? AND cid = ?').get(bvid, cid);
+  if (row && row.status !== 'failed') return false;
+  const now = Date.now();
+  db.prepare('INSERT OR REPLACE INTO gain_cache (bvid, cid, gain_mult, status, created_at, updated_at) VALUES (?, ?, 1.0, ?, ?, ?)')
+    .run(bvid, cid, 'pending', now, now);
+  enqueueAnalysis(bvid, cid, streamUrl);
+  return true;
+}
+
 async function runAnalysis(bvid, cid, streamUrl) {
   const tempPath = `/tmp/wemusic_gain_${bvid}_${cid}_${Date.now()}.mp4`;
   try {
@@ -822,13 +837,7 @@ router.get('/stream', async (req, res) => {
     }
 
     // 音量归一化：DB 中无此 bvid+cid 的 gain → 触发后台异步分析
-    const row = db.prepare('SELECT status FROM gain_cache WHERE bvid = ? AND cid = ?').get(bvid, resolvedCid);
-    if (!row || row.status === 'failed') {
-      const now = Date.now();
-      db.prepare('INSERT OR REPLACE INTO gain_cache (bvid, cid, gain_mult, status, created_at, updated_at) VALUES (?, ?, 1.0, ?, ?, ?)')
-        .run(bvid, resolvedCid, 'pending', now, now);
-      enqueueAnalysis(bvid, resolvedCid, stream.url);
-    }
+    ensureGainAnalysis(bvid, resolvedCid, stream.url);
 
     console.log(`[r:${reqId}]   step2 fetchAudio ✅ (${Date.now() - tFetch}ms) → piping (total=${Date.now() - tTotal}ms)`);
     pipeAudio(upstream, res, stream.mime, reqId);
@@ -862,13 +871,7 @@ router.get('/direct-url', authRequired, async (req, res) => {
     console.log(`[r:${reqId}]   getAudioStream ✅ (${Date.now() - t0}ms)`);
 
     // 音量归一化：DB 中无此 bvid+cid 的 gain → 触发后台异步分析（逻辑与 /stream 一致）
-    const row = db.prepare('SELECT status FROM gain_cache WHERE bvid = ? AND cid = ?').get(bvid, resolvedCid);
-    if (!row || row.status === 'failed') {
-      const now = Date.now();
-      db.prepare('INSERT OR REPLACE INTO gain_cache (bvid, cid, gain_mult, status, created_at, updated_at) VALUES (?, ?, 1.0, ?, ?, ?)')
-        .run(bvid, resolvedCid, 'pending', now, now);
-      enqueueAnalysis(bvid, resolvedCid, stream.url);
-    }
+    ensureGainAnalysis(bvid, resolvedCid, stream.url);
 
     // deadline 参数（若存在）解析为过期时间，供前端判断直链是否临近过期
     let expiresAt = null;
@@ -911,10 +914,39 @@ router.get('/gain', async (req, res) => {
   } catch { /* 不阻塞：cid 为 0 也能查 */ }
 
   const row = db.prepare('SELECT gain_mult, status FROM gain_cache WHERE bvid = ? AND cid = ?').get(bvid, cid);
-  if (!row) return res.json({ gain: null, status: null });
-  if (row.status === 'complete') return res.json({ gain: row.gain_mult, status: row.status });
-  return res.json({ gain: null, status: row.status });
+  // 响应字段与各分支保持一致（先返回，再补触发分析，不拖慢响应）
+  if (!row) res.json({ gain: null, status: null });
+  else if (row.status === 'complete') res.json({ gain: row.gain_mult, status: row.status });
+  else res.json({ gain: null, status: row.status });
+
+  // 已缓存在浏览器本地的歌曲不会再请求 /direct-url 与 /stream，缺失/失败的分析将永远得不到重试；
+  // 这里补一条触发路径。仅限已登录请求（/gain 本身不要求登录，不能让匿名请求驱动下载与转码）。
+  if (cid && (!row || row.status === 'failed') && _isAuthedRequest(req)) backfillGainAnalysis(bvid, cid);
 });
+
+const BVID_RE = /^BV[0-9A-Za-z]{10}$/;
+const _gainBackfillAt = new Map(); // bvid:cid → 上次补触发时间，10 分钟冷却，避免 failed 记录被每次播放反复下载
+const GAIN_BACKFILL_COOLDOWN = 10 * 60_000;
+
+function _isAuthedRequest(req) {
+  const h = req.headers.authorization || '';
+  if (!h.startsWith('Bearer ')) return false;
+  try { jwt.verify(h.slice(7), config.jwtSecret); return true; } catch { return false; }
+}
+
+function backfillGainAnalysis(bvid, cid) {
+  if (!BVID_RE.test(bvid)) return;
+  const key = `${bvid}:${cid}`;
+  const last = _gainBackfillAt.get(key) || 0;
+  if (Date.now() - last < GAIN_BACKFILL_COOLDOWN) return;
+  _gainBackfillAt.set(key, Date.now());
+  if (_gainBackfillAt.size > 2000) _gainBackfillAt.delete(_gainBackfillAt.keys().next().value);
+  getAudioStream(bvid, cid, 'gain-backfill')
+    .then((stream) => {
+      if (ensureGainAnalysis(bvid, stream.cid || cid, stream.url)) console.log(`[gain] backfill queued bvid=${bvid} cid=${stream.cid || cid}`);
+    })
+    .catch((e) => console.warn(`[gain] backfill skipped bvid=${bvid}: ${e.message}`));
+}
 
 /**
  * 列出所有已分析的 gain 记录。
