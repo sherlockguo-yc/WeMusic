@@ -16,6 +16,8 @@ export const CACHE_POLL_MS = 2000;         // 被动缓存：就绪检测间隔
 export const CACHE_MAX_WAIT_MS = 120000;   // 被动缓存：最长等待，超时放弃
 export const PROXY_AHEAD_SEC = 30;         // 代理线路播放时，缓冲余量达到该秒数才允许并行下载
 export const DIRECT_MIN_PLAYED_SEC = 5;    // 直连线路播放时，播放满该秒数才允许下载
+export const DEVICE_SIGNAL_DEBOUNCE_MS = 250;  // 同一轮插拔的多个设备信号合并窗口
+export const DEVICE_PAUSE_COOLDOWN_MS = 3000;  // 一次设备中断内只暂停 / 提示一次
 
 /**
  * 停滞判定（每秒一次）。只有「已经真正出过声」的曲目才会计数：
@@ -27,6 +29,27 @@ export function evaluateStall({ ticks, started, paused, crossfading, currentTime
   if (Math.abs(currentTime - lastTime) >= 0.3) return { ticks: 0, stalled: false };
   const next = ticks + 1;
   return next >= threshold ? { ticks: 0, stalled: true } : { ticks: next, stalled: false };
+}
+
+/**
+ * bgAudio 的 pause 事件是否属于「非预期的系统中断」（拔耳机时 Safari / iOS 会直接暂停媒体元素）。
+ * 用户主动暂停、切歌、换源、展开视频、crossfade 都有各自明确的状态，必须排除，
+ * 否则这些正常流程会被当成拔耳机而二次暂停。
+ * playingSeen 由 'playing' 事件置位、_beginLoad() 清零，因此加载 / 销毁阶段天然不满足。
+ */
+export function isUnexpectedPause({ timerPaused, mode, crossfading, playingSeen, hasSong, paused }) {
+  return !!paused && !timerPaused && mode === 'bg' && !crossfading && !!playingSeen && !!hasSong;
+}
+
+/**
+ * 设备变化信号是否应该触发一次自动暂停。
+ * enabled / playing 是硬条件；cooldownMs 把同一轮插拔里接踵而至的
+ * devicechange / sinkchange / pause 合并成一次，只暂停一次、只提示一次。
+ */
+export function shouldPauseForDeviceSignal({ enabled, playing, now, lastPauseAt, cooldownMs = DEVICE_PAUSE_COOLDOWN_MS }) {
+  if (!enabled || !playing) return false;
+  if (!lastPauseAt) return true;   // 从未因设备暂停过，首次信号无条件放行
+  return (now - lastPauseAt) >= cooldownMs;
 }
 
 /**
