@@ -1361,15 +1361,6 @@ export async function openSettings() {
     };
   }
 
-  // 拔耳机自动暂停（设备本地设置，默认开启；player.js 每次事件直接读 localStorage，无需广播）
-  const headphonePauseToggle = $('headphonePauseToggle');
-  if (headphonePauseToggle) {
-    headphonePauseToggle.checked = localStorage.getItem('wemusic_headphone_pause') !== '0';
-    headphonePauseToggle.onchange = () => {
-      localStorage.setItem('wemusic_headphone_pause', headphonePauseToggle.checked ? '1' : '0');
-    };
-  }
-
   // 淡入淡出：直接选时长（含"关闭"）
   _bindOptionGroup('.crossfade-opt', {
     getActive: () => {

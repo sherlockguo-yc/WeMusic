@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  STALL_TICK_THRESHOLD, CACHE_MAX_WAIT_MS, CACHE_POLL_MS, RETRY_DELAY_MS, DEVICE_PAUSE_COOLDOWN_MS,
+  STALL_TICK_THRESHOLD, CACHE_MAX_WAIT_MS, CACHE_POLL_MS, RETRY_DELAY_MS,
   evaluateStall, cacheReady, createLoadGuard, createRecoveryGate, createCacheScheduler,
-  isUnexpectedPause, shouldPauseForDeviceSignal,
 } from '../../src/playback-guard.js';
 
 beforeEach(() => { vi.useFakeTimers(); });
@@ -320,43 +319,5 @@ describe('createCacheScheduler', () => {
     mode = 'iframe';            // 播放 3 秒后用户展开视频：iframe 不占隧道
     vi.advanceTimersByTime(CACHE_POLL_MS);
     expect(run).toHaveBeenCalledWith('BV1');
-  });
-});
-
-describe('isUnexpectedPause（拔耳机时浏览器直接暂停 <audio> 的判定）', () => {
-  const base = { timerPaused: false, mode: 'bg', crossfading: false, playingSeen: true, hasSong: true, paused: true };
-
-  it('正常播放中被系统暂停 → 判定为设备中断', () => {
-    expect(isUnexpectedPause(base)).toBe(true);
-  });
-
-  it('用户主动暂停 / 展开视频 / crossfade / 换源加载中 / 无当前歌曲 一律排除', () => {
-    expect(isUnexpectedPause({ ...base, timerPaused: true })).toBe(false);
-    expect(isUnexpectedPause({ ...base, mode: 'iframe' })).toBe(false);
-    expect(isUnexpectedPause({ ...base, crossfading: true })).toBe(false);
-    expect(isUnexpectedPause({ ...base, playingSeen: false })).toBe(false);
-    expect(isUnexpectedPause({ ...base, hasSong: false })).toBe(false);
-    expect(isUnexpectedPause({ ...base, paused: false })).toBe(false);
-  });
-});
-
-describe('shouldPauseForDeviceSignal（设备信号闸门）', () => {
-  const base = { enabled: true, playing: true, now: 10000, lastPauseAt: 0 };
-
-  it('开关关闭 / 当前未播放 → 不暂停', () => {
-    expect(shouldPauseForDeviceSignal({ ...base, enabled: false })).toBe(false);
-    expect(shouldPauseForDeviceSignal({ ...base, playing: false })).toBe(false);
-  });
-
-  it('同一轮插拔里接踵而至的多个信号只放行一次', () => {
-    expect(shouldPauseForDeviceSignal(base)).toBe(true);
-    const justPaused = 10000;
-    expect(shouldPauseForDeviceSignal({ ...base, now: justPaused + 250, lastPauseAt: justPaused })).toBe(false);
-    expect(shouldPauseForDeviceSignal({ ...base, now: justPaused + DEVICE_PAUSE_COOLDOWN_MS - 1, lastPauseAt: justPaused })).toBe(false);
-    expect(shouldPauseForDeviceSignal({ ...base, now: justPaused + DEVICE_PAUSE_COOLDOWN_MS, lastPauseAt: justPaused })).toBe(true);
-  });
-
-  it('首次触发（lastPauseAt 缺省）也能放行', () => {
-    expect(shouldPauseForDeviceSignal({ enabled: true, playing: true, now: 1, lastPauseAt: undefined })).toBe(true);
   });
 });

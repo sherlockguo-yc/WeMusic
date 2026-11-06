@@ -6,7 +6,6 @@ import { state } from './state.js';
 import { clearSleep, sleepAfterSong, syncPrefsToServer } from './settings.js';
 import {
   CANPLAY_TIMEOUT_MS, DIRECT_PROBE_MS, STALLED_EVENT_MS, RETRY_DELAY_MS,
-  DEVICE_SIGNAL_DEBOUNCE_MS, isUnexpectedPause, shouldPauseForDeviceSignal,
   evaluateStall, cacheReady, createLoadGuard, createRecoveryGate, createCacheScheduler,
 } from './playback-guard.js';
 
@@ -17,13 +16,6 @@ export let elapsed = 0;
 export let totalDur = 0;
 export let timerPaused = false;
 export let playSeq = 0;
-
-// ---- 拔耳机自动暂停（设备本地设置，见 docs/功能规格/拔耳机自动暂停.md）----
-const HEADPHONE_PAUSE_KEY = 'wemusic_headphone_pause';
-let _devicePaused = false;          // 当前暂停是否由音频设备中断触发
-let _iframeMutedByDevice = false;   // 展开视频时是否被设备中断置为静音
-let _lastDevicePauseAt = 0;         // 冷却窗口起点：同一轮插拔只暂停一次
-let _deviceSignalTimer = null;      // 设备事件防抖
 
 // ---- 播放日志 ----
 let _logTimer = null;
@@ -118,7 +110,6 @@ function _updateSeekBarUI(elapsed, totalDur) {
 
 export function resetProgress(d) {
   elapsed = 0; totalDur = Number(d) || 0; timerPaused = false;
-  _clearDevicePause();  // 切歌 / 重开进度时解除设备暂停标记，避免残留 iframe 静音
   _hasStartedPlaying = false;
   _playingSeen = false;
   _seekDragging = false;
@@ -1671,93 +1662,6 @@ function _setIframeVolume(vol) {
   } catch { console.warn('B站 iframe 音量通信失败') }
 }
 
-// ---------------- 拔耳机自动暂停 ----------------
-// 浏览器没有「3.5mm 插头被拔出」这个物理事件；无麦克风权限时 enumerateDevices()
-// 又只返回一个全空的匿名输出设备（本机 Chrome 实测），无法比对设备列表。
-// 因此把四类互不重叠的信号并集，全部汇到 pauseForAudioDevice() 这一个幂等入口。
-function _headphonePauseEnabled() {
-  try { return localStorage.getItem(HEADPHONE_PAUSE_KEY) !== '0'; } // 未设置 = 默认开启
-  catch { return true; }
-}
-
-/** 解除「因设备中断而暂停」的标记，恢复 iframe 音量与系统媒体控件状态。 */
-function _clearDevicePause() {
-  if (!_devicePaused) return;
-  _devicePaused = false;
-  if (_iframeMutedByDevice) {
-    _setIframeVolume(_volume);
-    _iframeMutedByDevice = false;
-  }
-  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-}
-
-/**
- * 幂等暂停入口。关键是置 timerPaused = true 而不是只调 bgAudio.pause()：
- * _tick() 每秒发现「意外暂停」会立刻 play() 回来，5 秒健康检查、收起视频续播、
- * 卡顿恢复等路径也都会把声音放回来；timerPaused 是它们共同认可的现成开关。
- */
-function pauseForAudioDevice(source) {
-  const now = Date.now();
-  if (!shouldPauseForDeviceSignal({
-    enabled: _headphonePauseEnabled(),
-    playing: !!state.current && !timerPaused && !!autoTimer,
-    now, lastPauseAt: _lastDevicePauseAt,
-  })) return false;
-  _lastDevicePauseAt = now;
-  _devicePaused = true;
-  timerPaused = true;
-  $('playPauseBtn').innerHTML = PLAY_ICON;
-  $('playPauseBtn').title = '继续自动连播';
-  if (mode === 'bg') {
-    bgAudio.pause();
-  } else {
-    // B 站官方 postMessage 只公开了 setVolume，无法远程暂停 iframe 播放器。
-    // 静音 + 停计时器保证不外放；用户点播放时 _clearDevicePause() 还原音量。
-    _setIframeVolume(0);
-    _iframeMutedByDevice = true;
-  }
-  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-  toast(mode === 'bg' ? '耳机已拔出，已暂停播放' : '耳机已拔出，视频已静音（请手动暂停）');
-  console.warn(`[audio-device] ${source} → 自动暂停`);
-  return true;
-}
-
-function _initAudioDeviceWatch() {
-  const md = navigator.mediaDevices;
-  const onSignal = (source) => {
-    console.info(`[audio-device] 收到信号: ${source}`);
-    if (_deviceSignalTimer) clearTimeout(_deviceSignalTimer);
-    _deviceSignalTimer = setTimeout(() => {
-      _deviceSignalTimer = null;
-      pauseForAudioDevice(source);
-    }, DEVICE_SIGNAL_DEBOUNCE_MS);
-  };
-
-  // 1) USB / 蓝牙音频设备移除、带麦克风耳机拔出
-  if (md && typeof md.addEventListener === 'function') {
-    md.addEventListener('devicechange', () => onSignal('devicechange'));
-  }
-  // 2) Chrome / Edge：输出路由（含系统默认输出设备）变化
-  if (_audioCtx && 'onsinkchange' in _audioCtx) {
-    _audioCtx.addEventListener('sinkchange', () => onSignal('sinkchange'));
-  }
-  // 3) Safari / iOS：音频会话中断。只认 interrupted —— suspended 在页面节流时也会出现，会误判。
-  if (_audioCtx) {
-    _audioCtx.addEventListener('statechange', () => {
-      if (_audioCtx.state === 'interrupted') onSignal('statechange:interrupted');
-    });
-  }
-  // 4) 浏览器直接把媒体元素暂停（Safari / iOS 常见）。同步判定，抢在 _tick() 恢复之前。
-  //    pause 事件异步派发，此时 togglePause / expandVideo / destroyVideo 的状态位已就位，
-  //    isUnexpectedPause() 会把这些主动暂停全部排除。
-  bgAudio.addEventListener('pause', () => {
-    if (isUnexpectedPause({
-      timerPaused, mode, crossfading: _crossfading, playingSeen: _playingSeen,
-      hasSong: !!state.current, paused: bgAudio.paused,
-    })) pauseForAudioDevice('unexpected pause');
-  });
-}
-
 // 播放/切换到某个 bvid（供 playCurrent / 换源 调用）。
 // mode === 'bg'：加载并播放 bgAudio。
 // mode === 'iframe'：挂载新 iframe（保持展开状态），同时静默预载 bgAudio 供随时收起。
@@ -1912,9 +1816,6 @@ export function initPlayer() {
 
   // 初始化 AudioContext（音量归一化用，createMediaElementSource 只能调一次）
   _initAudioCtx();
-
-  // 拔耳机自动暂停：必须在 _initAudioCtx() 之后（sinkchange / statechange 挂在 AudioContext 上）
-  _initAudioDeviceWatch();
 
   // 设置面板切换归一化开关 → 立即生效
   window.addEventListener('volume_normalize_changed', () => _applyNormVol());
@@ -2109,15 +2010,11 @@ export function togglePause() {
   if (!state.current) return 'noSong';
   if (!autoTimer) { playCurrent(); return 'mounted'; }
   timerPaused = !timerPaused;
-  if (!timerPaused) _clearDevicePause(); // 用户主动恢复：还原设备中断时的 iframe 静音
   $('playPauseBtn').innerHTML = timerPaused ? PLAY_ICON : PAUSE_ICON;
   $('playPauseBtn').title = timerPaused ? '继续自动连播' : '暂停自动连播';
   if (mode === 'bg') {
     if (timerPaused) bgAudio.pause();
     else bgAudio.play().catch(() => {});
-  }
-  if ('mediaSession' in navigator) {
-    navigator.mediaSession.playbackState = timerPaused ? 'paused' : 'playing';
   }
   // mode === 'iframe' 时，B 站播放器由用户在视频内自行暂停/播放，这里只暂停计时器/歌词同步
   return timerPaused;
