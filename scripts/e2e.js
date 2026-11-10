@@ -18,7 +18,7 @@ function shell(cmd) { try { return execSync(cmd, { encoding: 'utf-8', stdio: 'pi
 function pcli(cmd) { shell(PCLI + ' ' + cmd); }
 
 // —— 1. 获取 token ——
-const TOKEN = shell(`cd /Users/sherlockguo/code/WeMusic && node -e "import('./server/middleware/auth.js').then(m=>{import('./server/db.js').then(({default:d})=>{const u=d.prepare('SELECT id,username FROM users WHERE username = ?').get('sherlockguo');console.log(m.signToken({id:u.id,username:u.username}));process.exit(0)})})" `).trim();
+const TOKEN = shell(`cd /Users/sherlockguo/code/WeProjects/WeMusic && node -e "import('./server/middleware/auth.js').then(m=>{import('./server/db.js').then(({default:d})=>{const u=d.prepare('SELECT id,username FROM users WHERE username = ?').get('sherlockguo');console.log(m.signToken({id:u.id,username:u.username}));process.exit(0)})})" `).trim();
 console.log('\n📋 E2E 验证\n');
 
 // —— 2. API 验证 ——
