@@ -4,7 +4,8 @@ import { config } from '../config.js';
 
 export function signToken(payload) {
   // 默认 30 天，可通过环境变量 JWT_EXPIRES 调整（如 '1d' '24h' '30d'）
-  const expiresIn = config.jwtExpires;
+  // 兜底：测试或精简配置（mock config）未提供 jwtExpires 时不能让签发直接 500
+  const expiresIn = config.jwtExpires || '30d';
   return jwt.sign(payload, config.jwtSecret, { expiresIn });
 }
 
