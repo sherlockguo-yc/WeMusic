@@ -28,6 +28,28 @@ export const Auth = {
 const FETCH_TIMEOUT_MS = 8000; // 弱网（蜂窝→CF 国际链路）下 fetch 会永久挂起，必须主动超时
 const RETRY_DELAY_MS = 1200;
 
+// 解析 JWT 的 exp（毫秒）；失败返回 0。只用于比较新旧 token，不做签名校验。
+function jwtExpMs(token) {
+  try {
+    const payload = String(token).split('.')[1];
+    if (!payload) return 0;
+    const padded = payload.replace(/-/g, '+').replace(/_/g, '/')
+      .padEnd(Math.ceil(payload.length / 4) * 4, '=');
+    const json = JSON.parse(atob(padded));
+    return Number(json.exp) * 1000 || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// 服务端在 token 剩余不足一半时通过响应头换发新 token。
+// SW 可能重放带旧 X-New-Token 的缓存响应，因此只接受过期时间更晚的。
+function adoptRefreshedToken(res) {
+  const fresh = res.headers.get('X-New-Token');
+  if (!fresh) return;
+  if (jwtExpMs(fresh) > jwtExpMs(Auth.token)) Auth.save(fresh, Auth.user);
+}
+
 export async function api(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth && Auth.token) headers.Authorization = `Bearer ${Auth.token}`;
@@ -54,6 +76,7 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
       throw err;
     }
     clearTimeout(timer);
+    adoptRefreshedToken(res);
     let data = null;
     try { data = await res.json(); } catch { /* ignore */ }
     if (res.status === 401) {

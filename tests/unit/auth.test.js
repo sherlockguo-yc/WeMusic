@@ -42,6 +42,32 @@ describe('signToken', () => {
   });
 });
 
+describe('shouldRefreshToken', () => {
+  // 与 server/middleware/auth.js 保持一致的内联副本
+  function shouldRefreshToken(decoded, nowMs = Date.now()) {
+    if (!decoded || !decoded.exp || !decoded.iat) return false;
+    const ttlSec = decoded.exp - decoded.iat;
+    if (ttlSec <= 0) return false;
+    return decoded.exp - Math.floor(nowMs / 1000) < ttlSec / 2;
+  }
+
+  const iat = 1_700_000_000;
+  const ttl = 30 * 24 * 3600;
+
+  it('剩余 60% 时不续期', () => {
+    expect(shouldRefreshToken({ iat, exp: iat + ttl }, (iat + ttl * 0.4) * 1000)).toBe(false);
+  });
+
+  it('剩余 40% 时续期', () => {
+    expect(shouldRefreshToken({ iat, exp: iat + ttl }, (iat + ttl * 0.6) * 1000)).toBe(true);
+  });
+
+  it('缺少 iat/exp 时不续期', () => {
+    expect(shouldRefreshToken({})).toBe(false);
+    expect(shouldRefreshToken(null)).toBe(false);
+  });
+});
+
 describe('authRequired 中间件', () => {
   function mockReq(authHeader) {
     return {
