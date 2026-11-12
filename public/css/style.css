@@ -2135,12 +2135,19 @@ body.light .wr-insight { background: rgba(42,183,88,.07); border-color: rgba(42,
   gap: 2px;
   height: 18px;
   flex-shrink: 0;
+  overflow: visible; /* 标签只有 3 个，允许文字溢出所在列而不被裁掉 */
 }
 .bar-axis-item {
+  /* 30 天里每一列只有十几像素宽，标签「10/28」比列宽，
+     用 overflow: hidden 会把后半截切掉（看着像被柱子挡住），
+     这里改为允许溢出，相邻列为空所以不会重叠。 */
   flex: 1; text-align: center;
   font-size: 9px; color: var(--text-dim); line-height: 18px;
-  white-space: nowrap; overflow: hidden; min-width: 0;
+  white-space: nowrap; min-width: 0;
 }
+/* 首尾标签贴边对齐，避免居中后溢出到面板外 */
+.bar-axis-item:first-child { text-align: left; }
+.bar-axis-item:last-child { text-align: right; }
 
 /* 时段热力格 */
 .hour-grid {
