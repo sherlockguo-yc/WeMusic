@@ -13,6 +13,16 @@ STATE_DIR="${QUEUE_ROOT}/states"
 WORKER_STATE_FILE="${QUEUE_ROOT}/worker.json"
 LOCK_FILE="${QUEUE_ROOT}/worker.lock"
 LOG_BASE="/tmp"
+
+# 产物分发源（2026-10-15）：N150 在大陆，出境到 GitHub 只剩约 3.5KB/s
+# （ghproxy 镜像已废、直连不通），稍大一点的产物在下载预算里永远下不完。
+# 把 R2（或任何国内可达的静态源）的公开域名写进 ~/.deploy-artifact-base
+# （一行，如 https://dl.example.com），即可让所有项目优先从那里拉；
+# 文件不存在、或产物不在上面时自动回退到 ghproxy → GitHub 直连。
+ARTIFACT_BASE_URL=""
+if [ -f "$HOME/.deploy-artifact-base" ]; then
+  ARTIFACT_BASE_URL=$(head -1 "$HOME/.deploy-artifact-base" | tr -d '[:space:]')
+fi
 LEASE_SECONDS=1800
 DEPLOY_WORKER_PID=$$
 export DEPLOY_WORKER_PID
@@ -142,6 +152,12 @@ elif action in ('succeeded', 'failed', 'interrupted'):
         completed['workerPid'] = active.get('workerPid')
     state['active'] = None
     state['last'] = completed
+    # 终态同样要清掉同版本的 pending：worker 命中「本地 .version 已等于目标
+    # 版本」的短路分支时不会经过 active 阶段，pending 若不在此清除会永久残留，
+    # 让部署页和拓扑图一直显示「排队中」（WeDou 2a1749e 曾卡住 5 天）。
+    pending = state.get('pending')
+    if isinstance(pending, dict) and (pending.get('version') or '')[:7] == (version or '')[:7]:
+        state['pending'] = None
 
 os.makedirs(os.path.dirname(path), exist_ok=True)
 fd, tmp = tempfile.mkstemp(prefix='.state-', dir=os.path.dirname(path), text=True)
@@ -348,6 +364,14 @@ curl_error_message() {
   esac
 }
 
+artifact_exists() {
+  local code
+  # 带随机查询串回源：Cloudflare 会缓存 404（例如 cron 抢在 CI 上传之前探测过），
+  # 读缓存会让「产物存在」被误判成不存在，从而白白退回慢链路。
+  code=$(curl -sI -o /dev/null -w '%{http_code}' --max-time 10 --connect-timeout 5 "$1?probe=$RANDOM" 2>/dev/null || echo 000)
+  [ "$code" = "200" ] || [ "$code" = "206" ]
+}
+
 try_download_resumable() {
   local project="$1" version="$2" source="$3" url="$4" tmp="$5" budget="$6" per_try="${7:-90}"
   local start attempt=0 curl_rc=0
@@ -376,6 +400,10 @@ try_download_resumable() {
 download_artifact() {
   local project="$1" repo="$2" tag="$3" file_name="$4" tmp="$5" version="$6"
   local base="https://github.com/$repo/releases/download"
+  local r2_url=""
+  if [ -n "$ARTIFACT_BASE_URL" ]; then
+    r2_url="$ARTIFACT_BASE_URL/$project/$tag/$file_name"
+  fi
   local mirror_url="https://ghproxy.net/$base/$tag/$file_name"
   local direct_url="$base/$tag/$file_name"
   local version_marker="${tmp}.version"
@@ -388,6 +416,14 @@ download_artifact() {
   fi
 
   DOWNLOAD_ERROR="下载失败"
+  # R2 优先，但只对真的上传过的产物走这条路：curl 撞上 404 会立刻返回，
+  # 重试循环会在几秒内空转满预算，所以未接入 R2 的项目必须先用 HEAD 探测跳过。
+  if [ -n "$r2_url" ] && artifact_exists "$r2_url"; then
+    if try_download_resumable "$project" "$version" R2 "$r2_url" "$tmp" 300 90; then
+      rm -f "$version_marker"
+      return 0
+    fi
+  fi
   if try_download_resumable "$project" "$version" 镜像 "$mirror_url" "$tmp" 360 90; then
     rm -f "$version_marker"
     return 0
