@@ -526,13 +526,14 @@ export function pickAlbumMid(songs, name, singer = '') {
 /**
  * 按「歌名 + 歌手」反查 QQ 音乐专辑 mid（Apple / 网易云等外源歌曲补封面用）。
  * 任何失败（超时 / 网络 / 未命中）都返回 ''，不抛异常——调用方无需 try/catch。
+ * timeout：单次搜索超时（毫秒），报告页等交互路径需要更短的等待。
  */
-export async function lookupAlbumMid(name, singer = '') {
+export async function lookupAlbumMid(name, singer = '', { timeout = 8000 } = {}) {
   if (!name) return '';
   try {
     const singerFirst = String(singer || '').split('/')[0].trim();
     const keyword = singerFirst ? `${name} ${singerFirst}` : String(name);
-    const { songs } = await fullSearch(keyword, 10, { timeout: 8000 });
+    const { songs } = await fullSearch(keyword, 10, { timeout });
     return pickAlbumMid(songs, name, singer);
   } catch {
     return '';

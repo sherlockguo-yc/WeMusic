@@ -5,7 +5,7 @@ import express from 'express';
 import db from '../db.js';
 import { authRequired } from '../middleware/auth.js';
 import { fetchLyrics, searchLyricsCandidates, fetchLyricsById, getLyricCache, setLyricCache, qqFetchLyric, parseLrc, parseLrcWithTrans, isInstrumental } from '../services/lyrics.js';
-import { getTopList, searchSongs, searchSongsForRecommend, findSingerMid } from '../services/qqmusic.js';
+import { getTopList, searchSongs, searchSongsForRecommend, findSingerMid, lookupAlbumMid } from '../services/qqmusic.js';
 import { renderPosterPNG } from '../services/poster.js';
 import { POSTER_THEMES } from '../../shared/poster-template.js';
 import { decodeSourceId, Platform } from '../../shared/constants.js';
@@ -161,6 +161,52 @@ async function attachSingerMids(artists) {
   return artists;
 }
 
+// ============================================================
+// 报告页「最爱专辑」封面 mid 补全
+// ============================================================
+// play_logs 里的 album_mid 可能为空（歌曲来源没有 QQ 专辑信息），也可能是纯数字
+// （网易云的数字专辑 ID，拼 QQ 封面 URL 必然 404）。两种情况都会让最爱专辑显示占位图，
+// 因此在 SQL 之外再做一层兜底：组内取不到有效 mid 时，用该专辑播放最多的一首歌名反查 QQ。
+const ALBUM_MID_TTL = 24 * 3600 * 1000;      // 命中结果长期有效（专辑 mid 不会变）
+const ALBUM_MID_MISS_TTL = 10 * 60 * 1000;   // 未命中的短缓存，避免每次请求都打接口
+const ALBUM_MID_CACHE_MAX = 500;
+const albumMidCache = new Map();
+
+/** 有效 QQ 专辑 mid：非空且含非数字字符（纯数字是网易云自己的专辑 ID） */
+function isValidAlbumMid(mid) {
+  return !!mid && /[^0-9]/.test(String(mid));
+}
+
+/** 就地补全 albums[].album_mid；反查失败保持空，由前端渲染占位 */
+async function fillAlbumCoverMids(uid, since, until, albums) {
+  const missing = (albums || []).filter((a) => !isValidAlbumMid(a.album_mid));
+  if (!missing.length) return;
+  const topSongStmt = db.prepare(`
+    SELECT name, singer FROM play_logs
+    WHERE user_id=? AND played_at>=? AND played_at<? AND album=? AND name != ''
+    GROUP BY name ORDER BY COUNT(*) DESC LIMIT 1
+  `);
+  await Promise.all(missing.map(async (a) => {
+    const key = `${a.album}__${String(a.singer || '').split('/')[0].trim()}`;
+    const cached = albumMidCache.get(key);
+    const ttl = cached?.mid ? ALBUM_MID_TTL : ALBUM_MID_MISS_TTL;
+    if (cached && Date.now() - cached.at < ttl) {
+      a.album_mid = cached.mid;
+      return;
+    }
+    const row = topSongStmt.get(uid, since, until, a.album);
+    if (!row) return;
+    // 1.5s 超时：反查失败只是少一张封面，不能拖慢整个报告接口
+    const mid = await lookupAlbumMid(row.name, row.singer, { timeout: 1500 });
+    if (albumMidCache.size >= ALBUM_MID_CACHE_MAX) {
+      const oldest = albumMidCache.keys().next().value;
+      if (oldest !== undefined) albumMidCache.delete(oldest);
+    }
+    albumMidCache.set(key, { mid, at: Date.now() });
+    if (mid) a.album_mid = mid;
+  }));
+}
+
 // 公共函数：构建听歌报告数据
 async function buildReport(uid, since, until, compareSince, compareUntil, label) {
   // —— 概览（含有效播放次数） ——
@@ -181,7 +227,9 @@ async function buildReport(uid, since, until, compareSince, compareUntil, label)
 
   // —— Top 歌曲 / 歌手 ——
   const topSongs = db.prepare(`
-    SELECT name, singer, MAX(album) AS album, MAX(album_mid) AS album_mid, COUNT(*) AS play_count, SUM(played_sec) AS total_sec
+    SELECT name, singer, MAX(album) AS album,
+           MAX(CASE WHEN album_mid != '' AND album_mid GLOB '*[^0-9]*' THEN album_mid END) AS album_mid,
+           COUNT(*) AS play_count, SUM(played_sec) AS total_sec
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
     GROUP BY name, singer ORDER BY play_count DESC LIMIT 10
   `).all(uid, since, until);
@@ -221,11 +269,16 @@ async function buildReport(uid, since, until, compareSince, compareUntil, label)
   `).get(uid, since, until);
 
   // —— 最爱专辑（按播放次数排序，取封面缩略图）——
+  // album_mid 必须显式取「组内第一个有效值」：裸列在 GROUP BY 下取哪一行不确定，
+  // 组内若有空 mid 的行（部分来源没匹配到 QQ 专辑）会随机拿到空值 → 封面 404。
   const topAlbums = db.prepare(`
-    SELECT album, album_mid, singer, COUNT(*) AS play_count
+    SELECT album,
+           MAX(CASE WHEN album_mid != '' AND album_mid GLOB '*[^0-9]*' THEN album_mid END) AS album_mid,
+           singer, COUNT(*) AS play_count
     FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND album != ''
     GROUP BY album ORDER BY play_count DESC LIMIT 2
   `).all(uid, since, until);
+  await fillAlbumCoverMids(uid, since, until, topAlbums);
 
   // —— 周期内新收藏歌曲（收藏动作发生在周期内，最新在前） ——
   const favSongs = db.prepare(`
