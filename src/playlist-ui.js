@@ -100,7 +100,7 @@ function syncPlaylistActive(id) {
 }
 
 export function setActiveNav(id) {
-  ['navDiscover', 'navStats', 'navLikes', 'navFavorites', 'navSavedAlbums', 'navOffline', 'navMy'].forEach((n) => {
+  ['navDiscover', 'navStats', 'navYearly', 'navLikes', 'navFavorites', 'navSavedAlbums', 'navOffline', 'navMy'].forEach((n) => {
     const el = $(n); if (el) el.classList.toggle('active', n === id);
   });
   // 导航项与歌单是两组互斥的选中态：切到「我喜欢的」等视图时，歌单不能再保持高亮。

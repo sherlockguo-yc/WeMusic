@@ -111,10 +111,14 @@ router.get('/overview', (req, res) => {
 // —— 有效播放判断（SQL 表达式片段） ——
 // 有效播放：播了 ≥ 30 秒，或播了 ≥ 40% 总时长（短歌也能公平计入）
 // 用于：跳过率分母、新歌发现门槛、平均每首播放时长计算
-// 表达式引用列名 played_sec、duration，用在 WHERE / CASE 中直接拼接
-const MEANINGFUL_COND = "played_sec >= 30 OR (duration > 0 AND CAST(played_sec AS REAL)/duration >= 0.4)";
+// 表达式引用列名 played_sec、duration，用在 WHERE / CASE 中直接拼接。
+// ⚠ 片段里含 OR，拼进 WHERE 时必须整体加括号（AND 的优先级高于 OR，
+//   否则 `WHERE user_id=? AND x OR y` 会变成 `(user_id=? AND x) OR y`，
+//   y 那半段不受 user_id 约束，会把全库数据算进来）。
+const MEANINGFUL_COND = "(played_sec >= 30 OR (duration > 0 AND CAST(played_sec AS REAL)/duration >= 0.4))";
 // 跳过判断：播了 < 25% 总时长（duration 未知时回退 30s 绝对阈值）
-const SKIP_COND = "(duration > 0 AND CAST(played_sec AS REAL)/duration < 0.25) OR ((duration IS NULL OR duration = 0) AND played_sec < 30)";
+// 同样含 OR，外层括号一并加上，拼进 WHERE 时不会漏掉其它条件
+const SKIP_COND = "((duration > 0 AND CAST(played_sec AS REAL)/duration < 0.25) OR ((duration IS NULL OR duration = 0) AND played_sec < 30))";
 
 // 歌手名分隔符：拆分合唱/组合（与 computeArtistWeights 保持一致）
 const ARTIST_SPLIT_RE = /[\/、,，&]/;
@@ -399,6 +403,165 @@ router.get('/monthly', async (req, res) => {
   }
   trend.reverse();
   res.json({ ...report, trend });
+});
+
+// —— 年度听歌总结（独立多屏页）——
+// 一次返回整页所需数据：概览 + 12 个月分布 + Top 歌曲/歌手/专辑 + 年度之最。
+// 前端按屏渲染，翻年份只换 yearOffset，不重复请求。
+/** 从升序的 YYYY-MM-DD 列表里算最长连续天数（返回天数与起止日期） */
+function computeStreak(days) {
+  if (!days.length) return { days: 0, start: '', end: '' };
+  let best = { days: 1, start: days[0], end: days[0] };
+  let cur = 1;
+  for (let i = 1; i < days.length; i++) {
+    const prev = new Date(`${days[i - 1]}T00:00:00`);
+    const now = new Date(`${days[i]}T00:00:00`);
+    if (Math.round((now - prev) / 86400000) === 1) cur++;
+    else cur = 1;
+    if (cur > best.days) best = { days: cur, start: days[i - cur + 1], end: days[i] };
+  }
+  return best;
+}
+
+router.get('/yearly', async (req, res) => {
+  const uid = req.user.id;
+  const now = new Date();
+  const off = Number(req.query.yearOffset) || 0;
+  const offset = Math.max(0, Math.min(off, 10));
+  const year = now.getFullYear() - offset;
+  const yearStart = new Date(year, 0, 1, 0, 0, 0, 0).getTime();
+  // 当年用「此刻」而不是 12/31：避免把还没到的月份算成空白
+  const yearEnd = offset === 0 ? now.getTime() : new Date(year + 1, 0, 1, 0, 0, 0, 0).getTime();
+  const label = `${year} 年`;
+
+  const ov = db.prepare(`
+    SELECT COUNT(*) AS plays, SUM(played_sec) AS sec,
+           COUNT(DISTINCT name||singer) AS unique_songs,
+           COUNT(DISTINCT date(played_at/1000,'unixepoch','localtime')) AS days
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+  `).get(uid, yearStart, yearEnd);
+
+  if (!ov || !ov.plays) {
+    return res.json({
+      year, label, hasData: false, overview: null,
+      monthly: [], topSongs: [], topArtists: [], topAlbums: [], highlights: null,
+    });
+  }
+
+  // —— 12 个月分布（无记录的月份补 0，保证柱状图固定 12 列） ——
+  const monthRows = db.prepare(`
+    SELECT CAST(strftime('%m', played_at/1000,'unixepoch','localtime') AS INTEGER) AS m,
+           COUNT(*) AS plays, SUM(played_sec) AS sec
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    GROUP BY m
+  `).all(uid, yearStart, yearEnd);
+  const monthMap = new Map(monthRows.map((r) => [r.m, r]));
+  const monthly = Array.from({ length: 12 }, (_, i) => {
+    const r = monthMap.get(i + 1);
+    return { month: i + 1, plays: r?.plays || 0, sec: r?.sec || 0 };
+  });
+
+  const topSongs = db.prepare(`
+    SELECT name, singer, MAX(album) AS album,
+           MAX(CASE WHEN album_mid != '' AND album_mid GLOB '*[^0-9]*' THEN album_mid END) AS album_mid,
+           COUNT(*) AS play_count, SUM(played_sec) AS total_sec
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    GROUP BY name, singer ORDER BY play_count DESC, total_sec DESC LIMIT 10
+  `).all(uid, yearStart, yearEnd);
+
+  const allArtists = aggregateArtists(uid, yearStart, yearEnd);
+  const uniqueArtists = allArtists.length;
+  const topArtists = allArtists.slice(0, 5);
+  await attachSingerMids(topArtists);
+
+  const topAlbums = db.prepare(`
+    SELECT album,
+           MAX(CASE WHEN album_mid != '' AND album_mid GLOB '*[^0-9]*' THEN album_mid END) AS album_mid,
+           singer, COUNT(*) AS play_count
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND album != ''
+    GROUP BY album ORDER BY play_count DESC LIMIT 4
+  `).all(uid, yearStart, yearEnd);
+  await fillAlbumCoverMids(uid, yearStart, yearEnd, topAlbums);
+
+  // —— 年度之最 ——
+  const bestDayRow = db.prepare(`
+    SELECT date(played_at/1000,'unixepoch','localtime') AS day, COUNT(*) AS plays
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    GROUP BY day ORDER BY plays DESC LIMIT 1
+  `).get(uid, yearStart, yearEnd);
+
+  const dayRows = db.prepare(`
+    SELECT DISTINCT date(played_at/1000,'unixepoch','localtime') AS day
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    ORDER BY day
+  `).all(uid, yearStart, yearEnd);
+  const streak = computeStreak(dayRows.map((r) => r.day));
+
+  const peakMonth = monthly.reduce((best, m) => (m.plays > (best?.plays || 0) ? m : best), null);
+
+  const lateNightRow = db.prepare(`
+    SELECT CAST(strftime('%H', played_at/1000,'unixepoch','localtime') AS INTEGER) AS hour, COUNT(*) AS plays
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+      AND CAST(strftime('%H', played_at/1000,'unixepoch','localtime') AS INTEGER) <= 4
+    GROUP BY hour ORDER BY plays DESC LIMIT 1
+  `).get(uid, yearStart, yearEnd);
+
+  const skipRow = db.prepare(`
+    SELECT COUNT(*) AS total, SUM(CASE WHEN ${SKIP_COND} THEN 1 ELSE 0 END) AS skipped
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+  `).get(uid, yearStart, yearEnd);
+
+  // 完播率只统计有时长的记录，避免 duration=0 把分母撑大
+  const comp = db.prepare(`
+    SELECT
+      SUM(CASE WHEN CAST(played_sec AS REAL)/duration < 0.2 THEN 1 ELSE 0 END) AS low,
+      SUM(CASE WHEN CAST(played_sec AS REAL)/duration >= 0.2 AND CAST(played_sec AS REAL)/duration < 0.8 THEN 1 ELSE 0 END) AS mid,
+      SUM(CASE WHEN CAST(played_sec AS REAL)/duration >= 0.8 THEN 1 ELSE 0 END) AS high
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<? AND duration > 0
+  `).get(uid, yearStart, yearEnd);
+
+  const newSongs = db.prepare(`
+    SELECT COUNT(DISTINCT name||'__'||COALESCE(singer,'')) AS cnt
+    FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+    AND ${MEANINGFUL_COND}
+    AND (name||'__'||COALESCE(singer,'')) NOT IN (
+      SELECT name||'__'||COALESCE(singer,'') FROM play_logs WHERE user_id=? AND played_at < ?
+    )
+  `).get(uid, yearStart, yearEnd, uid, yearStart);
+
+  const repeatRow = db.prepare(`
+    SELECT COUNT(*) AS cnt FROM (
+      SELECT name, singer FROM play_logs WHERE user_id=? AND played_at>=? AND played_at<?
+      GROUP BY name, singer HAVING COUNT(*) > 1
+    )
+  `).get(uid, yearStart, yearEnd);
+
+  const uniqueSongs = ov.unique_songs || 1;
+
+  res.json({
+    year, label, hasData: true,
+    overview: {
+      plays: ov.plays,
+      sec: ov.sec || 0,
+      uniqueSongs: ov.unique_songs || 0,
+      uniqueArtists,
+      days: ov.days || 0,
+      newSongs: newSongs?.cnt || 0,
+    },
+    monthly,
+    topSongs,
+    topArtists,
+    topAlbums,
+    highlights: {
+      bestDay: bestDayRow ? { day: bestDayRow.day, plays: bestDayRow.plays } : null,
+      streak,
+      peakMonth: peakMonth && peakMonth.plays > 0 ? { month: peakMonth.month, plays: peakMonth.plays } : null,
+      lateNight: lateNightRow ? { hour: lateNightRow.hour, plays: lateNightRow.plays } : null,
+      repeatRate: Math.round((repeatRow?.cnt || 0) / uniqueSongs * 100),
+      skipRate: skipRow?.total ? Math.round((skipRow.skipped || 0) / skipRow.total * 100) : 0,
+      completion: { low: comp?.low || 0, mid: comp?.mid || 0, high: comp?.high || 0 },
+    },
+  });
 });
 
 // 最常播放歌曲 Top N（默认 20）

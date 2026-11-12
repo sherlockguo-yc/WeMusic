@@ -98,6 +98,8 @@ export function navPush(view, data) {
   console.log('[nav] navPush:', view, 'popstateView:', _popstateView || '(null)', 'len:', history.length);
   // 退出 share 视图时清理 body.share-view（恢复主区域滚动条）
   if (view !== 'share') document.body.classList.remove('share-view');
+  // 退出年度总结时恢复 #main 的内边距与滚动（该视图改用自身滚动容器做滚动吸附）
+  if (view !== 'yearly') document.body.classList.remove('yearly-mode');
   if (_popstateView) {
     history.replaceState({ view, data }, '', location.href);
     _popstateView = null;
@@ -126,6 +128,7 @@ async function restoreView(view, data) {
   else if (view === 'album'       && data?.mid) import('./search.js').then(({ openAlbum }) => openAlbum(data.mid, data.name)).catch((e) => { console.error('[nav] album restore fail:', e); _popstateView = null; });
   else if (view === 'share')       import('./share.js').then(({ renderSharePage }) => renderSharePage(data)).catch((e) => { console.error('[nav] share restore fail:', e); _popstateView = null; });
   else if (view === 'stats')       import('./stats.js').then(({ openStats }) => openStats()).catch((e) => { console.error('[nav] stats restore fail:', e); _popstateView = null; });
+  else if (view === 'yearly')      import('./yearly.js').then(({ openYearly }) => openYearly()).catch((e) => { console.error('[nav] yearly restore fail:', e); _popstateView = null; });
   else if (view === 'savedAlbums') import('./stats.js').then(({ openSavedAlbums }) => openSavedAlbums()).catch((e) => { console.error('[nav] savedAlbums restore fail:', e); _popstateView = null; });
   else if (view === 'likes')   import('./stats.js').then(({ openLikesPage }) => openLikesPage()).catch((e) => { console.error('[nav] likes restore fail:', e); _popstateView = null; });
   else if (view === 'favorites') import('./favorites.js').then(({ openFavoritesPage }) => openFavoritesPage()).catch((e) => { console.error('[nav] favorites restore fail:', e); _popstateView = null; });
