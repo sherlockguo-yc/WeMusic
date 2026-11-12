@@ -7,7 +7,6 @@ export { openDiscover };
 export function initStats() {
   $('navDiscover').onclick = openDiscover;
   import('./report.js').then(({ openStats }) => { $('navStats').onclick = openStats; });
-  import('./yearly.js').then(({ openYearly }) => { $('navYearly').onclick = openYearly; });
   import('./likes.js').then(({ openLikesPage }) => { $('navLikes').onclick = openLikesPage; });
   import('./favorites.js').then(({ openFavoritesPage }) => { $('navFavorites').onclick = openFavoritesPage; });
   import('./albums.js').then(({ openSavedAlbums }) => {

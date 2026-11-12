@@ -1,15 +1,7 @@
-// 年度听歌总结（独立多屏叙事页）
-// 与周报/月报的区别：不复用卡片墙，而是一屏一个主题的滚动叙事。
-// 数据由 /api/stats/yearly 一次性返回，翻年份只重新请求，不重新挂载页面。
-import { $, esc, fmtFullMin, albumCover, singerAvatar } from './utils.js';
-import { api } from './api.js';
-import { state } from './state.js';
-import { setActiveNav } from './playlist-ui.js';
-
-const SCREEN_COUNT = 8;
-let _observer = null;   // 进出页面时重建，避免对已卸载的 DOM 持续观察
-let _seq = 0;           // 年份切换的请求代次，丢弃陈旧响应
-let _yearOffset = 0;
+// 年度听歌总结 · 渲染模块
+// 作为「我的数据」页的第三个周期（周 / 月 / 年）使用，不再单独占一个视图。
+// 本模块只负责「把一年数据画成多屏叙事」和绑定滚动行为，路由与请求都在 report.js。
+import { esc, fmtFullMin, albumCover, singerAvatar } from './utils.js';
 
 /** 年度听歌人格：阈值按「一年」的量级设定，与月报的 scale 不同 */
 function yearlyPersona(data) {
@@ -29,6 +21,8 @@ const PERSONA_ICONS = {
   moon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
   music: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
 };
+
+const COVER_PH = '<div class="yy-hero-cover yy-cover-ph"></div>';
 
 const fmtDay = (s) => {
   if (!s) return '';
@@ -51,7 +45,18 @@ function monthlyChartHtml(monthly) {
   }).join('');
 }
 
-function screenHtml(data) {
+/** 该年没有任何记录时的单屏空态 */
+export function yearlyEmptyHtml(year) {
+  return `<div class="yearly-scroll"><section class="yearly-screen ys-cover in">
+    <div class="yy-eyebrow">NO DATA</div>
+    <div class="yy-year">${year}</div>
+    <div class="yy-cover-title">这一年还没有音乐记录</div>
+    <div class="yy-cover-sub">换一年看看，或者去听几首歌</div>
+  </section></div>`;
+}
+
+/** 8 屏叙事 HTML（不含外层滚动容器的滚动行为，绑定见 bindYearly） */
+export function yearlyHtml(data) {
   const { overview, highlights: hl, topSongs, topArtists, topAlbums, monthly } = data;
   const persona = yearlyPersona(data);
   const heroArtist = topArtists[0];
@@ -61,7 +66,7 @@ function screenHtml(data) {
   const compTotal = comp.low + comp.mid + comp.high || 1;
   const compHigh = Math.round((comp.high / compTotal) * 100);
 
-  return `
+  return `<div class="yearly-scroll" id="yyScroll">
     <!-- 1 封面 -->
     <section class="yearly-screen ys-cover">
       <div class="yy-eyebrow">YEAR IN MUSIC</div>
@@ -107,7 +112,7 @@ function screenHtml(data) {
     <section class="yearly-screen ys-songs">
       <div class="yy-screen-title">循环最多的旋律</div>
       ${heroSong ? `<div class="yy-hero-song">
-        ${heroSong.album_mid ? `<img class="yy-hero-cover" src="${albumCover(heroSong.album_mid, 300)}" loading="lazy" alt="" />` : '<div class="yy-hero-cover yy-cover-ph"></div>'}
+        ${heroSong.album_mid ? `<img class="yy-hero-cover" src="${albumCover(heroSong.album_mid, 300)}" loading="lazy" alt="" onerror="this.style.visibility='hidden'" />` : COVER_PH}
         <div class="yy-hero-song-info">
           <div class="yy-hero-song-name">${esc(heroSong.name)}</div>
           <div class="yy-hero-song-singer">${esc(heroSong.singer || '')}</div>
@@ -168,21 +173,19 @@ function screenHtml(data) {
         再看一遍
       </button>
     </section>
-  `;
+  </div>`;
 }
 
-/** 空态：该年份没有任何播放记录 */
-function emptyHtml(year) {
-  return `<section class="yearly-screen ys-cover">
-    <div class="yy-eyebrow">NO DATA</div>
-    <div class="yy-year">${year}</div>
-    <div class="yy-cover-title">这一年还没有音乐记录</div>
-    <div class="yy-cover-sub">换一年看看，或者去听几首歌</div>
-  </section>`;
-}
+let _observer = null;
 
-function bindScreens(root, scrollEl) {
+/**
+ * 绑定滚动叙事：入场动画、圆点跳转、「再看一遍」。
+ * 容器每屏用 scroll-snap，圆点由调用方放在 .yearly-view 外层的 .yearly-dots 里。
+ */
+export function bindYearly(root) {
   if (_observer) { _observer.disconnect(); _observer = null; }
+  const scrollEl = root.querySelector('.yearly-scroll');
+  if (!scrollEl) return;
   const screens = [...scrollEl.querySelectorAll('.yearly-screen')];
   const dots = [...root.querySelectorAll('.yy-dot')];
 
@@ -199,63 +202,14 @@ function bindScreens(root, scrollEl) {
   screens.forEach((s) => _observer.observe(s));
   dots.forEach((d, i) => {
     d.onclick = () => {
-      const top = screens[i]?.offsetTop || 0;
-      scrollEl.scrollTo({ top, behavior: 'smooth' });
+      scrollEl.scrollTo({ top: screens[i]?.offsetTop || 0, behavior: 'smooth' });
     };
   });
   const again = root.querySelector('#yyAgain');
   if (again) again.onclick = () => scrollEl.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-export async function openYearly() {
-  state.view = 'yearly';
-  setActiveNav('navYearly');
-  import('./main.js').then(({ navPush }) => navPush('yearly')).catch(() => {});
-  document.body.classList.add('yearly-mode');
-
-  const main = $('main');
-  _yearOffset = 0;
-
-  async function load() {
-    const seq = ++_seq;
-    main.innerHTML = '<div class="loading">正在整理你的音乐记忆…</div>';
-    let data;
-    try {
-      data = await api(`/stats/yearly?yearOffset=${_yearOffset}`);
-    } catch (e) {
-      if (seq !== _seq) return;
-      main.innerHTML = `<div class="empty">加载失败：${esc(e.message)}
-        <div style="margin-top:12px"><button class="btn sm" id="yyRetry">重试</button></div></div>`;
-      const retry = $('yyRetry');
-      if (retry) retry.onclick = load;
-      return;
-    }
-    if (seq !== _seq) return; // 年份已再次切换，丢弃陈旧响应
-
-    const body = data.hasData ? screenHtml(data) : emptyHtml(data.year);
-    main.innerHTML = `
-      <div class="yearly-view">
-        <div class="yearly-topbar">
-          <button class="yy-year-btn" id="yyPrevYear" title="上一年">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-          <span class="yy-year-label">${data.year} 年</span>
-          <button class="yy-year-btn" id="yyNextYear" title="下一年"${_yearOffset === 0 ? ' disabled' : ''}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
-        </div>
-        <div class="yearly-dots">${Array.from({ length: data.hasData ? SCREEN_COUNT : 1 }, (_, i) => `<span class="yy-dot${i === 0 ? ' active' : ''}"></span>`).join('')}</div>
-        <div class="yearly-scroll" id="yyScroll">${body}</div>
-      </div>`;
-
-    const scrollEl = $('yyScroll');
-    bindScreens(main, scrollEl);
-    scrollEl.querySelector('.yearly-screen')?.classList.add('in');
-
-    $('yyPrevYear').onclick = () => { if (_yearOffset < 10) { _yearOffset++; load(); } };
-    const nextBtn = $('yyNextYear');
-    if (nextBtn) nextBtn.onclick = () => { if (_yearOffset > 0) { _yearOffset--; load(); } };
-  }
-
-  await load();
+/** 年份对应屏数：空态只有 1 屏 */
+export function yearlyDotCount(data) {
+  return data && data.hasData ? 8 : 1;
 }

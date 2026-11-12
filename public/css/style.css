@@ -3619,9 +3619,14 @@ body.share-view .main { overflow: hidden; }
    进入该视图时 body 加 .yearly-mode：#main 交出滚动权，
    由 .yearly-scroll 做滚动吸附，避免两层滚动条打架。
    ============================================================ */
-body.yearly-mode #main { padding: 0; overflow: hidden; }
+/* 年度总结是「我的数据」的第三个 tab：切到它时 #main 变成 flex 列，
+   上方标题与工具栏保持原位，叙事区吃满剩余高度并自己接管滚动。 */
+#main.stats-yearly { display: flex; flex-direction: column; overflow: hidden; }
+#main.stats-yearly .stats-overview,
+#main.stats-yearly .stats-two-col { display: none; }
+#main.stats-yearly #reportSection { flex: 1; min-height: 0; }
 
-.yearly-view { position: relative; height: 100%; background: var(--bg); }
+.yearly-view { position: relative; height: 100%; background: var(--bg); border-radius: var(--radius); overflow: hidden; }
 .yearly-scroll {
   height: 100%;
   overflow-y: auto;
@@ -3632,22 +3637,6 @@ body.yearly-mode #main { padding: 0; overflow: hidden; }
 }
 .yearly-scroll::-webkit-scrollbar { display: none; }
 
-/* 顶部年份切换 */
-.yearly-topbar {
-  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-  z-index: 4; display: flex; align-items: center; gap: 6px;
-  padding: 4px 6px; border-radius: 999px;
-  background: var(--bg-soft); border: 1px solid var(--border);
-  backdrop-filter: blur(8px);
-}
-.yy-year-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 50%;
-  background: transparent; border: none; color: var(--text-dim); cursor: pointer;
-}
-.yy-year-btn:hover:not(:disabled) { background: var(--border); color: var(--text); }
-.yy-year-btn:disabled { opacity: .3; cursor: not-allowed; }
-.yy-year-label { font-size: 13px; font-weight: 600; padding: 0 4px; }
 
 /* 右侧屏指示点 */
 .yearly-dots {

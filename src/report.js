@@ -4,6 +4,7 @@ import { api, Auth } from './api.js';
 import { state } from './state.js';
 import { setActiveNav } from './playlist-ui.js';
 import { POSTER_THEME_LIST } from '../shared/poster-template.js';
+import { yearlyHtml, yearlyEmptyHtml, bindYearly, yearlyDotCount } from './yearly.js';
 function timeLabel(h) {
   if (h == null) return null;
   if (h >= 5 && h < 9)  return { label: '清晨', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>' };
@@ -460,6 +461,7 @@ export async function openStats() {
         <div class="wr-tabs">
           <button class="wr-tab active" data-period="week"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> 本周</button>
           <button class="wr-tab" data-period="month"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg> 本月</button>
+          <button class="wr-tab" data-period="year"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg> 本年</button>
         </div>
         <div class="wr-toolbar-right">
           <button class="wr-share-btn" id="wrShareBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg> 生成分享海报</button>
@@ -503,18 +505,35 @@ export async function openStats() {
         </div>
       </div>`;
 
-    // —— 本周/本月报告渲染 + 分享海报绑定 + 前后周月导航 ——
+    // —— 周报 / 月报 / 年度总结渲染 + 分享海报绑定 + 周期导航 ——
     let currentPosterData = null;
-    let weeklyOffset = 0, monthlyOffset = 0;
+    let weeklyOffset = 0, monthlyOffset = 0, yearlyOffset = 0;
 
     function cacheKey(periodType, offset) { return `${periodType}$${offset}`; }
+
+    // 年度总结：多屏叙事渲染 + 圆点绑定；同时切换 #main 的布局类，
+    // 把上方的总览卡和下方的时段/Top 区块让位给叙事（详见 style.css 的 #main.stats-yearly）
+    function renderYearly(data) {
+      const dots = Array.from({ length: yearlyDotCount(data) }, (_, i) =>
+        `<span class="yy-dot${i === 0 ? ' active' : ''}"></span>`).join('');
+      $('reportSection').innerHTML = `<div class="yearly-view">
+        <div class="yearly-dots">${dots}</div>
+        ${data.hasData ? yearlyHtml(data) : yearlyEmptyHtml(data.year)}
+      </div>`;
+      const view = $('reportSection').querySelector('.yearly-view');
+      bindYearly(view);
+      view.querySelector('.yearly-screen')?.classList.add('in');
+      currentPosterData = null; // 年度暂不支持分享海报，按钮已隐藏
+    }
 
     async function renderReport(type, offset = 0) {
       const key = cacheKey(type, offset);
       if (!reportCache[key]) {
         $('reportSection').innerHTML = '<div class="loading">加载中…</div>';
         try {
-          const endpoint = type === 'week' ? `/stats/weekly?weekOffset=${offset}` : `/stats/monthly?monthOffset=${offset}`;
+          const endpoint = type === 'week' ? `/stats/weekly?weekOffset=${offset}`
+            : type === 'month' ? `/stats/monthly?monthOffset=${offset}`
+              : `/stats/yearly?yearOffset=${offset}`;
           reportCache[key] = await api(endpoint);
         } catch (e) {
           $('reportSection').innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
@@ -522,6 +541,15 @@ export async function openStats() {
         }
       }
       const data = reportCache[key];
+      const isYear = type === 'year';
+      main.classList.toggle('stats-yearly', isYear);
+      const shareBtn = $('wrShareBtn');
+      if (shareBtn) shareBtn.style.display = isYear ? 'none' : '';
+      if (isYear) {
+        renderYearly(data);
+        updatePeriodNav(type, offset);
+        return;
+      }
       const { html, posterData } = buildReportHtml(data, type);
       $('reportSection').innerHTML = html;
       currentPosterData = posterData;
@@ -539,14 +567,18 @@ export async function openStats() {
     bindPosterModalOnce();
     $('wrShareBtn').onclick = () => openPosterModal(currentPosterData);
 
+    const currentPeriod = () => document.querySelector('.wr-tab.active')?.dataset?.period || 'week';
+
     $('wrPrevBtn').onclick = async () => {
-      const type = document.querySelector('.wr-tab.active')?.dataset?.period || 'week';
-      const next = (type === 'week' ? ++weeklyOffset : ++monthlyOffset);
+      const type = currentPeriod();
+      const next = type === 'week' ? ++weeklyOffset
+        : type === 'month' ? ++monthlyOffset : ++yearlyOffset;
       await renderReport(type, next);
     };
     $('wrNextBtn').onclick = async () => {
-      const type = document.querySelector('.wr-tab.active')?.dataset?.period || 'week';
-      const next = (type === 'week' ? Math.max(0, --weeklyOffset) : Math.max(0, --monthlyOffset));
+      const type = currentPeriod();
+      const next = type === 'week' ? Math.max(0, --weeklyOffset)
+        : type === 'month' ? Math.max(0, --monthlyOffset) : Math.max(0, --yearlyOffset);
       await renderReport(type, next);
     };
 
@@ -556,7 +588,7 @@ export async function openStats() {
         main.querySelectorAll('.wr-tab').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         // 切换周期类型时重置 offset
-        weeklyOffset = 0; monthlyOffset = 0;
+        weeklyOffset = 0; monthlyOffset = 0; yearlyOffset = 0;
         await renderReport(type);
       };
     });
