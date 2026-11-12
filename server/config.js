@@ -23,6 +23,8 @@ const superAdminList = [...new Set([...defaultAdmins, ...envAdmins])];
 export const config = {
   port: Number(process.env.PORT) || 5174,
   jwtSecret: process.env.JWT_SECRET || 'wemusic-dev-secret-change-me',
+  // token 基础有效期；滑动续期在剩余不足一半时签发新 token
+  jwtExpires: process.env.JWT_EXPIRES || '30d',
   allowRegister: String(process.env.ALLOW_REGISTER ?? 'true') === 'true',
   superAdmins: superAdminList,
   dbPath: path.join(DATA_DIR, 'wemusic.sqlite'),

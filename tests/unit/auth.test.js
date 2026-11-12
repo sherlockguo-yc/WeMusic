@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
 
 // 直接内联测试 JWT 逻辑，避免复杂的 mock
 function signToken(payload) {
-  const expiresIn = process.env.JWT_EXPIRES || '7d';
+  const expiresIn = process.env.JWT_EXPIRES || '30d';
   return jwt.sign(payload, process.env.JWT_SECRET || 'test', { expiresIn });
 }
 
