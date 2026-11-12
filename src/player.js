@@ -1226,7 +1226,7 @@ function _setPlayStatus() {
     // 在线命中本地缓存时不该显示「离线播放」，否则用户会以为断网了
     const reason = _cacheUse.reason;
     const badgeText = reason === '离线' ? '离线播放'
-      : reason === '网络不佳' ? '缓存播放' : '本地缓存';
+      : reason === '网络不佳' ? '缓存播放' : '本地播放';
     // 图标按「是否真的与网络异常有关」区分：免流量读本地缓存是正常路径，
     // 用 wifi-off 会被误读成断网，因此只有离线/网络不佳两态才用 OFFLINE_ICON。
     const badgeIcon = (reason === '离线' || reason === '网络不佳') ? OFFLINE_ICON : CACHE_ICON;
@@ -1568,7 +1568,7 @@ bgAudio.addEventListener('ended', () => {
 function _switchToProxy(bvid, reason) {
   if (_usedFallback || mode !== 'bg' || !bvid) return;
   _usedFallback = true;
-  _cacheUse = null; // 线路已不是本地缓存，状态栏不能继续显示「本地缓存」
+  _cacheUse = null; // 线路已不是本地缓存，状态栏不能继续显示「本地播放」
   console.log(`[bgAudio] ${reason}，降级为服务端代理`);
   // 直连→代理属于正常容错：只在状态栏标注线路，不弹 toast
   _lineHint = '代理线路';
