@@ -1,5 +1,5 @@
 // ---------------- 播放核心 ----------------
-import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, debounce, PLAY_ICON, PAUSE_ICON, LOADING_ICON, OFFLINE_ICON } from './utils.js';
+import { $, fmtDur, esc, biliEmbed, albumCover, singerAvatar, toast, debounce, PLAY_ICON, PAUSE_ICON, LOADING_ICON, OFFLINE_ICON, CACHE_ICON } from './utils.js';
 import * as offline from './offlineCache.js';
 import { api, Auth } from './api.js';
 import { state } from './state.js';
@@ -1224,9 +1224,13 @@ function _setPlayStatus() {
   const lineTag = _lineHint ? ` <span class="offline-reason">${esc(_lineHint)}</span>` : '';
   if (_cacheUse && _cacheUse.fromCache) {
     // 在线命中本地缓存时不该显示「离线播放」，否则用户会以为断网了
-    const badgeText = _cacheUse.reason === '离线' ? '离线播放'
-      : _cacheUse.reason === '网络不佳' ? '缓存播放' : '本地缓存';
-    $('playStatus').innerHTML = `<span class="status-inner"><span class="badge offline-badge">${OFFLINE_ICON} ${badgeText}</span> <span class="offline-reason">${esc(_cacheUse.reason)}</span> ${esc(title)}</span>`;
+    const reason = _cacheUse.reason;
+    const badgeText = reason === '离线' ? '离线播放'
+      : reason === '网络不佳' ? '缓存播放' : '本地缓存';
+    // 图标按「是否真的与网络异常有关」区分：免流量读本地缓存是正常路径，
+    // 用 wifi-off 会被误读成断网，因此只有离线/网络不佳两态才用 OFFLINE_ICON。
+    const badgeIcon = (reason === '离线' || reason === '网络不佳') ? OFFLINE_ICON : CACHE_ICON;
+    $('playStatus').innerHTML = `<span class="status-inner"><span class="badge offline-badge">${badgeIcon} ${badgeText}</span> <span class="offline-reason">${esc(reason)}</span> ${esc(title)}</span>`;
   } else {
     $('playStatus').innerHTML = `<span class="status-inner"><span class="badge">${PLAY_ICON} Bilibili</span>${lineTag} ${esc(title)}</span>`;
   }
